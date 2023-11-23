@@ -1,8 +1,11 @@
 use std::cell::RefCell;
 
 use eframe::App;
-use egui::{pos2, vec2, InnerResponse, Ui};
-use egui_snarl::{Effects, Pin, Snarl, SnarlViewer};
+use egui::{pos2, vec2, Color32, InnerResponse, Ui};
+use egui_snarl::{
+    ui::{Effects, Forbidden, NodeInPin, NodeOutPin, Pin, SnarlViewer},
+    InPin, OutPin, Snarl,
+};
 
 #[derive(Clone, Copy, serde::Deserialize, serde::Serialize)]
 enum DemoNode {
@@ -12,7 +15,12 @@ enum DemoNode {
 
     /// Value node with a single output.
     /// The value is editable in UI.
-    Integer(u32),
+    Integer(i32),
+
+    /// Value node with a single output.
+    ///
+    /// It has two inputs, ediable if not connected.
+    Add([i32; 2]),
 }
 
 struct DemoViewer;
@@ -22,10 +30,31 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         todo!()
     }
 
+    #[inline]
+    fn connect(
+        &mut self,
+        _from: NodeOutPin<DemoNode>,
+        to: NodeInPin<DemoNode>,
+        effects: &mut Effects<DemoNode>,
+    ) -> Result<(), Forbidden> {
+        for remote in &to.remotes {
+            effects.disconnect(
+                OutPin {
+                    node: remote.node_idx,
+                    output: remote.pin_idx,
+                },
+                to.in_pin,
+            );
+        }
+
+        Ok(())
+    }
+
     fn title(&mut self, node: &DemoNode) -> std::borrow::Cow<'static, str> {
         match node {
             DemoNode::Sink => "Sink".into(),
             DemoNode::Integer(_) => "Integer".into(),
+            DemoNode::Add { .. } => "Add".into(),
         }
     }
 
@@ -33,6 +62,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         match node {
             DemoNode::Sink => 1,
             DemoNode::Integer(_) => 0,
+            DemoNode::Add { .. } => 2,
         }
     }
 
@@ -40,6 +70,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         match node {
             DemoNode::Sink => 0,
             DemoNode::Integer(_) => 1,
+            DemoNode::Add { .. } => 1,
         }
     }
 
@@ -48,22 +79,29 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         node: &RefCell<DemoNode>,
         pin: Pin<DemoNode>,
         ui: &mut Ui,
-    ) -> egui::InnerResponse<Effects<DemoNode>> {
-        match *node.borrow() {
+        _effects: &mut Effects<DemoNode>,
+    ) -> egui::InnerResponse<Color32> {
+        let demo_node = *node.borrow();
+        match demo_node {
             DemoNode::Sink => {
-                assert_eq!(pin.local, 0, "Sink node has only one input");
+                assert_eq!(pin.pin_idx, 0, "Sink node has only one input");
 
-                match &*pin.remote {
+                match &*pin.remotes {
                     [] => {
                         let r = ui.label("None");
-                        InnerResponse::new(Effects::default(), r)
+                        InnerResponse::new(Color32::GRAY, r)
                     }
                     [remote] => match *remote.node.borrow() {
                         DemoNode::Sink => unreachable!("Sink node has no outputs"),
                         DemoNode::Integer(value) => {
-                            assert_eq!(remote.idx, 0, "Integer node has only one output");
+                            assert_eq!(remote.pin_idx, 0, "Integer node has only one output");
                             let r = ui.label(format!("{}", value));
-                            InnerResponse::new(Effects::default(), r)
+                            InnerResponse::new(Color32::RED, r)
+                        }
+                        DemoNode::Add([a, b]) => {
+                            assert_eq!(remote.pin_idx, 0, "Integer node has only one output");
+                            let r = ui.label(format!("{}", a + b));
+                            InnerResponse::new(Color32::RED, r)
                         }
                     },
                     _ => unreachable!("Sink input has only one wire"),
@@ -72,6 +110,44 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             DemoNode::Integer(_) => {
                 unreachable!("Integer node has no inputs")
             }
+            DemoNode::Add(_) => match &*pin.remotes {
+                [] => match &mut *node.borrow_mut() {
+                    DemoNode::Add(values) => {
+                        let r = ui.add(egui::DragValue::new(&mut values[pin.pin_idx]));
+                        InnerResponse::new(Color32::GREEN, r)
+                    }
+                    _ => unreachable!(),
+                },
+                [remote] => {
+                    let remote_node = *remote.node.borrow();
+                    match remote_node {
+                        DemoNode::Sink => unreachable!("Sink node has no outputs"),
+                        DemoNode::Integer(value) => {
+                            assert_eq!(remote.pin_idx, 0, "Integer node has only one output");
+                            match &mut *node.borrow_mut() {
+                                DemoNode::Add(values) => {
+                                    values[pin.pin_idx] = value;
+                                }
+                                _ => unreachable!(),
+                            }
+                            let r = ui.label(format!("{}", value));
+                            InnerResponse::new(Color32::RED, r)
+                        }
+                        DemoNode::Add([a, b]) => {
+                            assert_eq!(remote.pin_idx, 0, "Integer node has only one output");
+                            match &mut *node.borrow_mut() {
+                                DemoNode::Add(values) => {
+                                    values[pin.pin_idx] = a + b;
+                                }
+                                _ => unreachable!(),
+                            }
+                            let r = ui.label(format!("{}", a + b));
+                            InnerResponse::new(Color32::RED, r)
+                        }
+                    }
+                }
+                _ => unreachable!("Add node has only one wire"),
+            },
         }
     }
 
@@ -80,15 +156,21 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         node: &RefCell<DemoNode>,
         pin: Pin<DemoNode>,
         ui: &mut Ui,
-    ) -> egui::InnerResponse<Effects<DemoNode>> {
-        match &mut *node.borrow_mut() {
+        _effects: &mut Effects<DemoNode>,
+    ) -> egui::InnerResponse<Color32> {
+        match *node.borrow_mut() {
             DemoNode::Sink => {
                 unreachable!("Sink node has no outputs")
             }
-            DemoNode::Integer(value) => {
-                assert_eq!(pin.local, 0, "Integer node has only one output");
+            DemoNode::Integer(ref mut value) => {
+                assert_eq!(pin.pin_idx, 0, "Integer node has only one output");
                 let r = ui.add(egui::DragValue::new(value));
-                InnerResponse::new(Effects::default(), r)
+                InnerResponse::new(Color32::RED, r)
+            }
+            DemoNode::Add([a, b]) => {
+                assert_eq!(pin.pin_idx, 0, "Add node has only one output");
+                let r = ui.label(format!("{}", a + b));
+                InnerResponse::new(Color32::RED, r)
             }
         }
     }
@@ -104,14 +186,19 @@ impl DemoApp {
     pub fn new() -> Self {
         let mut snarl = Snarl::new();
 
-        snarl.add_node(
+        let i = snarl.add_node(
             DemoNode::Integer(42),
             egui::Rect::from_min_size(pos2(10.0, 20.0), vec2(100.0, 50.0)),
         );
 
-        snarl.add_node(
+        let a = snarl.add_node(
+            DemoNode::Add([0, 0]),
+            egui::Rect::from_min_size(pos2(30.0, 80.0), vec2(100.0, 50.0)),
+        );
+
+        let s = snarl.add_node(
             DemoNode::Sink,
-            egui::Rect::from_min_size(pos2(40.0, 200.0), vec2(100.0, 50.0)),
+            egui::Rect::from_min_size(pos2(190.0, 60.0), vec2(100.0, 50.0)),
         );
 
         DemoApp { snarl }
@@ -136,7 +223,7 @@ impl App for DemoApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.snarl.show(&mut DemoViewer, ui);
+            self.snarl.show(&mut DemoViewer, egui::Id::new("snarl"), ui);
         });
     }
 }
@@ -149,7 +236,7 @@ fn main() -> eframe::Result<()> {
     };
 
     eframe::run_native(
-        "eframe template",
+        "egui-snarl demo",
         native_options,
         Box::new(|_| Box::new(DemoApp::new())),
     )

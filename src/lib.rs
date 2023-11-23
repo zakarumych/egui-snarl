@@ -5,11 +5,11 @@
 //!
 //!
 
-mod ui;
+pub mod ui;
 
-use std::{borrow::Cow, cell::RefCell};
+use std::cell::RefCell;
 
-use egui::{ahash::HashSet, Ui};
+use egui::ahash::HashSet;
 use slab::Slab;
 
 impl<T> Default for Snarl<T> {
@@ -17,120 +17,6 @@ impl<T> Default for Snarl<T> {
         Snarl::new()
     }
 }
-
-/// Node's pin that contains local idx, remove idx and remove node reference.
-pub struct Pin<'a, T> {
-    pub local: usize,
-    pub remote: Vec<Remote<'a, T>>,
-}
-
-pub struct Remote<'a, T> {
-    pub idx: usize,
-    pub node: &'a RefCell<T>,
-}
-
-pub enum Effect<T> {
-    /// Adds connection between two nodes.
-    Connect {
-        from_node: usize,
-        from_output: usize,
-        to_node: usize,
-        to_input: usize,
-    },
-
-    /// Removes connection between two nodes.
-    Disconnect {
-        from_node: usize,
-        from_output: usize,
-        to_node: usize,
-        to_input: usize,
-    },
-
-    /// Executes a closure with mutable reference to the Snarl.
-    Closure(Box<dyn FnOnce(&mut Snarl<T>)>),
-}
-
-pub struct Effects<T> {
-    effects: Vec<Effect<T>>,
-}
-
-impl<T> Default for Effects<T> {
-    #[inline]
-    fn default() -> Self {
-        Effects {
-            effects: Default::default(),
-        }
-    }
-}
-
-/// SnarlViewer is a trait for viewing a Snarl.
-///
-/// It can extract necessary data from the nodes and controls their
-/// response to certain events.
-pub trait SnarlViewer<T> {
-    /// Called to create new node in the Snarl.
-    ///
-    /// Returns response with effects to be applied to the Snarl after the node is added.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Forbidden` error if the node cannot be added.
-    #[inline]
-    fn add_node(&mut self, idx: usize, node: &T) -> Result<Effects<T>, Forbidden> {
-        let _ = (idx, node);
-        Ok(Effects::default())
-    }
-
-    /// Called when a node is about to be removed.
-    ///
-    /// # Arguments
-    ///
-    /// * `node` - Node that is about to be removed.
-    /// * `inputs` - Array of input pins connected to the node.
-    /// * `outputs` - Array of output pins connected to the node.
-    ///
-    /// Returns response with effects to be applied to the Snarl after the node is removed.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Forbidden` error if the node cannot be removed.
-    #[inline]
-    fn remove_node(
-        &mut self,
-        idx: usize,
-        node: &RefCell<T>,
-        inputs: &[Pin<T>],
-        outputs: &[Pin<T>],
-    ) -> Result<Effects<T>, Forbidden> {
-        let _ = (idx, node, inputs, outputs);
-        Ok(Effects::default())
-    }
-
-    fn node_picker(&mut self, ui: &mut Ui) -> egui::InnerResponse<Option<T>>;
-
-    fn inputs(&mut self, node: &T) -> usize;
-
-    fn outputs(&mut self, node: &T) -> usize;
-
-    fn title(&mut self, node: &T) -> Cow<'static, str>;
-
-    fn show_input(
-        &mut self,
-        node: &RefCell<T>,
-        pin: Pin<T>,
-        ui: &mut Ui,
-    ) -> egui::InnerResponse<Effects<T>>;
-
-    fn show_output(
-        &mut self,
-        node: &RefCell<T>,
-        pin: Pin<T>,
-        ui: &mut Ui,
-    ) -> egui::InnerResponse<Effects<T>>;
-}
-
-/// Error returned from methods where `Viewer` forbids the operation.
-pub struct Forbidden;
 
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -147,10 +33,36 @@ struct Node<T> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct Wire {
-    from_node: usize,
-    from_output: usize,
-    to_node: usize,
-    to_input: usize,
+    #[serde(flatten)]
+    out_pin: OutPin,
+
+    #[serde(flatten)]
+    in_pin: InPin,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct OutPin {
+    pub node: usize,
+    pub output: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct InPin {
+    pub node: usize,
+    pub input: usize,
+}
+
+fn wire_pins(out_pin: OutPin, in_pin: InPin) -> Wire {
+    Wire { out_pin, in_pin }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+enum AnyPin {
+    Out(OutPin),
+    In(InPin),
 }
 
 #[derive(Clone, Debug)]
@@ -178,31 +90,35 @@ impl Wires {
         self.wires.remove(wire)
     }
 
-    pub fn drop_with_node(&mut self, node: usize) {
+    pub fn drop_node(&mut self, node: usize) {
         self.wires
-            .retain(|wire| wire.from_node != node && wire.to_node != node);
+            .retain(|wire| wire.out_pin.node != node && wire.in_pin.node != node);
     }
 
-    pub fn wired_inputs(
-        &self,
-        node: usize,
-        output: usize,
-    ) -> impl Iterator<Item = (usize, usize)> + '_ {
-        self.wires
-            .iter()
-            .filter(move |wire| wire.from_node == node && wire.from_output == output)
-            .map(|wire| (wire.to_node, wire.to_input))
+    pub fn drop_inputs(&mut self, pin: InPin) {
+        self.wires.retain(|wire| wire.in_pin != pin);
     }
 
-    pub fn wired_outputs(
-        &self,
-        node: usize,
-        input: usize,
-    ) -> impl Iterator<Item = (usize, usize)> + '_ {
+    pub fn drop_outputs(&mut self, pin: OutPin) {
+        self.wires.retain(|wire| wire.out_pin != pin);
+    }
+
+    pub fn wired_inputs(&self, out_pin: OutPin) -> impl Iterator<Item = InPin> + '_ {
         self.wires
             .iter()
-            .filter(move |wire| wire.to_node == node && wire.to_input == input)
-            .map(|wire| (wire.from_node, wire.from_output))
+            .filter(move |wire| wire.out_pin == out_pin)
+            .map(|wire| (wire.in_pin))
+    }
+
+    pub fn wired_outputs(&self, in_pin: InPin) -> impl Iterator<Item = OutPin> + '_ {
+        self.wires
+            .iter()
+            .filter(move |wire| wire.in_pin == in_pin)
+            .map(|wire| (wire.out_pin))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = Wire> + '_ {
+        self.wires.iter().copied()
     }
 }
 
@@ -259,94 +175,22 @@ impl<T> Snarl<T> {
     /// snarl.remove_node(node);
     /// ```
     pub fn remove_node(&mut self, idx: usize) -> T {
-        self.nodes.remove(idx).value.into_inner()
+        let value = self.nodes.remove(idx).value.into_inner();
+        self.wires.drop_node(idx);
+        value
     }
 
     /// Connects two nodes.
     /// Returns true if the connection was successful.
     /// Returns false if the connection already exists.
-    pub fn connect(
-        &mut self,
-        from_node: usize,
-        from_output: usize,
-        to_node: usize,
-        to_input: usize,
-    ) -> bool {
-        debug_assert!(self.nodes.contains(from_node));
-        debug_assert!(self.nodes.contains(to_node));
+    pub fn connect(&mut self, from: OutPin, to: InPin) -> bool {
+        debug_assert!(self.nodes.contains(from.node));
+        debug_assert!(self.nodes.contains(to.node));
 
         let wire = Wire {
-            from_node,
-            from_output,
-            to_node,
-            to_input,
+            out_pin: from,
+            in_pin: to,
         };
         self.wires.insert(wire)
-    }
-}
-
-struct SnarlView<'a, T, V> {
-    snarl: &'a mut Snarl<T>,
-    viewer: &'a mut V,
-    pos: egui::Pos2,
-    scale: f32,
-}
-
-/// Methods that use viewer hooks.
-impl<T, V> SnarlView<'_, T, V>
-where
-    V: SnarlViewer<T>,
-{
-    fn apply_effects(&mut self, response: Effects<T>) {
-        for effect in response.effects {
-            self.apply_effect(effect);
-        }
-    }
-
-    fn apply_effect(&mut self, effect: Effect<T>) {
-        match effect {
-            Effect::Connect {
-                from_node,
-                from_output,
-                to_node,
-                to_input,
-            } => {
-                let wire = Wire {
-                    from_node,
-                    from_output,
-                    to_node,
-                    to_input,
-                };
-                self.snarl.wires.insert(wire);
-            }
-            Effect::Disconnect {
-                from_node,
-                from_output,
-                to_node,
-                to_input,
-            } => {
-                let wire = Wire {
-                    from_node,
-                    from_output,
-                    to_node,
-                    to_input,
-                };
-                self.snarl.wires.remove(&wire);
-            }
-            Effect::Closure(f) => f(self.snarl),
-        }
-    }
-
-    /// Creates new node using a viewer hook
-    /// and places it in the Snarl.
-    fn add_node(&mut self, node: T, rect: egui::Rect) -> Result<(), Forbidden> {
-        let idx = self.snarl.nodes.vacant_key();
-        let e = self.viewer.add_node(idx, &node)?;
-        self.snarl.nodes.insert(Node {
-            value: RefCell::new(node),
-            rect,
-        });
-        self.apply_effects(e);
-        Ok(())
     }
 }
