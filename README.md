@@ -1,2 +1,9 @@
 # egui-snarl
-Basics to create node-graph UI with egui
+
+Crate for creating node-graph UIs.
+
+
+# Why "snarl"?
+
+Because that's how any complex graph UI looks like.
+
