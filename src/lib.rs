@@ -22,7 +22,7 @@ impl<T> Default for Snarl<T> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct Node<T> {
     value: RefCell<T>,
-    rect: egui::Rect,
+    pos: egui::Pos2,
 }
 
 /// Connection between two nodes.
@@ -33,10 +33,10 @@ struct Node<T> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct Wire {
-    #[serde(flatten)]
+    #[cfg_attr(feature = "serde", serde(flatten))]
     out_pin: OutPin,
 
-    #[serde(flatten)]
+    #[cfg_attr(feature = "serde", serde(flatten))]
     in_pin: InPin,
 }
 
@@ -156,10 +156,10 @@ impl<T> Snarl<T> {
     /// let mut snarl = Snarl::<()>::new();
     /// snarl.add_node(());
     /// ```
-    pub fn add_node(&mut self, node: T, rect: egui::Rect) -> usize {
+    pub fn add_node(&mut self, node: T, pos: egui::Pos2) -> usize {
         self.nodes.insert(Node {
             value: RefCell::new(node),
-            rect,
+            pos,
         })
     }
 

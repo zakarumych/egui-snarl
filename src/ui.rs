@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cell::RefCell};
+use std::cell::RefCell;
 
 use egui::{ahash::HashMap, *};
 
@@ -221,11 +221,13 @@ pub trait SnarlViewer<T> {
 
     fn node_picker(&mut self, ui: &mut Ui) -> egui::InnerResponse<Option<T>>;
 
-    fn inputs(&mut self, node: &T) -> usize;
+    fn size_hint(&self, node: &T) -> Vec2;
+
+    fn title<'a>(&'a mut self, node: &'a T) -> &'a str;
 
     fn outputs(&mut self, node: &T) -> usize;
 
-    fn title(&mut self, node: &T) -> Cow<'static, str>;
+    fn inputs(&mut self, node: &T) -> usize;
 
     fn show_input(
         &mut self,
@@ -280,8 +282,7 @@ impl<T> Snarl<T> {
 
         for (node_idx, delta) in nodes_moved {
             let node = &mut self.nodes[node_idx];
-            node.rect.min += delta;
-            node.rect.max += delta;
+            node.pos += delta;
         }
     }
 
@@ -311,8 +312,8 @@ impl<T> Snarl<T> {
 
                 for (node_idx, node) in &self.nodes {
                     let node_rect = Rect::from_min_size(
-                        node.rect.min + vec2(max_rect.min.x, max_rect.min.y),
-                        node.rect.size(),
+                        node.pos + vec2(max_rect.min.x, max_rect.min.y),
+                        viewer.size_hint(&node.value.borrow()),
                     );
 
                     let ref mut ui = ui.child_ui_with_id_source(
