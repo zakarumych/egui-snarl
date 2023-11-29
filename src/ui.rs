@@ -347,8 +347,8 @@ impl<T> Snarl<T> {
         V: SnarlViewer<T>,
     {
         Frame::none()
-            .fill(Color32::DARK_GRAY)
-            .stroke(Stroke::new(1.0, Color32::GRAY))
+            .fill(ui.style().visuals.widgets.inactive.bg_fill)
+            .stroke(ui.style().visuals.widgets.inactive.bg_stroke)
             .show(ui, |ui| {
                 let pin_size = style
                     .pin_size
@@ -380,6 +380,7 @@ impl<T> Snarl<T> {
                         Layout::top_down(Align::Center),
                         node_idx,
                     );
+                    ui.set_clip_rect(max_rect);
 
                     Frame::window(ui.style()).show(ui, |ui| {
                         let r = ui.vertical(|ui| {
