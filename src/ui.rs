@@ -246,6 +246,39 @@ pub trait SnarlViewer<T> {
     ) -> egui::InnerResponse<Color32>;
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SnarlStyle {
+    pub pin_size: Option<f32>,
+    pub wire_width: Option<f32>,
+    pub wire_frame_size: Option<f32>,
+    pub downscale_wire: bool,
+    pub upscale_wire: bool,
+}
+
+impl Default for SnarlStyle {
+    fn default() -> Self {
+        SnarlStyle {
+            pin_size: None,
+            wire_width: None,
+            wire_frame_size: None,
+            downscale_wire: false,
+            upscale_wire: true,
+        }
+    }
+}
+
+impl SnarlStyle {
+    pub fn upscale_wire(mut self, upscale: bool) -> Self {
+        self.upscale_wire = upscale;
+        self
+    }
+
+    pub fn downscale_wire(mut self, downscale: bool) -> Self {
+        self.downscale_wire = downscale;
+        self
+    }
+}
+
 impl<T> Snarl<T> {
     fn apply_effects(&mut self, response: Effects<T>) {
         for effect in response.effects {
@@ -271,28 +304,45 @@ impl<T> Snarl<T> {
         }
     }
 
-    pub fn show<V>(&mut self, viewer: &mut V, id: Id, ui: &mut Ui)
+    pub fn show<V>(&mut self, viewer: &mut V, style: &SnarlStyle, snarl_id: Id, ui: &mut Ui)
     where
         V: SnarlViewer<T>,
     {
         let mut effects = Effects::new();
         let mut nodes_moved = Vec::new();
-        self._show(viewer, id, ui, &mut effects, &mut nodes_moved);
+        let mut node_order_to_top = None;
+
+        self._show(
+            viewer,
+            style,
+            snarl_id,
+            ui,
+            &mut effects,
+            &mut nodes_moved,
+            &mut node_order_to_top,
+        );
         self.apply_effects(effects);
 
         for (node_idx, delta) in nodes_moved {
             let node = &mut self.nodes[node_idx];
             node.pos += delta;
         }
+
+        if let Some(order) = node_order_to_top {
+            let node_idx = self.draw_order.remove(order);
+            self.draw_order.push(node_idx);
+        }
     }
 
     fn _show<V>(
         &self,
         viewer: &mut V,
+        style: &SnarlStyle,
         snarl_id: Id,
         ui: &mut Ui,
         effects: &mut Effects<T>,
         nodes_moved: &mut Vec<(usize, Vec2)>,
+        node_order_to_top: &mut Option<usize>,
     ) where
         V: SnarlViewer<T>,
     {
@@ -300,8 +350,12 @@ impl<T> Snarl<T> {
             .fill(Color32::DARK_GRAY)
             .stroke(Stroke::new(1.0, Color32::GRAY))
             .show(ui, |ui| {
-                let base_size = ui.style().spacing.interact_size.y * 0.5;
-                let wire_frame_size = base_size * 5.0;
+                let pin_size = style
+                    .pin_size
+                    .unwrap_or_else(|| ui.style().spacing.interact_size.y * 0.5);
+
+                let wire_frame_size = style.wire_frame_size.unwrap_or(pin_size * 5.0);
+                let wire_width = style.wire_width.unwrap_or_else(|| pin_size * 0.2);
 
                 let max_rect = ui.max_rect();
 
@@ -314,7 +368,8 @@ impl<T> Snarl<T> {
                 let mut part_wire_drag_released = false;
                 let mut pin_hovered = None;
 
-                for (node_idx, node) in &self.nodes {
+                for (order, &node_idx) in self.draw_order.iter().enumerate() {
+                    let node = &self.nodes[node_idx];
                     let node_rect = Rect::from_min_size(
                         node.pos + vec2(max_rect.min.x, max_rect.min.y),
                         viewer.size_hint(&node.value.borrow()),
@@ -323,23 +378,23 @@ impl<T> Snarl<T> {
                     let ref mut ui = ui.child_ui_with_id_source(
                         node_rect,
                         Layout::top_down(Align::Center),
-                        "snarl",
+                        node_idx,
                     );
 
                     Frame::window(ui.style()).show(ui, |ui| {
-                        let r = ui.scope(|ui| {
+                        let r = ui.vertical(|ui| {
                             ui.label(viewer.title(&node.value.borrow()));
                             ui.separator();
                         });
 
-                        let r = ui.interact(
-                            r.response.rect,
-                            r.response.id.with("drag").with(node_idx),
-                            Sense::drag(),
-                        );
-
-                        if r.dragged() {
+                        let r = ui.interact(r.response.rect, r.response.id, Sense::drag());
+                        if r.dragged_by(PointerButton::Primary) {
                             nodes_moved.push((node_idx, r.drag_delta()));
+                        }
+                        if r.clicked_by(PointerButton::Primary)
+                            || r.dragged_by(PointerButton::Primary)
+                        {
+                            *node_order_to_top = Some(order);
                         }
 
                         ui.horizontal(|ui| {
@@ -354,13 +409,13 @@ impl<T> Snarl<T> {
 
                                     ui.horizontal(|ui| {
                                         let pin = Pin::input(&self, in_pin);
-                                        ui.allocate_space(vec2(base_size, base_size));
+                                        ui.allocate_space(vec2(pin_size, pin_size));
 
                                         let r = viewer.show_input(&node.value, pin, ui, effects);
                                         let pin_color = r.inner;
 
                                         let x = r.response.rect.left()
-                                            - base_size / 2.0
+                                            - pin_size / 2.0
                                             - ui.style().spacing.item_spacing.x;
 
                                         let y = (r.response.rect.top() + r.response.rect.bottom())
@@ -369,25 +424,25 @@ impl<T> Snarl<T> {
                                         let r = ui.allocate_rect(
                                             Rect::from_center_size(
                                                 pos2(x, y),
-                                                vec2(base_size, base_size),
+                                                vec2(pin_size, pin_size),
                                             ),
                                             Sense::click_and_drag(),
                                         );
 
                                         ui.painter().circle(
                                             r.rect.center(),
-                                            base_size / 2.0,
+                                            pin_size / 2.0,
                                             pin_color,
                                             Stroke::new(1.0, Color32::BLACK),
                                         );
 
-                                        if r.double_clicked() {
+                                        if r.clicked_by(PointerButton::Secondary) {
                                             effects.drop_inputs(in_pin);
                                         }
-                                        if r.drag_started() {
+                                        if r.drag_started_by(PointerButton::Primary) {
                                             set_part_wire(ui, snarl_id, AnyPin::In(in_pin));
                                         }
-                                        if r.drag_released() {
+                                        if r.drag_released_by(PointerButton::Primary) {
                                             part_wire_drag_released = true;
                                         }
                                         if r.hovered() {
@@ -414,10 +469,10 @@ impl<T> Snarl<T> {
                                         let r = viewer.show_output(&node.value, pin, ui, effects);
                                         let pin_color = r.inner;
 
-                                        ui.allocate_space(vec2(base_size, base_size));
+                                        ui.allocate_space(vec2(pin_size, pin_size));
 
                                         let x = r.response.rect.right()
-                                            + base_size / 2.0
+                                            + pin_size / 2.0
                                             + ui.style().spacing.item_spacing.x;
                                         let y = (r.response.rect.top() + r.response.rect.bottom())
                                             / 2.0;
@@ -425,25 +480,25 @@ impl<T> Snarl<T> {
                                         let r = ui.allocate_rect(
                                             Rect::from_center_size(
                                                 pos2(x, y),
-                                                vec2(base_size, base_size),
+                                                vec2(pin_size, pin_size),
                                             ),
                                             Sense::click_and_drag(),
                                         );
 
                                         ui.painter().circle(
                                             r.rect.center(),
-                                            base_size / 2.0,
+                                            pin_size / 2.0,
                                             pin_color,
                                             Stroke::new(1.0, Color32::BLACK),
                                         );
 
-                                        if r.double_clicked() {
+                                        if r.clicked_by(PointerButton::Secondary) {
                                             effects.drop_outputs(out_pin);
                                         }
-                                        if r.drag_started() {
+                                        if r.drag_started_by(PointerButton::Primary) {
                                             set_part_wire(ui, snarl_id, AnyPin::Out(out_pin));
                                         }
-                                        if r.drag_released() {
+                                        if r.drag_released_by(PointerButton::Primary) {
                                             part_wire_drag_released = true;
                                         }
                                         if r.hovered() {
@@ -470,8 +525,7 @@ impl<T> Snarl<T> {
                     max_rect,
                     max_rect,
                 );
-                let mut painter = ui.painter().clone();
-                painter.set_layer_id(LayerId::new(Order::Middle, Id::new("wires")));
+                let painter = ui.painter();
                 for wire in self.wires.iter() {
                     let from = output_positions[&wire.out_pin];
                     let to = input_positions[&wire.in_pin];
@@ -486,7 +540,15 @@ impl<T> Snarl<T> {
                         oa / 2 + ia / 2,
                     );
 
-                    draw_wire(&painter, wire_frame_size, from, to, Stroke::new(1.0, color));
+                    draw_wire(
+                        painter,
+                        wire_frame_size,
+                        style.upscale_wire,
+                        style.downscale_wire,
+                        from,
+                        to,
+                        Stroke::new(wire_width, color),
+                    );
                 }
 
                 match get_part_wire(ui, snarl_id) {
@@ -497,7 +559,15 @@ impl<T> Snarl<T> {
 
                         let color = input_colors[&pin];
 
-                        draw_wire(&painter, wire_frame_size, from, to, Stroke::new(1.0, color));
+                        draw_wire(
+                            painter,
+                            wire_frame_size,
+                            style.upscale_wire,
+                            style.downscale_wire,
+                            from,
+                            to,
+                            Stroke::new(wire_width, color),
+                        );
                     }
                     Some(AnyPin::Out(pin)) => {
                         let from: Pos2 = output_positions[&pin];
@@ -505,7 +575,15 @@ impl<T> Snarl<T> {
 
                         let color = output_colors[&pin];
 
-                        draw_wire(&painter, wire_frame_size, from, to, Stroke::new(1.0, color));
+                        draw_wire(
+                            painter,
+                            wire_frame_size,
+                            style.upscale_wire,
+                            style.downscale_wire,
+                            from,
+                            to,
+                            Stroke::new(wire_width, color),
+                        );
                     }
                 }
 
@@ -557,7 +635,22 @@ fn take_part_wire(ui: &Ui, id: Id) -> Option<AnyPin> {
     }
 }
 
-fn draw_wire(painter: &Painter, frame_size: f32, from: Pos2, to: Pos2, mut stroke: Stroke) {
+fn draw_wire(
+    painter: &Painter,
+    mut frame_size: f32,
+    upscale: bool,
+    downscale: bool,
+    from: Pos2,
+    to: Pos2,
+    stroke: Stroke,
+) {
+    if upscale {
+        frame_size = frame_size.max((from - to).length() / 4.0);
+    }
+    if downscale {
+        frame_size = frame_size.min((from - to).length() / 4.0);
+    }
+
     let from_norm_x = frame_size;
     let from_2 = pos2(from.x + from_norm_x, from.y);
     let to_norm_x = -from_norm_x;

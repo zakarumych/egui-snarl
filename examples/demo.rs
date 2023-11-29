@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use eframe::App;
 use egui::{pos2, Color32, InnerResponse, Ui};
 use egui_snarl::{
-    ui::{Effects, Forbidden, NodeInPin, NodeOutPin, Pin, SnarlViewer},
+    ui::{Effects, Forbidden, NodeInPin, NodeOutPin, Pin, SnarlStyle, SnarlViewer},
     OutPin, Snarl,
 };
 
@@ -329,7 +329,16 @@ impl App for DemoApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.snarl.show(&mut DemoViewer, egui::Id::new("snarl"), ui);
+            self.snarl.show(
+                &mut DemoViewer,
+                &SnarlStyle {
+                    upscale_wire: true,
+                    downscale_wire: false,
+                    ..Default::default()
+                },
+                egui::Id::new("snarl"),
+                ui,
+            );
         });
     }
 }
