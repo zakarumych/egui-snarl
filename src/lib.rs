@@ -25,6 +25,22 @@ struct Node<T> {
     pos: egui::Pos2,
 }
 
+/// Output pin identifier. Cosists of node index and pin index.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct OutPinId {
+    pub node: usize,
+    pub output: usize,
+}
+
+/// Input pin identifier. Cosists of node index and pin index.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct InPinId {
+    pub node: usize,
+    pub input: usize,
+}
+
 /// Connection between two nodes.
 ///
 /// Nodes may support multiple connections to the same input or output.
@@ -34,35 +50,14 @@ struct Node<T> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct Wire {
     #[cfg_attr(feature = "serde", serde(flatten))]
-    out_pin: OutPin,
+    out_pin: OutPinId,
 
     #[cfg_attr(feature = "serde", serde(flatten))]
-    in_pin: InPin,
+    in_pin: InPinId,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct OutPin {
-    pub node: usize,
-    pub output: usize,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct InPin {
-    pub node: usize,
-    pub input: usize,
-}
-
-fn wire_pins(out_pin: OutPin, in_pin: InPin) -> Wire {
+fn wire_pins(out_pin: OutPinId, in_pin: InPinId) -> Wire {
     Wire { out_pin, in_pin }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-enum AnyPin {
-    Out(OutPin),
-    In(InPin),
 }
 
 #[derive(Clone, Debug)]
@@ -95,22 +90,22 @@ impl Wires {
             .retain(|wire| wire.out_pin.node != node && wire.in_pin.node != node);
     }
 
-    pub fn drop_inputs(&mut self, pin: InPin) {
+    pub fn drop_inputs(&mut self, pin: InPinId) {
         self.wires.retain(|wire| wire.in_pin != pin);
     }
 
-    pub fn drop_outputs(&mut self, pin: OutPin) {
+    pub fn drop_outputs(&mut self, pin: OutPinId) {
         self.wires.retain(|wire| wire.out_pin != pin);
     }
 
-    pub fn wired_inputs(&self, out_pin: OutPin) -> impl Iterator<Item = InPin> + '_ {
+    pub fn wired_inputs(&self, out_pin: OutPinId) -> impl Iterator<Item = InPinId> + '_ {
         self.wires
             .iter()
             .filter(move |wire| wire.out_pin == out_pin)
             .map(|wire| (wire.in_pin))
     }
 
-    pub fn wired_outputs(&self, in_pin: InPin) -> impl Iterator<Item = OutPin> + '_ {
+    pub fn wired_outputs(&self, in_pin: InPinId) -> impl Iterator<Item = OutPinId> + '_ {
         self.wires
             .iter()
             .filter(move |wire| wire.in_pin == in_pin)
@@ -189,7 +184,7 @@ impl<T> Snarl<T> {
     /// Connects two nodes.
     /// Returns true if the connection was successful.
     /// Returns false if the connection already exists.
-    pub fn connect(&mut self, from: OutPin, to: InPin) -> bool {
+    pub fn connect(&mut self, from: OutPinId, to: InPinId) -> bool {
         debug_assert!(self.nodes.contains(from.node));
         debug_assert!(self.nodes.contains(to.node));
 

@@ -1,28 +1,27 @@
 use std::cell::RefCell;
 
-use egui::{ahash::HashMap, *};
+use egui::{ahash::HashMap, epaint::PathShape, *};
 
-use crate::{wire_pins, AnyPin, InPin, OutPin, Snarl};
+use crate::{wire_pins, InPinId, OutPinId, Snarl};
 
 /// Error returned from methods where `Viewer` forbids the operation.
 pub struct Forbidden;
 
 pub enum Effect<T> {
     /// Adds connection between two nodes.
-    Connect {
-        from: OutPin,
-        to: InPin,
-    },
+    Connect { from: OutPinId, to: InPinId },
 
     /// Removes connection between two nodes.
-    Disconnect {
-        from: OutPin,
-        to: InPin,
-    },
+    Disconnect { from: OutPinId, to: InPinId },
 
-    DropInputs(InPin),
+    /// Removes all connections from the output pin.
+    DropOutputs { pin: OutPinId },
 
-    DropOutputs(OutPin),
+    /// Removes all connections to the input pin.
+    DropInputs { pin: InPinId },
+
+    /// Removes a node from snarl.
+    RemoveNode { node: usize },
 
     /// Executes a closure with mutable reference to the Snarl.
     Closure(Box<dyn FnOnce(&mut Snarl<T>)>),
@@ -48,113 +47,156 @@ impl<T> Effects<T> {
         }
     }
 
-    pub fn connect(&mut self, from: OutPin, to: InPin) {
+    pub fn connect(&mut self, from: OutPinId, to: InPinId) {
         self.effects.push(Effect::Connect { from, to });
     }
 
-    pub fn disconnect(&mut self, from: OutPin, to: InPin) {
+    pub fn disconnect(&mut self, from: OutPinId, to: InPinId) {
         self.effects.push(Effect::Disconnect { from, to });
     }
 
-    pub fn drop_inputs(&mut self, input: InPin) {
-        self.effects.push(Effect::DropInputs(input));
+    pub fn drop_inputs(&mut self, pin: InPinId) {
+        self.effects.push(Effect::DropInputs { pin });
     }
 
-    pub fn drop_outputs(&mut self, output: OutPin) {
-        self.effects.push(Effect::DropOutputs(output));
+    pub fn drop_outputs(&mut self, pin: OutPinId) {
+        self.effects.push(Effect::DropOutputs { pin });
+    }
+
+    pub fn remove_node(&mut self, node: usize) {
+        self.effects.push(Effect::RemoveNode { node });
     }
 }
 
-pub struct Remote<'a, T> {
-    pub node_idx: usize,
-    pub pin_idx: usize,
+#[derive(Clone, Copy, Debug)]
+pub struct RemoteOutPin<'a, T> {
+    pub id: OutPinId,
     pub node: &'a RefCell<T>,
 }
 
-/// Node's pin that contains local idx, remove idx and remove node reference.
-pub struct Pin<'a, T> {
-    pub pin_idx: usize,
-    pub remotes: Vec<Remote<'a, T>>,
-}
-
-impl<'a, T> Pin<'a, T> {
-    pub fn output(snarl: &'a Snarl<T>, pin: OutPin) -> Self {
-        Pin {
-            pin_idx: pin.output,
-            remotes: snarl
-                .wires
-                .wired_inputs(pin)
-                .map(|pin| Remote {
-                    node: &snarl.nodes[pin.node].value,
-                    node_idx: pin.node,
-                    pin_idx: pin.input,
-                })
-                .collect(),
-        }
-    }
-
-    pub fn input(snarl: &'a Snarl<T>, pin: InPin) -> Self {
-        Pin {
-            pin_idx: pin.input,
-            remotes: snarl
-                .wires
-                .wired_outputs(pin)
-                .map(|pin| Remote {
-                    node: &snarl.nodes[pin.node].value,
-                    node_idx: pin.node,
-                    pin_idx: pin.output,
-                })
-                .collect(),
-        }
-    }
+#[derive(Clone, Copy, Debug)]
+pub struct RemoteInPin<'a, T> {
+    pub id: InPinId,
+    pub node: &'a RefCell<T>,
 }
 
 /// Node and its output pin.
-pub struct NodeOutPin<'a, T> {
-    pub out_pin: OutPin,
+#[derive(Clone, Debug)]
+pub struct OutPin<'a, T> {
+    pub id: OutPinId,
     pub node: &'a RefCell<T>,
-    pub remotes: Vec<Remote<'a, T>>,
+    pub remotes: Vec<RemoteInPin<'a, T>>,
 }
 
 /// Node and its output pin.
-pub struct NodeInPin<'a, T> {
-    pub in_pin: InPin,
+#[derive(Clone, Debug)]
+pub struct InPin<'a, T> {
+    pub id: InPinId,
     pub node: &'a RefCell<T>,
-    pub remotes: Vec<Remote<'a, T>>,
+    pub remotes: Vec<RemoteOutPin<'a, T>>,
 }
 
-impl<'a, T> NodeOutPin<'a, T> {
-    pub fn new(snarl: &'a Snarl<T>, pin: OutPin) -> Self {
-        NodeOutPin {
-            out_pin: pin,
+impl<'a, T> OutPin<'a, T> {
+    pub fn output(snarl: &'a Snarl<T>, pin: OutPinId) -> Self {
+        OutPin {
+            id: pin,
             node: &snarl.nodes[pin.node].value,
             remotes: snarl
                 .wires
                 .wired_inputs(pin)
-                .map(|pin| Remote {
+                .map(|pin| RemoteInPin {
                     node: &snarl.nodes[pin.node].value,
-                    node_idx: pin.node,
-                    pin_idx: pin.input,
+                    id: pin,
                 })
                 .collect(),
         }
     }
 }
 
-impl<'a, T> NodeInPin<'a, T> {
-    pub fn input(snarl: &'a Snarl<T>, pin: InPin) -> Self {
-        NodeInPin {
-            in_pin: pin,
+impl<'a, T> InPin<'a, T> {
+    pub fn input(snarl: &'a Snarl<T>, pin: InPinId) -> Self {
+        InPin {
+            id: pin,
             node: &snarl.nodes[pin.node].value,
             remotes: snarl
                 .wires
                 .wired_outputs(pin)
-                .map(|pin| Remote {
+                .map(|pin| RemoteOutPin {
                     node: &snarl.nodes[pin.node].value,
-                    node_idx: pin.node,
-                    pin_idx: pin.output,
+                    id: pin,
                 })
                 .collect(),
+        }
+    }
+}
+
+/// Shape of a pin.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PinShape {
+    Cirle,
+    Triangle,
+    Square,
+}
+
+/// Information about a pin returned by `SnarlViewer::show_input` and `SnarlViewer::show_output`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PinInfo {
+    pub shape: PinShape,
+    pub size: f32,
+    pub fill: Color32,
+    pub stroke: Stroke,
+}
+
+impl Default for PinInfo {
+    fn default() -> Self {
+        PinInfo {
+            shape: PinShape::Cirle,
+            size: 1.0,
+            fill: Color32::GRAY,
+            stroke: Stroke::new(1.0, Color32::BLACK),
+        }
+    }
+}
+
+impl PinInfo {
+    pub fn with_shape(mut self, shape: PinShape) -> Self {
+        self.shape = shape;
+        self
+    }
+
+    pub fn with_size(mut self, size: f32) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn with_fill(mut self, fill: Color32) -> Self {
+        self.fill = fill;
+        self
+    }
+
+    pub fn with_stroke(mut self, stroke: Stroke) -> Self {
+        self.stroke = stroke;
+        self
+    }
+
+    pub fn circle() -> Self {
+        PinInfo {
+            shape: PinShape::Cirle,
+            ..Default::default()
+        }
+    }
+
+    pub fn triangle() -> Self {
+        PinInfo {
+            shape: PinShape::Triangle,
+            ..Default::default()
+        }
+    }
+
+    pub fn square() -> Self {
+        PinInfo {
+            shape: PinShape::Square,
+            ..Default::default()
         }
     }
 }
@@ -182,14 +224,50 @@ pub trait SnarlViewer<T> {
         Ok(())
     }
 
+    /// Asks the viewer to connect two pins.
+    ///
+    /// This is usually happens when user drags a wire from one node's output pin to another node's input pin or vice versa.
+    /// By default this method connects the pins and returns `Ok(())`.
     #[inline]
     fn connect(
         &mut self,
-        from: NodeOutPin<T>,
-        to: NodeInPin<T>,
+        from: &OutPin<T>,
+        to: &InPin<T>,
         effects: &mut Effects<T>,
     ) -> Result<(), Forbidden> {
-        let _ = (from, to, effects);
+        effects.connect(from.id, to.id);
+        Ok(())
+    }
+
+    /// Asks the viewer to disconnect two pins.
+    #[inline]
+    fn disconnect(
+        &mut self,
+        from: &OutPin<T>,
+        to: &InPin<T>,
+        effects: &mut Effects<T>,
+    ) -> Result<(), Forbidden> {
+        effects.disconnect(from.id, to.id);
+        Ok(())
+    }
+
+    /// Asks the viewer to disconnect all wires from the output pin.
+    ///
+    /// This is usually happens when right-clicking on an output pin.
+    /// By default this method disconnects the pins and returns `Ok(())`.
+    #[inline]
+    fn drop_outputs(&mut self, pin: &OutPin<T>, effects: &mut Effects<T>) -> Result<(), Forbidden> {
+        effects.drop_outputs(pin.id);
+        Ok(())
+    }
+
+    /// Asks the viewer to disconnect all wires from the input pin.
+    ///
+    /// This is usually happens when right-clicking on an input pin.
+    /// By default this method disconnects the pins and returns `Ok(())`.
+    #[inline]
+    fn drop_inputs(&mut self, pin: &InPin<T>, effects: &mut Effects<T>) -> Result<(), Forbidden> {
+        effects.drop_inputs(pin.id);
         Ok(())
     }
 
@@ -211,11 +289,12 @@ pub trait SnarlViewer<T> {
         &mut self,
         idx: usize,
         node: &RefCell<T>,
-        inputs: &[Pin<T>],
-        outputs: &[Pin<T>],
+        inputs: &[InPin<T>],
+        outputs: &[OutPin<T>],
         effects: &mut Effects<T>,
     ) -> Result<(), Forbidden> {
-        let _ = (idx, node, inputs, outputs, effects);
+        let _ = (idx, node, inputs, outputs);
+        effects.remove_node(idx);
         Ok(())
     }
 
@@ -231,19 +310,17 @@ pub trait SnarlViewer<T> {
 
     fn show_input(
         &mut self,
-        node: &RefCell<T>,
-        pin: Pin<T>,
+        pin: &InPin<T>,
         ui: &mut Ui,
         effects: &mut Effects<T>,
-    ) -> egui::InnerResponse<Color32>;
+    ) -> egui::InnerResponse<PinInfo>;
 
     fn show_output(
         &mut self,
-        node: &RefCell<T>,
-        pin: Pin<T>,
+        pin: &OutPin<T>,
         ui: &mut Ui,
         effects: &mut Effects<T>,
-    ) -> egui::InnerResponse<Color32>;
+    ) -> egui::InnerResponse<PinInfo>;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -279,6 +356,12 @@ impl SnarlStyle {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum AnyPin {
+    Out(OutPinId),
+    In(InPinId),
+}
+
 impl<T> Snarl<T> {
     fn apply_effects(&mut self, response: Effects<T>) {
         for effect in response.effects {
@@ -294,11 +377,14 @@ impl<T> Snarl<T> {
             Effect::Disconnect { from, to } => {
                 self.wires.remove(&wire_pins(from, to));
             }
-            Effect::DropInputs(pin) => {
+            Effect::DropOutputs { pin } => {
+                self.wires.drop_outputs(pin);
+            }
+            Effect::DropInputs { pin } => {
                 self.wires.drop_inputs(pin);
             }
-            Effect::DropOutputs(pin) => {
-                self.wires.drop_outputs(pin);
+            Effect::RemoveNode { node } => {
+                self.remove_node(node);
             }
             Effect::Closure(f) => f(self),
         }
@@ -403,17 +489,19 @@ impl<T> Snarl<T> {
                                 let inputs = viewer.inputs(&node.value.borrow());
 
                                 for input_idx in 0..inputs {
-                                    let in_pin = InPin {
-                                        node: node_idx,
-                                        input: input_idx,
-                                    };
+                                    let in_pin = InPin::input(
+                                        &self,
+                                        InPinId {
+                                            node: node_idx,
+                                            input: input_idx,
+                                        },
+                                    );
 
                                     ui.horizontal(|ui| {
-                                        let pin = Pin::input(&self, in_pin);
                                         ui.allocate_space(vec2(pin_size, pin_size));
 
-                                        let r = viewer.show_input(&node.value, pin, ui, effects);
-                                        let pin_color = r.inner;
+                                        let r = viewer.show_input(&in_pin, ui, effects);
+                                        let pin_info = r.inner;
 
                                         let x = r.response.rect.left()
                                             - pin_size / 2.0
@@ -430,28 +518,28 @@ impl<T> Snarl<T> {
                                             Sense::click_and_drag(),
                                         );
 
-                                        ui.painter().circle(
-                                            r.rect.center(),
-                                            pin_size / 2.0,
-                                            pin_color,
-                                            Stroke::new(1.0, Color32::BLACK),
-                                        );
+                                        let mut pin_size = pin_size;
+                                        if r.hovered() {
+                                            pin_size *= 1.2;
+                                        }
+
+                                        draw_pin(ui.painter(), pin_info, r.rect.center(), pin_size);
 
                                         if r.clicked_by(PointerButton::Secondary) {
-                                            effects.drop_inputs(in_pin);
+                                            let _ = viewer.drop_inputs(&in_pin, effects);
                                         }
                                         if r.drag_started_by(PointerButton::Primary) {
-                                            set_part_wire(ui, snarl_id, AnyPin::In(in_pin));
+                                            set_part_wire(ui, snarl_id, AnyPin::In(in_pin.id));
                                         }
                                         if r.drag_released_by(PointerButton::Primary) {
                                             part_wire_drag_released = true;
                                         }
                                         if r.hovered() {
-                                            pin_hovered = Some(AnyPin::In(in_pin));
+                                            pin_hovered = Some(AnyPin::In(in_pin.id));
                                         }
 
-                                        input_positions.insert(in_pin, r.rect.center());
-                                        input_colors.insert(in_pin, pin_color);
+                                        input_positions.insert(in_pin.id, r.rect.center());
+                                        input_colors.insert(in_pin.id, pin_info.fill);
                                     });
                                 }
                             });
@@ -460,21 +548,24 @@ impl<T> Snarl<T> {
                                 let outputs = viewer.outputs(&node.value.borrow());
 
                                 for output_idx in 0..outputs {
-                                    let out_pin = OutPin {
-                                        node: node_idx,
-                                        output: output_idx,
-                                    };
-                                    let pin = Pin::output(self, out_pin);
+                                    let out_pin = OutPin::output(
+                                        &self,
+                                        OutPinId {
+                                            node: node_idx,
+                                            output: output_idx,
+                                        },
+                                    );
 
                                     ui.horizontal(|ui| {
-                                        let r = viewer.show_output(&node.value, pin, ui, effects);
-                                        let pin_color = r.inner;
+                                        let r = viewer.show_output(&out_pin, ui, effects);
+                                        let pin_info = r.inner;
 
                                         ui.allocate_space(vec2(pin_size, pin_size));
 
                                         let x = r.response.rect.right()
                                             + pin_size / 2.0
                                             + ui.style().spacing.item_spacing.x;
+
                                         let y = (r.response.rect.top() + r.response.rect.bottom())
                                             / 2.0;
 
@@ -486,28 +577,28 @@ impl<T> Snarl<T> {
                                             Sense::click_and_drag(),
                                         );
 
-                                        ui.painter().circle(
-                                            r.rect.center(),
-                                            pin_size / 2.0,
-                                            pin_color,
-                                            Stroke::new(1.0, Color32::BLACK),
-                                        );
+                                        let mut pin_size = pin_size;
+                                        if r.hovered() {
+                                            pin_size *= 1.2;
+                                        }
+
+                                        draw_pin(ui.painter(), pin_info, r.rect.center(), pin_size);
 
                                         if r.clicked_by(PointerButton::Secondary) {
-                                            effects.drop_outputs(out_pin);
+                                            let _ = viewer.drop_outputs(&out_pin, effects);
                                         }
                                         if r.drag_started_by(PointerButton::Primary) {
-                                            set_part_wire(ui, snarl_id, AnyPin::Out(out_pin));
+                                            set_part_wire(ui, snarl_id, AnyPin::Out(out_pin.id));
                                         }
                                         if r.drag_released_by(PointerButton::Primary) {
                                             part_wire_drag_released = true;
                                         }
                                         if r.hovered() {
-                                            pin_hovered = Some(AnyPin::Out(out_pin));
+                                            pin_hovered = Some(AnyPin::Out(out_pin.id));
                                         }
 
-                                        output_positions.insert(out_pin, r.rect.center());
-                                        output_colors.insert(out_pin, pin_color);
+                                        output_positions.insert(out_pin.id, r.rect.center());
+                                        output_colors.insert(out_pin.id, pin_info.fill);
                                     });
                                 }
                             });
@@ -592,16 +683,11 @@ impl<T> Snarl<T> {
                     match (take_part_wire(ui, snarl_id), pin_hovered) {
                         (Some(AnyPin::In(in_pin)), Some(AnyPin::Out(out_pin)))
                         | (Some(AnyPin::Out(out_pin)), Some(AnyPin::In(in_pin))) => {
-                            let res = viewer.connect(
-                                NodeOutPin::new(self, out_pin),
-                                NodeInPin::input(self, in_pin),
+                            let _ = viewer.connect(
+                                &OutPin::output(self, out_pin),
+                                &InPin::input(self, in_pin),
                                 effects,
                             );
-
-                            match res {
-                                Ok(()) => effects.connect(out_pin, in_pin),
-                                Err(Forbidden) => {}
-                            }
                         }
                         _ => {}
                     }
@@ -888,6 +974,44 @@ fn sample_bezier(points: &[Pos2], t: f32) -> Pos2 {
             let a = sample_bezier(&many[..many.len() - 1], t);
             let b = sample_bezier(&many[1..], t);
             a.lerp(b, t)
+        }
+    }
+}
+
+fn draw_pin(painter: &Painter, pin: PinInfo, pos: Pos2, base_size: f32) {
+    let size = base_size * pin.size;
+    match pin.shape {
+        PinShape::Cirle => {
+            painter.circle(pos, size * 0.5, pin.fill, pin.stroke);
+        }
+        PinShape::Triangle => {
+            const A: Vec2 = vec2(-0.64951905283832895, 0.4875);
+            const B: Vec2 = vec2(0.64951905283832895, 0.4875);
+            const C: Vec2 = vec2(0.0, -0.6375);
+
+            let points = vec![pos + A * size, pos + B * size, pos + C * size];
+
+            painter.add(Shape::Path(PathShape {
+                points,
+                closed: true,
+                fill: pin.fill,
+                stroke: pin.stroke,
+            }));
+        }
+        PinShape::Square => {
+            let points = vec![
+                pos + vec2(-0.5, -0.5) * size,
+                pos + vec2(0.5, -0.5) * size,
+                pos + vec2(0.5, 0.5) * size,
+                pos + vec2(-0.5, 0.5) * size,
+            ];
+
+            painter.add(Shape::Path(PathShape {
+                points,
+                closed: true,
+                fill: pin.fill,
+                stroke: pin.stroke,
+            }));
         }
     }
 }
