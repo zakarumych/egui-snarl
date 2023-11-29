@@ -269,7 +269,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             DemoNode::String(ref mut value) => {
                 assert_eq!(pin.pin_idx, 0, "String node has only one output");
                 let r = ui.text_edit_singleline(value);
-                InnerResponse::new(Color32::RED, r)
+                InnerResponse::new(Color32::GREEN, r)
             }
             DemoNode::Add(ref values) => {
                 let sum = values.iter().copied().sum::<i32>();
@@ -319,7 +319,7 @@ impl App for DemoApp {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("Quit").clicked() {
-                        _frame.close();
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close)
                     }
                 });
                 ui.add_space(16.0);
@@ -336,8 +336,9 @@ impl App for DemoApp {
 
 fn main() -> eframe::Result<()> {
     let native_options = eframe::NativeOptions {
-        initial_window_size: Some([400.0, 300.0].into()),
-        min_window_size: Some([300.0, 220.0].into()),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([400.0, 300.0])
+            .with_min_inner_size([300.0, 220.0]),
         ..Default::default()
     };
 

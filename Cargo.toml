@@ -7,14 +7,14 @@ edition = "2021"
 serde = ["dep:serde", "egui/serde", "slab/serde"]
 
 [dependencies]
-egui = { version = "0.23" }
+egui = { version = "0.24" }
 slab = { version = "0.4" }
-lyon_geom = { version = "0.17" }
+lyon_geom = { version = "1.0" }
 serde = { version = "1.0", features = ["derive"], optional = true }
 
 [dev-dependencies]
-eframe = { version = "0.23", features = ["serde"] }
-egui_extras = { version = "0.23", features = ["all_loaders"] }
+eframe = { version = "0.24", features = ["serde"] }
+egui_extras = { version = "0.24", features = ["all_loaders"] }
 
 [[example]]
 name = "demo"

@@ -301,11 +301,15 @@ impl<T> Snarl<T> {
             .stroke(Stroke::new(1.0, Color32::GRAY))
             .show(ui, |ui| {
                 let base_size = ui.style().spacing.interact_size.y * 0.5;
+                let wire_frame_size = base_size * 5.0;
 
                 let max_rect = ui.max_rect();
 
                 let mut input_positions = HashMap::with_hasher(egui::ahash::RandomState::new());
                 let mut output_positions = HashMap::with_hasher(egui::ahash::RandomState::new());
+
+                let mut input_colors = HashMap::with_hasher(egui::ahash::RandomState::new());
+                let mut output_colors = HashMap::with_hasher(egui::ahash::RandomState::new());
 
                 let mut part_wire_drag_released = false;
                 let mut pin_hovered = None;
@@ -391,6 +395,7 @@ impl<T> Snarl<T> {
                                         }
 
                                         input_positions.insert(in_pin, r.rect.center());
+                                        input_colors.insert(in_pin, pin_color);
                                     });
                                 }
                             });
@@ -446,6 +451,7 @@ impl<T> Snarl<T> {
                                         }
 
                                         output_positions.insert(out_pin, r.rect.center());
+                                        output_colors.insert(out_pin, pin_color);
                                     });
                                 }
                             });
@@ -470,13 +476,17 @@ impl<T> Snarl<T> {
                     let from = output_positions[&wire.out_pin];
                     let to = input_positions[&wire.in_pin];
 
-                    draw_wire(
-                        &painter,
-                        base_size,
-                        from,
-                        to,
-                        Stroke::new(1.0, Color32::BLACK),
+                    let [or, og, ob, oa] = output_colors[&wire.out_pin].to_array();
+                    let [ir, ig, ib, ia] = input_colors[&wire.in_pin].to_array();
+
+                    let color = Color32::from_rgba_premultiplied(
+                        or / 2 + ir / 2,
+                        og / 2 + ig / 2,
+                        ob / 2 + ib / 2,
+                        oa / 2 + ia / 2,
                     );
+
+                    draw_wire(&painter, wire_frame_size, from, to, Stroke::new(1.0, color));
                 }
 
                 match get_part_wire(ui, snarl_id) {
@@ -485,29 +495,17 @@ impl<T> Snarl<T> {
                         let from = ui.input(|i| i.pointer.latest_pos().unwrap_or(Pos2::ZERO));
                         let to = input_positions[&pin];
 
-                        // painter.line_segment([from, to], Stroke::new(1.0, Color32::BLACK));
+                        let color = input_colors[&pin];
 
-                        draw_wire(
-                            &painter,
-                            base_size,
-                            from,
-                            to,
-                            Stroke::new(1.0, Color32::BLACK),
-                        );
+                        draw_wire(&painter, wire_frame_size, from, to, Stroke::new(1.0, color));
                     }
                     Some(AnyPin::Out(pin)) => {
                         let from: Pos2 = output_positions[&pin];
                         let to = ui.input(|i| i.pointer.latest_pos().unwrap_or(Pos2::ZERO));
 
-                        // painter.line_segment([from, to], Stroke::new(1.0, Color32::BLACK));
+                        let color = output_colors[&pin];
 
-                        draw_wire(
-                            &painter,
-                            base_size,
-                            from,
-                            to,
-                            Stroke::new(1.0, Color32::BLACK),
-                        );
+                        draw_wire(&painter, wire_frame_size, from, to, Stroke::new(1.0, color));
                     }
                 }
 
@@ -559,56 +557,155 @@ fn take_part_wire(ui: &Ui, id: Id) -> Option<AnyPin> {
     }
 }
 
-fn draw_wire(painter: &Painter, base_size: f32, from: Pos2, to: Pos2, stroke: Stroke) {
-    let from_norm_x = ((to.x - from.x) * 0.5).max(base_size);
+fn draw_wire(painter: &Painter, frame_size: f32, from: Pos2, to: Pos2, stroke: Stroke) {
+    let from_norm_x = frame_size;
+    let from_2 = pos2(from.x + from_norm_x, from.y);
     let to_norm_x = -from_norm_x;
+    let to_2 = pos2(to.x + to_norm_x, to.y);
 
-    draw_cubic_bezier(
-        painter,
-        from,
-        vec2(from_norm_x, 0.0),
-        to,
-        vec2(to_norm_x, 0.0),
-        stroke,
-    );
+    let between = (from_2 - to_2).length();
+
+    if from_2.x <= to_2.x && between >= frame_size * 2.0 {
+        let middle_1 = from_2 + (to_2 - from_2).normalized() * frame_size;
+        let middle_2 = to_2 + (from_2 - to_2).normalized() * frame_size;
+
+        draw_bezier(
+            painter,
+            &[from, from_2, middle_1, middle_2, to_2, to],
+            stroke,
+        );
+    } else if from_2.x <= to_2.x {
+        // let t = 1.0 - ((to_2.y - from_2.y).abs() - between) / between;
+        let t = (between - frame_size * 2.0) / ((to_2.y - from_2.y).abs() - frame_size * 2.0);
+
+        let middle_1 = to_2.lerp(pos2(from_2.x, from_2.y + frame_size), t);
+        let middle_1 = from_2 + (middle_1 - from_2).normalized() * frame_size;
+
+        let middle_2 = from_2.lerp(pos2(to_2.x, to_2.y + frame_size), t);
+        let middle_2 = to_2 + (middle_2 - to_2).normalized() * frame_size;
+
+        draw_bezier(
+            painter,
+            &[from, from_2, middle_1, middle_2, to_2, to],
+            stroke,
+        );
+    } else {
+        let middle_1 = pos2(from_2.x, from_2.y + frame_size);
+        let middle_2 = pos2(to_2.x, to_2.y + frame_size);
+
+        draw_bezier(
+            painter,
+            &[from, from_2, middle_1, middle_2, to_2, to],
+            stroke,
+        );
+    }
 }
 
-fn draw_cubic_bezier(
-    painter: &Painter,
-    from: Pos2,
-    from_norm: Vec2,
-    to: Pos2,
-    to_nrom: Vec2,
-    stroke: Stroke,
-) {
-    let curve = lyon_geom::cubic_bezier::CubicBezierSegment {
-        from: lyon_geom::point(from.x, from.y),
-        ctrl1: lyon_geom::point(from.x + from_norm.x, from.y + from_norm.y),
-        ctrl2: lyon_geom::point(to.x + to_nrom.x, to.y + to_nrom.y),
-        to: lyon_geom::point(to.x, to.y),
-    };
+fn draw_bezier(painter: &Painter, points: &[Pos2], stroke: Stroke) {
+    assert!(points.len() > 0);
 
-    let bb = curve.bounding_box();
+    let total_length = points[1..]
+        .iter()
+        .scan(points[0], |last, point| {
+            let l = (*point - *last).length();
+            *last = *point;
+            Some(l)
+        })
+        .sum::<f32>();
 
-    if !painter.clip_rect().intersects(Rect::from_min_max(
-        pos2(bb.min.x, bb.min.y),
-        pos2(bb.max.x, bb.max.y),
-    )) {
-        return;
-    }
+    let samples = total_length.ceil() as usize;
 
-    let mut points = Vec::new();
+    let mut path = Vec::new();
 
-    points.push(from);
-
-    for point in curve.flattened(0.2) {
-        points.push(pos2(point.x, point.y));
+    for i in 0..samples {
+        let t = i as f32 / (samples - 1) as f32;
+        path.push(sample_bezier(points, t));
     }
 
     painter.add(Shape::Path(epaint::PathShape {
-        points,
+        points: path,
         closed: false,
         fill: Color32::TRANSPARENT,
         stroke,
     }));
+}
+
+fn sample_bezier(points: &[Pos2], t: f32) -> Pos2 {
+    assert!(points.len() > 0);
+
+    match points {
+        [] => panic!("Empty bezier curve"),
+        [p] => *p,
+        [p1, p2] => p1.lerp(*p2, t),
+        [p1, p2, p3] => {
+            let x1 = p1.lerp(*p2, t);
+            let x2 = p2.lerp(*p3, t);
+            x1.lerp(x2, t)
+        }
+        [p1, p2, p3, p4] => {
+            let x1 = p1.lerp(*p2, t);
+            let x2 = p2.lerp(*p3, t);
+            let x3 = p3.lerp(*p4, t);
+            let y1 = x1.lerp(x2, t);
+            let y2 = x2.lerp(x3, t);
+            y1.lerp(y2, t)
+        }
+        [p1, p2, p3, p4, p5] => {
+            let x1 = p1.lerp(*p2, t);
+            let x2 = p2.lerp(*p3, t);
+            let x3 = p3.lerp(*p4, t);
+            let x4 = p4.lerp(*p5, t);
+            let y1 = x1.lerp(x2, t);
+            let y2 = x2.lerp(x3, t);
+            let y3 = x3.lerp(x4, t);
+            let z1 = y1.lerp(y2, t);
+            let z2 = y2.lerp(y3, t);
+            z1.lerp(z2, t)
+        }
+        [p1, p2, p3, p4, p5, p6] => {
+            let x1 = p1.lerp(*p2, t);
+            let x2 = p2.lerp(*p3, t);
+            let x3 = p3.lerp(*p4, t);
+            let x4 = p4.lerp(*p5, t);
+            let x5 = p5.lerp(*p6, t);
+            let y1 = x1.lerp(x2, t);
+            let y2 = x2.lerp(x3, t);
+            let y3 = x3.lerp(x4, t);
+            let y4 = x4.lerp(x5, t);
+            let z1 = y1.lerp(y2, t);
+            let z2 = y2.lerp(y3, t);
+            let z3 = y3.lerp(y4, t);
+            let w1 = z1.lerp(z2, t);
+            let w2 = z2.lerp(z3, t);
+            w1.lerp(w2, t)
+        }
+        [p1, p2, p3, p4, p5, p6, p7] => {
+            let x1 = p1.lerp(*p2, t);
+            let x2 = p2.lerp(*p3, t);
+            let x3 = p3.lerp(*p4, t);
+            let x4 = p4.lerp(*p5, t);
+            let x5 = p5.lerp(*p6, t);
+            let x6 = p6.lerp(*p7, t);
+            let y1 = x1.lerp(x2, t);
+            let y2 = x2.lerp(x3, t);
+            let y3 = x3.lerp(x4, t);
+            let y4 = x4.lerp(x5, t);
+            let y5 = x5.lerp(x6, t);
+            let z1 = y1.lerp(y2, t);
+            let z2 = y2.lerp(y3, t);
+            let z3 = y3.lerp(y4, t);
+            let z4 = y4.lerp(y5, t);
+            let w1 = z1.lerp(z2, t);
+            let w2 = z2.lerp(z3, t);
+            let w3 = z3.lerp(z4, t);
+            let u1 = w1.lerp(w2, t);
+            let u2 = w2.lerp(w3, t);
+            u1.lerp(u2, t)
+        }
+        many => {
+            let a = sample_bezier(&many[..many.len() - 1], t);
+            let b = sample_bezier(&many[1..], t);
+            a.lerp(b, t)
+        }
+    }
 }
