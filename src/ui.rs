@@ -557,7 +557,7 @@ fn take_part_wire(ui: &Ui, id: Id) -> Option<AnyPin> {
     }
 }
 
-fn draw_wire(painter: &Painter, frame_size: f32, from: Pos2, to: Pos2, stroke: Stroke) {
+fn draw_wire(painter: &Painter, frame_size: f32, from: Pos2, to: Pos2, mut stroke: Stroke) {
     let from_norm_x = frame_size;
     let from_2 = pos2(from.x + from_norm_x, from.y);
     let to_norm_x = -from_norm_x;
@@ -575,22 +575,55 @@ fn draw_wire(painter: &Painter, frame_size: f32, from: Pos2, to: Pos2, stroke: S
             stroke,
         );
     } else if from_2.x <= to_2.x {
-        // let t = 1.0 - ((to_2.y - from_2.y).abs() - between) / between;
-        let t = (between - frame_size * 2.0) / ((to_2.y - from_2.y).abs() - frame_size * 2.0);
+        let t =
+            (between - (to_2.y - from_2.y).abs()) / (frame_size * 2.0 - (to_2.y - from_2.y).abs());
 
-        let middle_1 = to_2.lerp(pos2(from_2.x, from_2.y + frame_size), t);
-        let middle_1 = from_2 + (middle_1 - from_2).normalized() * frame_size;
+        let mut middle_1 = from_2 + (to_2 - from_2).normalized() * frame_size;
+        let mut middle_2 = to_2 + (from_2 - to_2).normalized() * frame_size;
 
-        let middle_2 = from_2.lerp(pos2(to_2.x, to_2.y + frame_size), t);
-        let middle_2 = to_2 + (middle_2 - to_2).normalized() * frame_size;
+        if from_2.y >= to_2.y + frame_size {
+            let u = (from_2.y - to_2.y - frame_size) / frame_size;
+
+            let t0_middle_1 = pos2(from_2.x + (1.0 - u) * frame_size, from_2.y - frame_size * u);
+            let t0_middle_2 = pos2(to_2.x, to_2.y + frame_size);
+
+            middle_1 = t0_middle_1.lerp(middle_1, t);
+            middle_2 = t0_middle_2.lerp(middle_2, t);
+        } else if from_2.y >= to_2.y {
+            let u = (from_2.y - to_2.y) / frame_size;
+
+            let t0_middle_1 = pos2(from_2.x + u * frame_size, from_2.y + frame_size * (1.0 - u));
+            let t0_middle_2 = pos2(to_2.x, to_2.y + frame_size);
+
+            middle_1 = t0_middle_1.lerp(middle_1, t);
+            middle_2 = t0_middle_2.lerp(middle_2, t);
+        } else if to_2.y >= from_2.y + frame_size {
+            let u = (to_2.y - from_2.y - frame_size) / frame_size;
+
+            let t0_middle_1 = pos2(from_2.x, from_2.y + frame_size);
+            let t0_middle_2 = pos2(to_2.x - (1.0 - u) * frame_size, to_2.y - frame_size * u);
+
+            middle_1 = t0_middle_1.lerp(middle_1, t);
+            middle_2 = t0_middle_2.lerp(middle_2, t);
+        } else if to_2.y >= from_2.y {
+            let u = (to_2.y - from_2.y) / frame_size;
+
+            let t0_middle_1 = pos2(from_2.x, from_2.y + frame_size);
+            let t0_middle_2 = pos2(to_2.x - u * frame_size, to_2.y + frame_size * (1.0 - u));
+
+            middle_1 = t0_middle_1.lerp(middle_1, t);
+            middle_2 = t0_middle_2.lerp(middle_2, t);
+        } else {
+            unreachable!();
+        }
 
         draw_bezier(
             painter,
             &[from, from_2, middle_1, middle_2, to_2, to],
             stroke,
         );
-    } else {
-        let middle_1 = pos2(from_2.x, from_2.y + frame_size);
+    } else if from_2.y >= to_2.y + frame_size * 2.0 {
+        let middle_1 = pos2(from_2.x, from_2.y - frame_size);
         let middle_2 = pos2(to_2.x, to_2.y + frame_size);
 
         draw_bezier(
@@ -598,6 +631,61 @@ fn draw_wire(painter: &Painter, frame_size: f32, from: Pos2, to: Pos2, stroke: S
             &[from, from_2, middle_1, middle_2, to_2, to],
             stroke,
         );
+    } else if from_2.y >= to_2.y + frame_size {
+        let t = (from_2.y - to_2.y - frame_size) / frame_size;
+
+        let middle_1 = pos2(from_2.x + (1.0 - t) * frame_size, from_2.y - frame_size * t);
+        let middle_2 = pos2(to_2.x, to_2.y + frame_size);
+
+        draw_bezier(
+            painter,
+            &[from, from_2, middle_1, middle_2, to_2, to],
+            stroke,
+        );
+    } else if from_2.y >= to_2.y {
+        let t = (from_2.y - to_2.y) / frame_size;
+
+        let middle_1 = pos2(from_2.x + t * frame_size, from_2.y + frame_size * (1.0 - t));
+        let middle_2 = pos2(to_2.x, to_2.y + frame_size);
+
+        draw_bezier(
+            painter,
+            &[from, from_2, middle_1, middle_2, to_2, to],
+            stroke,
+        );
+    } else if to_2.y >= from_2.y + frame_size * 2.0 {
+        let middle_1 = pos2(from_2.x, from_2.y + frame_size);
+        let middle_2 = pos2(to_2.x, to_2.y - frame_size);
+
+        draw_bezier(
+            painter,
+            &[from, from_2, middle_1, middle_2, to_2, to],
+            stroke,
+        );
+    } else if to_2.y >= from_2.y + frame_size {
+        let t = (to_2.y - from_2.y - frame_size) / frame_size;
+
+        let middle_1 = pos2(from_2.x, from_2.y + frame_size);
+        let middle_2 = pos2(to_2.x - (1.0 - t) * frame_size, to_2.y - frame_size * t);
+
+        draw_bezier(
+            painter,
+            &[from, from_2, middle_1, middle_2, to_2, to],
+            stroke,
+        );
+    } else if to_2.y >= from_2.y {
+        let t = (to_2.y - from_2.y) / frame_size;
+
+        let middle_1 = pos2(from_2.x, from_2.y + frame_size);
+        let middle_2 = pos2(to_2.x - t * frame_size, to_2.y + frame_size * (1.0 - t));
+
+        draw_bezier(
+            painter,
+            &[from, from_2, middle_1, middle_2, to_2, to],
+            stroke,
+        );
+    } else {
+        unreachable!();
     }
 }
 
