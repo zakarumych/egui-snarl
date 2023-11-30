@@ -304,6 +304,19 @@ pub trait SnarlViewer<T> {
 
     fn title<'a>(&'a mut self, node: &'a T) -> &'a str;
 
+    fn show_content(
+        &mut self,
+        idx: usize,
+        node: &RefCell<T>,
+        inputs: &[InPin<T>],
+        outputs: &[OutPin<T>],
+        ui: &mut Ui,
+        effects: &mut Effects<T>,
+    ) -> Response {
+        let _ = (idx, node, inputs, outputs, effects);
+        ui.interact(Rect::ZERO, Id::NULL, Sense::hover())
+    }
+
     fn outputs(&mut self, node: &T) -> usize;
 
     fn inputs(&mut self, node: &T) -> usize;
@@ -372,18 +385,25 @@ impl<T> Snarl<T> {
     fn apply_effect(&mut self, effect: Effect<T>) {
         match effect {
             Effect::Connect { from, to } => {
+                assert!(self.nodes.contains(from.node));
+                assert!(self.nodes.contains(to.node));
                 self.wires.insert(wire_pins(from, to));
             }
             Effect::Disconnect { from, to } => {
+                assert!(self.nodes.contains(from.node));
+                assert!(self.nodes.contains(to.node));
                 self.wires.remove(&wire_pins(from, to));
             }
             Effect::DropOutputs { pin } => {
+                assert!(self.nodes.contains(pin.node));
                 self.wires.drop_outputs(pin);
             }
             Effect::DropInputs { pin } => {
+                assert!(self.nodes.contains(pin.node));
                 self.wires.drop_inputs(pin);
             }
             Effect::RemoveNode { node } => {
+                assert!(self.nodes.contains(node));
                 self.remove_node(node);
             }
             Effect::Closure(f) => f(self),
@@ -445,6 +465,8 @@ impl<T> Snarl<T> {
 
                 let max_rect = ui.max_rect();
 
+                let r = ui.allocate_rect(max_rect, Sense::click());
+
                 let mut input_positions = HashMap::with_hasher(egui::ahash::RandomState::new());
                 let mut output_positions = HashMap::with_hasher(egui::ahash::RandomState::new());
 
@@ -484,11 +506,40 @@ impl<T> Snarl<T> {
                             *node_order_to_top = Some(order);
                         }
 
+                        let inputs_count = viewer.inputs(&node.value.borrow());
+                        let outputs_count = viewer.outputs(&node.value.borrow());
+
+                        let inputs = (0..inputs_count)
+                            .map(|idx| {
+                                InPin::input(
+                                    &self,
+                                    InPinId {
+                                        node: node_idx,
+                                        input: idx,
+                                    },
+                                )
+                            })
+                            .collect::<Vec<_>>();
+
+                        let outputs = (0..outputs_count)
+                            .map(|idx| {
+                                OutPin::output(
+                                    &self,
+                                    OutPinId {
+                                        node: node_idx,
+                                        output: idx,
+                                    },
+                                )
+                            })
+                            .collect::<Vec<_>>();
+
+                        viewer.show_content(node_idx, &node.value, &inputs, &outputs, ui, effects);
+
+                        // let r = ui.interact(r.response.rect, r.response.id, Sense::drag());
+
                         ui.horizontal(|ui| {
                             ui.with_layout(Layout::top_down(Align::Min), |ui| {
-                                let inputs = viewer.inputs(&node.value.borrow());
-
-                                for input_idx in 0..inputs {
+                                for input_idx in 0..inputs_count {
                                     let in_pin = InPin::input(
                                         &self,
                                         InPinId {
@@ -545,9 +596,7 @@ impl<T> Snarl<T> {
                             });
 
                             ui.with_layout(Layout::top_down(Align::Max), |ui| {
-                                let outputs = viewer.outputs(&node.value.borrow());
-
-                                for output_idx in 0..outputs {
+                                for output_idx in 0..outputs_count {
                                     let out_pin = OutPin::output(
                                         &self,
                                         OutPinId {
@@ -606,31 +655,55 @@ impl<T> Snarl<T> {
                     });
                 }
 
-                let leftover = ui.available_size();
-                ui.allocate_exact_size(leftover, Sense::hover());
+                let part_wire = get_part_wire(ui, snarl_id);
+                let hover_pos = r.hover_pos();
+                let mut hovered_wire = None;
 
-                let id = Id::new(("wires", ui.layer_id()));
-                let ref mut ui = Ui::new(
-                    ui.ctx().clone(),
-                    LayerId::new(Order::Middle, id),
-                    id,
-                    max_rect,
-                    max_rect,
-                );
+                for wire in self.wires.iter() {
+                    let from = output_positions[&wire.out_pin];
+                    let to = input_positions[&wire.in_pin];
+
+                    if part_wire.is_none() {
+                        // Do not select wire if we are dragging a new wire.
+                        if let Some(hover_pos) = hover_pos {
+                            let hit = hit_wire(
+                                hover_pos,
+                                wire_frame_size,
+                                style.upscale_wire,
+                                style.downscale_wire,
+                                from,
+                                to,
+                                wire_width * 1.5,
+                            );
+
+                            if hit {
+                                hovered_wire = Some(wire);
+                            }
+                        }
+                    }
+                }
+
+                if let Some(wire) = hovered_wire {
+                    if r.clicked_by(PointerButton::Secondary) {
+                        let out_pin = OutPin::output(&self, wire.out_pin);
+                        let in_pin = InPin::input(&self, wire.in_pin);
+
+                        let _ = viewer.disconnect(&out_pin, &in_pin, effects);
+                    }
+                }
+
                 let painter = ui.painter();
                 for wire in self.wires.iter() {
                     let from = output_positions[&wire.out_pin];
                     let to = input_positions[&wire.in_pin];
 
-                    let [or, og, ob, oa] = output_colors[&wire.out_pin].to_array();
-                    let [ir, ig, ib, ia] = input_colors[&wire.in_pin].to_array();
+                    let color =
+                        mix_colors(output_colors[&wire.out_pin], input_colors[&wire.in_pin]);
 
-                    let color = Color32::from_rgba_premultiplied(
-                        or / 2 + ir / 2,
-                        og / 2 + ig / 2,
-                        ob / 2 + ib / 2,
-                        oa / 2 + ia / 2,
-                    );
+                    let mut draw_width = wire_width;
+                    if hovered_wire == Some(wire) {
+                        draw_width *= 1.5;
+                    }
 
                     draw_wire(
                         painter,
@@ -639,11 +712,11 @@ impl<T> Snarl<T> {
                         style.downscale_wire,
                         from,
                         to,
-                        Stroke::new(wire_width, color),
+                        Stroke::new(draw_width, color),
                     );
                 }
 
-                match get_part_wire(ui, snarl_id) {
+                match part_wire {
                     None => {}
                     Some(AnyPin::In(pin)) => {
                         let from = ui.input(|i| i.pointer.latest_pos().unwrap_or(Pos2::ZERO));
@@ -838,7 +911,7 @@ fn wire_bezier(
 
 fn draw_wire(
     painter: &Painter,
-    mut frame_size: f32,
+    frame_size: f32,
     upscale: bool,
     downscale: bool,
     from: Pos2,
@@ -850,6 +923,19 @@ fn draw_wire(
         &wire_bezier(frame_size, upscale, downscale, from, to),
         stroke,
     );
+}
+
+fn hit_wire(
+    pos: Pos2,
+    frame_size: f32,
+    upscale: bool,
+    downscale: bool,
+    from: Pos2,
+    to: Pos2,
+    threshold: f32,
+) -> bool {
+    let points = wire_bezier(frame_size, upscale, downscale, from, to);
+    hit_bezier(pos, &points, threshold)
 }
 
 fn bezier_reference_size(points: &[Pos2; 6]) -> f32 {
@@ -956,7 +1042,7 @@ fn split_bezier(points: &[Pos2; 6], t: f32) -> [[Pos2; 6]; 2] {
     ]
 }
 
-fn bezier_hit(pos: Pos2, points: &[Pos2; 6], threshold: f32) -> bool {
+fn hit_bezier(pos: Pos2, points: &[Pos2; 6], threshold: f32) -> bool {
     let aabb = Rect::from_points(points);
 
     if pos.x + threshold < aabb.left() {
@@ -976,7 +1062,7 @@ fn bezier_hit(pos: Pos2, points: &[Pos2; 6], threshold: f32) -> bool {
     if samples > 16 {
         let [points1, points2] = split_bezier(points, 0.5);
 
-        return bezier_hit(pos, &points1, threshold) || bezier_hit(pos, &points2, threshold);
+        return hit_bezier(pos, &points1, threshold) || hit_bezier(pos, &points2, threshold);
     }
 
     for i in 0..samples {
@@ -1026,4 +1112,16 @@ fn draw_pin(painter: &Painter, pin: PinInfo, pos: Pos2, base_size: f32) {
             }));
         }
     }
+}
+
+fn mix_colors(a: Color32, b: Color32) -> Color32 {
+    let [or, og, ob, oa] = a.to_array();
+    let [ir, ig, ib, ia] = b.to_array();
+
+    Color32::from_rgba_premultiplied(
+        or / 2 + ir / 2,
+        og / 2 + ig / 2,
+        ob / 2 + ib / 2,
+        oa / 2 + ia / 2,
+    )
 }

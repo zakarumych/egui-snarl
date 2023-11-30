@@ -15,6 +15,7 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 [dev-dependencies]
 eframe = { version = "0.24", features = ["serde"] }
 egui_extras = { version = "0.24", features = ["all_loaders"] }
+syn = { version = "1.0", features = ["extra-traits"] }
 
 [[example]]
 name = "demo"
