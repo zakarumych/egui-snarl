@@ -722,15 +722,14 @@ fn take_part_wire(ui: &Ui, id: Id) -> Option<AnyPin> {
     }
 }
 
-fn draw_wire(
-    painter: &Painter,
+/// Returns 6th degree bezier curve for the wire
+fn wire_bezier(
     mut frame_size: f32,
     upscale: bool,
     downscale: bool,
     from: Pos2,
     to: Pos2,
-    stroke: Stroke,
-) {
+) -> [Pos2; 6] {
     if upscale {
         frame_size = frame_size.max((from - to).length() / 4.0);
     }
@@ -749,11 +748,7 @@ fn draw_wire(
         let middle_1 = from_2 + (to_2 - from_2).normalized() * frame_size;
         let middle_2 = to_2 + (from_2 - to_2).normalized() * frame_size;
 
-        draw_bezier(
-            painter,
-            &[from, from_2, middle_1, middle_2, to_2, to],
-            stroke,
-        );
+        [from, from_2, middle_1, middle_2, to_2, to]
     } else if from_2.x <= to_2.x {
         let t =
             (between - (to_2.y - from_2.y).abs()) / (frame_size * 2.0 - (to_2.y - from_2.y).abs());
@@ -797,91 +792,85 @@ fn draw_wire(
             unreachable!();
         }
 
-        draw_bezier(
-            painter,
-            &[from, from_2, middle_1, middle_2, to_2, to],
-            stroke,
-        );
+        [from, from_2, middle_1, middle_2, to_2, to]
     } else if from_2.y >= to_2.y + frame_size * 2.0 {
         let middle_1 = pos2(from_2.x, from_2.y - frame_size);
         let middle_2 = pos2(to_2.x, to_2.y + frame_size);
 
-        draw_bezier(
-            painter,
-            &[from, from_2, middle_1, middle_2, to_2, to],
-            stroke,
-        );
+        [from, from_2, middle_1, middle_2, to_2, to]
     } else if from_2.y >= to_2.y + frame_size {
         let t = (from_2.y - to_2.y - frame_size) / frame_size;
 
         let middle_1 = pos2(from_2.x + (1.0 - t) * frame_size, from_2.y - frame_size * t);
         let middle_2 = pos2(to_2.x, to_2.y + frame_size);
 
-        draw_bezier(
-            painter,
-            &[from, from_2, middle_1, middle_2, to_2, to],
-            stroke,
-        );
+        [from, from_2, middle_1, middle_2, to_2, to]
     } else if from_2.y >= to_2.y {
         let t = (from_2.y - to_2.y) / frame_size;
 
         let middle_1 = pos2(from_2.x + t * frame_size, from_2.y + frame_size * (1.0 - t));
         let middle_2 = pos2(to_2.x, to_2.y + frame_size);
 
-        draw_bezier(
-            painter,
-            &[from, from_2, middle_1, middle_2, to_2, to],
-            stroke,
-        );
+        [from, from_2, middle_1, middle_2, to_2, to]
     } else if to_2.y >= from_2.y + frame_size * 2.0 {
         let middle_1 = pos2(from_2.x, from_2.y + frame_size);
         let middle_2 = pos2(to_2.x, to_2.y - frame_size);
 
-        draw_bezier(
-            painter,
-            &[from, from_2, middle_1, middle_2, to_2, to],
-            stroke,
-        );
+        [from, from_2, middle_1, middle_2, to_2, to]
     } else if to_2.y >= from_2.y + frame_size {
         let t = (to_2.y - from_2.y - frame_size) / frame_size;
 
         let middle_1 = pos2(from_2.x, from_2.y + frame_size);
         let middle_2 = pos2(to_2.x - (1.0 - t) * frame_size, to_2.y - frame_size * t);
 
-        draw_bezier(
-            painter,
-            &[from, from_2, middle_1, middle_2, to_2, to],
-            stroke,
-        );
+        [from, from_2, middle_1, middle_2, to_2, to]
     } else if to_2.y >= from_2.y {
         let t = (to_2.y - from_2.y) / frame_size;
 
         let middle_1 = pos2(from_2.x, from_2.y + frame_size);
         let middle_2 = pos2(to_2.x - t * frame_size, to_2.y + frame_size * (1.0 - t));
 
-        draw_bezier(
-            painter,
-            &[from, from_2, middle_1, middle_2, to_2, to],
-            stroke,
-        );
+        [from, from_2, middle_1, middle_2, to_2, to]
     } else {
         unreachable!();
     }
 }
 
-fn draw_bezier(painter: &Painter, points: &[Pos2], stroke: Stroke) {
+fn draw_wire(
+    painter: &Painter,
+    mut frame_size: f32,
+    upscale: bool,
+    downscale: bool,
+    from: Pos2,
+    to: Pos2,
+    stroke: Stroke,
+) {
+    draw_bezier(
+        painter,
+        &wire_bezier(frame_size, upscale, downscale, from, to),
+        stroke,
+    );
+}
+
+fn bezier_reference_size(points: &[Pos2; 6]) -> f32 {
+    let [p0, p1, p2, p3, p4, p5] = *points;
+
+    (p1 - p0).length()
+        + (p2 - p1).length()
+        + (p3 - p2).length()
+        + (p4 - p3).length()
+        + (p5 - p4).length()
+}
+
+fn bezier_samples_number(points: &[Pos2; 6], threshold: f32) -> usize {
+    let reference_size = bezier_reference_size(points);
+    (reference_size / threshold).ceil() as usize
+}
+
+fn draw_bezier(painter: &Painter, points: &[Pos2; 6], stroke: Stroke) {
     assert!(points.len() > 0);
 
-    let total_length = points[1..]
-        .iter()
-        .scan(points[0], |last, point| {
-            let l = (*point - *last).length();
-            *last = *point;
-            Some(l)
-        })
-        .sum::<f32>();
-
-    let samples = total_length.ceil() as usize;
+    let samples = bezier_samples_number(points, stroke.width);
 
     let mut path = Vec::new();
 
@@ -898,84 +887,107 @@ fn draw_bezier(painter: &Painter, points: &[Pos2], stroke: Stroke) {
     }));
 }
 
-fn sample_bezier(points: &[Pos2], t: f32) -> Pos2 {
-    assert!(points.len() > 0);
+fn sample_bezier(points: &[Pos2; 6], t: f32) -> Pos2 {
+    let [p0, p1, p2, p3, p4, p5] = *points;
 
-    match points {
-        [] => panic!("Empty bezier curve"),
-        [p] => *p,
-        [p1, p2] => p1.lerp(*p2, t),
-        [p1, p2, p3] => {
-            let x1 = p1.lerp(*p2, t);
-            let x2 = p2.lerp(*p3, t);
-            x1.lerp(x2, t)
-        }
-        [p1, p2, p3, p4] => {
-            let x1 = p1.lerp(*p2, t);
-            let x2 = p2.lerp(*p3, t);
-            let x3 = p3.lerp(*p4, t);
-            let y1 = x1.lerp(x2, t);
-            let y2 = x2.lerp(x3, t);
-            y1.lerp(y2, t)
-        }
-        [p1, p2, p3, p4, p5] => {
-            let x1 = p1.lerp(*p2, t);
-            let x2 = p2.lerp(*p3, t);
-            let x3 = p3.lerp(*p4, t);
-            let x4 = p4.lerp(*p5, t);
-            let y1 = x1.lerp(x2, t);
-            let y2 = x2.lerp(x3, t);
-            let y3 = x3.lerp(x4, t);
-            let z1 = y1.lerp(y2, t);
-            let z2 = y2.lerp(y3, t);
-            z1.lerp(z2, t)
-        }
-        [p1, p2, p3, p4, p5, p6] => {
-            let x1 = p1.lerp(*p2, t);
-            let x2 = p2.lerp(*p3, t);
-            let x3 = p3.lerp(*p4, t);
-            let x4 = p4.lerp(*p5, t);
-            let x5 = p5.lerp(*p6, t);
-            let y1 = x1.lerp(x2, t);
-            let y2 = x2.lerp(x3, t);
-            let y3 = x3.lerp(x4, t);
-            let y4 = x4.lerp(x5, t);
-            let z1 = y1.lerp(y2, t);
-            let z2 = y2.lerp(y3, t);
-            let z3 = y3.lerp(y4, t);
-            let w1 = z1.lerp(z2, t);
-            let w2 = z2.lerp(z3, t);
-            w1.lerp(w2, t)
-        }
-        [p1, p2, p3, p4, p5, p6, p7] => {
-            let x1 = p1.lerp(*p2, t);
-            let x2 = p2.lerp(*p3, t);
-            let x3 = p3.lerp(*p4, t);
-            let x4 = p4.lerp(*p5, t);
-            let x5 = p5.lerp(*p6, t);
-            let x6 = p6.lerp(*p7, t);
-            let y1 = x1.lerp(x2, t);
-            let y2 = x2.lerp(x3, t);
-            let y3 = x3.lerp(x4, t);
-            let y4 = x4.lerp(x5, t);
-            let y5 = x5.lerp(x6, t);
-            let z1 = y1.lerp(y2, t);
-            let z2 = y2.lerp(y3, t);
-            let z3 = y3.lerp(y4, t);
-            let z4 = y4.lerp(y5, t);
-            let w1 = z1.lerp(z2, t);
-            let w2 = z2.lerp(z3, t);
-            let w3 = z3.lerp(z4, t);
-            let u1 = w1.lerp(w2, t);
-            let u2 = w2.lerp(w3, t);
-            u1.lerp(u2, t)
-        }
-        many => {
-            let a = sample_bezier(&many[..many.len() - 1], t);
-            let b = sample_bezier(&many[1..], t);
-            a.lerp(b, t)
+    let p0_0 = p0;
+    let p1_0 = p1;
+    let p2_0 = p2;
+    let p3_0 = p3;
+    let p4_0 = p4;
+    let p5_0 = p5;
+
+    let p0_1 = p0_0.lerp(p1_0, t);
+    let p1_1 = p1_0.lerp(p2_0, t);
+    let p2_1 = p2_0.lerp(p3_0, t);
+    let p3_1 = p3_0.lerp(p4_0, t);
+    let p4_1 = p4_0.lerp(p5_0, t);
+
+    let p0_2 = p0_1.lerp(p1_1, t);
+    let p1_2 = p1_1.lerp(p2_1, t);
+    let p2_2 = p2_1.lerp(p3_1, t);
+    let p3_2 = p3_1.lerp(p4_1, t);
+
+    let p0_3 = p0_2.lerp(p1_2, t);
+    let p1_3 = p1_2.lerp(p2_2, t);
+    let p2_3 = p2_2.lerp(p3_2, t);
+
+    let p0_4 = p0_3.lerp(p1_3, t);
+    let p1_4 = p1_3.lerp(p2_3, t);
+
+    let p0_5 = p0_4.lerp(p1_4, t);
+
+    p0_5
+}
+
+fn split_bezier(points: &[Pos2; 6], t: f32) -> [[Pos2; 6]; 2] {
+    let [p0, p1, p2, p3, p4, p5] = *points;
+
+    let p0_0 = p0;
+    let p1_0 = p1;
+    let p2_0 = p2;
+    let p3_0 = p3;
+    let p4_0 = p4;
+    let p5_0 = p5;
+
+    let p0_1 = p0_0.lerp(p1_0, t);
+    let p1_1 = p1_0.lerp(p2_0, t);
+    let p2_1 = p2_0.lerp(p3_0, t);
+    let p3_1 = p3_0.lerp(p4_0, t);
+    let p4_1 = p4_0.lerp(p5_0, t);
+
+    let p0_2 = p0_1.lerp(p1_1, t);
+    let p1_2 = p1_1.lerp(p2_1, t);
+    let p2_2 = p2_1.lerp(p3_1, t);
+    let p3_2 = p3_1.lerp(p4_1, t);
+
+    let p0_3 = p0_2.lerp(p1_2, t);
+    let p1_3 = p1_2.lerp(p2_2, t);
+    let p2_3 = p2_2.lerp(p3_2, t);
+
+    let p0_4 = p0_3.lerp(p1_3, t);
+    let p1_4 = p1_3.lerp(p2_3, t);
+
+    let p0_5 = p0_4.lerp(p1_4, t);
+
+    [
+        [p0_0, p0_1, p0_2, p0_3, p0_4, p0_5],
+        [p0_5, p1_4, p2_3, p3_2, p4_1, p5_0],
+    ]
+}
+
+fn bezier_hit(pos: Pos2, points: &[Pos2; 6], threshold: f32) -> bool {
+    let aabb = Rect::from_points(points);
+
+    if pos.x + threshold < aabb.left() {
+        return false;
+    }
+    if pos.x - threshold > aabb.right() {
+        return false;
+    }
+    if pos.y + threshold < aabb.top() {
+        return false;
+    }
+    if pos.y - threshold > aabb.bottom() {
+        return false;
+    }
+
+    let samples = bezier_samples_number(points, threshold);
+    if samples > 16 {
+        let [points1, points2] = split_bezier(points, 0.5);
+
+        return bezier_hit(pos, &points1, threshold) || bezier_hit(pos, &points2, threshold);
+    }
+
+    for i in 0..samples {
+        let t = i as f32 / (samples - 1) as f32;
+        let p = sample_bezier(points, t);
+        if (p - pos).length() < threshold {
+            return true;
         }
     }
+
+    false
 }
 
 fn draw_pin(painter: &Painter, pin: PinInfo, pos: Pos2, base_size: f32) {
