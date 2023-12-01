@@ -15,7 +15,7 @@ enum DemoNode {
 
     /// Value node with a single output.
     /// The value is editable in UI.
-    Integer(i32),
+    Integer(f64),
 
     /// Value node with a single output.
     String(String),
@@ -47,6 +47,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             (DemoNode::Sink, _) => {
                 unreachable!("Sink node has no outputs")
             }
+            (_, DemoNode::Sink) => {}
             (_, DemoNode::Integer(_)) => {
                 unreachable!("Integer node has no inputs")
             }
@@ -59,7 +60,6 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             (DemoNode::Show(_), DemoNode::Show(_)) => {
                 return Err(Forbidden);
             }
-            (_, DemoNode::Sink) => {}
             (DemoNode::String(_), DemoNode::Show(_)) => {}
             (DemoNode::ExprNode(_), DemoNode::ExprNode(_)) => {}
             (DemoNode::Integer(_), DemoNode::ExprNode(_)) => {}
@@ -83,7 +83,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     }
 
     fn size_hint(&self, _node: &DemoNode) -> egui::Vec2 {
-        egui::vec2(130.0, 50.0)
+        egui::vec2(30.0, 20.0)
     }
 
     fn title(&mut self, node: &DemoNode) -> &str {
@@ -96,7 +96,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         }
     }
 
-    fn show_content(
+    fn show_title(
         &mut self,
         node_idx: usize,
         node: &RefCell<DemoNode>,
@@ -106,58 +106,63 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         effects: &mut Effects<DemoNode>,
     ) -> egui::Response {
         match &mut *node.borrow_mut() {
+            DemoNode::Sink => ui.label("Sink"),
+            DemoNode::Integer(value) => ui.add(egui::DragValue::new(value)),
+            DemoNode::String(value) => ui.text_edit_singleline(value),
+            DemoNode::Show(_) => ui.label("Show"),
             DemoNode::ExprNode(expr_node) => {
-                let r = ui.text_edit_singleline(&mut expr_node.text);
+                let edit = egui::TextEdit::singleline(&mut expr_node.text).clip_text(false);
+                let r = ui.add(edit);
+                if r.changed() {
+                    match syn::parse_str(&expr_node.text) {
+                        Ok(expr) => {
+                            expr_node.expr = expr;
 
-                match syn::parse_str(&expr_node.text) {
-                    Ok(expr) => {
-                        expr_node.expr = expr;
+                            let values = Iterator::zip(
+                                expr_node.bindings.iter().map(|s| &**s),
+                                expr_node.values.iter().copied(),
+                            )
+                            .collect::<HashMap<&str, f64>>();
 
-                        let values = Iterator::zip(
-                            expr_node.bindings.iter().map(|s| &**s),
-                            expr_node.values.iter().copied(),
-                        )
-                        .collect::<HashMap<&str, f32>>();
+                            let mut new_bindings = Vec::new();
+                            expr_node.expr.extend_bindings(&mut new_bindings);
 
-                        let mut new_bindings = Vec::new();
-                        expr_node.expr.extend_bindings(&mut new_bindings);
+                            for (idx, name) in expr_node.bindings.iter().enumerate() {
+                                let new_idx =
+                                    new_bindings.iter().position(|new_name| *new_name == *name);
 
-                        for (idx, name) in expr_node.bindings.iter().enumerate() {
-                            let new_idx =
-                                new_bindings.iter().position(|new_name| *new_name == *name);
-
-                            match new_idx {
-                                None => {
-                                    effects.drop_inputs(inputs[idx].id);
-                                }
-                                Some(new_idx) if new_idx != idx => {
-                                    let new_in_pin = InPinId {
-                                        node: node_idx,
-                                        input: new_idx,
-                                    };
-                                    for remote in &inputs[idx].remotes {
-                                        effects.disconnect(remote.id, inputs[idx].id);
-                                        effects.connect(remote.id, new_in_pin);
+                                match new_idx {
+                                    None => {
+                                        effects.drop_inputs(inputs[idx].id);
                                     }
+                                    Some(new_idx) if new_idx != idx => {
+                                        let new_in_pin = InPinId {
+                                            node: node_idx,
+                                            input: new_idx,
+                                        };
+                                        for remote in &inputs[idx].remotes {
+                                            effects.disconnect(remote.id, inputs[idx].id);
+                                            effects.connect(remote.id, new_in_pin);
+                                        }
+                                    }
+                                    _ => {}
                                 }
-                                _ => {}
                             }
+
+                            let new_values = new_bindings
+                                .iter()
+                                .map(|name| values.get(&**name).copied().unwrap_or(0.0))
+                                .collect::<Vec<_>>();
+
+                            expr_node.bindings = new_bindings;
+                            expr_node.values = new_values;
                         }
-
-                        let new_values = new_bindings
-                            .iter()
-                            .map(|name| values.get(&**name).copied().unwrap_or(0.0))
-                            .collect::<Vec<_>>();
-
-                        expr_node.bindings = new_bindings;
-                        expr_node.values = new_values;
+                        Err(_) => {}
                     }
-                    Err(_) => {}
                 }
 
                 r
             }
-            _ => ui.interact(egui::Rect::ZERO, egui::Id::NULL, egui::Sense::hover()),
         }
     }
 
@@ -203,7 +208,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         DemoNode::Sink => unreachable!("Sink node has no outputs"),
                         DemoNode::Integer(value) => {
                             assert_eq!(remote.id.output, 0, "Integer node has only one output");
-                            let r = ui.label(format!("{}", value));
+                            let r = ui.label(format_float(value));
                             InnerResponse::new(PinInfo::square().with_fill(Color32::RED), r)
                         }
                         DemoNode::String(ref value) => {
@@ -213,7 +218,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         }
                         DemoNode::ExprNode(ref expr) => {
                             assert_eq!(remote.id.output, 0, "Expr node has only one output");
-                            let r = ui.label(format!("{}", expr.eval()));
+                            let r = ui.label(format_float(expr.eval()));
                             InnerResponse::new(PinInfo::square().with_fill(Color32::RED), r)
                         }
                         DemoNode::Show(ref uri) => {
@@ -287,11 +292,10 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                                     );
                                     match &mut *pin.node.borrow_mut() {
                                         DemoNode::ExprNode(expr_node) => {
-                                            expr_node.values[pin.id.input] = value as f32;
+                                            expr_node.values[pin.id.input] = value as f64;
                                         }
                                         _ => unreachable!(),
                                     }
-                                    ui.label(format!("{}", value));
                                     PinInfo::square().with_fill(Color32::RED)
                                 }
                                 DemoNode::ExprNode(expr_node) => {
@@ -307,7 +311,6 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                                         }
                                         _ => unreachable!(),
                                     }
-                                    ui.label(format!("{:0.2}", value));
                                     PinInfo::square().with_fill(Color32::RED)
                                 }
                                 DemoNode::Show(_) => {
@@ -338,85 +341,29 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             DemoNode::Sink => {
                 unreachable!("Sink node has no outputs")
             }
-            DemoNode::Integer(ref mut value) => {
+            DemoNode::Integer(value) => {
                 assert_eq!(pin.id.output, 0, "Integer node has only one output");
-                let r = ui.add(egui::DragValue::new(value));
+                // let r = ui.add(egui::DragValue::new(value));
+                let r = ui.label(format_float(value));
                 InnerResponse::new(PinInfo::square().with_fill(Color32::RED), r)
             }
-            DemoNode::String(ref mut value) => {
+            DemoNode::String(ref value) => {
                 assert_eq!(pin.id.output, 0, "String node has only one output");
-                let r = ui.text_edit_singleline(value);
+                // let r = ui.text_edit_singleline(value);
+                let r = ui.label(value);
                 InnerResponse::new(PinInfo::triangle().with_fill(Color32::GREEN), r)
             }
             DemoNode::ExprNode(ref expr_node) => {
                 let value = expr_node.eval();
-                assert_eq!(pin.id.output, 0, "Add node has only one output");
-                let r = ui.label(format!("{:0.2}", value));
+                assert_eq!(pin.id.output, 0, "Expr node has only one output");
+                let r = ui.label(format_float(value));
                 InnerResponse::new(PinInfo::square().with_fill(Color32::RED), r)
             }
             DemoNode::Show(_) => {
-                let (_, r) = ui.allocate_exact_size(egui::Vec2::ZERO, egui::Sense::hover());
+                let (_, r) = ui.allocate_at_least(egui::Vec2::ZERO, egui::Sense::hover());
                 InnerResponse::new(PinInfo::circle().with_fill(Color32::GOLD), r)
             }
         }
-    }
-}
-
-pub struct DemoApp {
-    snarl: Snarl<DemoNode>,
-}
-
-impl DemoApp {
-    pub fn new() -> Self {
-        let mut snarl = Snarl::new();
-
-        snarl.add_node(DemoNode::Integer(42), pos2(10.0, 20.0));
-
-        snarl.add_node(DemoNode::ExprNode(ExprNode::new()), pos2(30.0, 80.0));
-
-        snarl.add_node(DemoNode::ExprNode(ExprNode::new()), pos2(40.0, 100.0));
-
-        // snarl.add_node(DemoNode::String("".to_owned()), pos2(20.0, 150.0));
-
-        // snarl.add_node(DemoNode::Show("".to_owned()), pos2(120.0, 20.0));
-
-        // snarl.add_node(DemoNode::Sink, pos2(190.0, 60.0));
-
-        DemoApp { snarl }
-    }
-}
-
-impl App for DemoApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui_extras::install_image_loaders(ctx);
-
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            // The top panel is often a good place for a menu bar:
-
-            egui::menu::bar(ui, |ui| {
-                ui.menu_button("File", |ui| {
-                    if ui.button("Quit").clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close)
-                    }
-                });
-                ui.add_space(16.0);
-
-                egui::widgets::global_dark_light_mode_switch(ui);
-            });
-        });
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            self.snarl.show(
-                &mut DemoViewer,
-                &SnarlStyle {
-                    upscale_wire: true,
-                    downscale_wire: false,
-                    ..Default::default()
-                },
-                egui::Id::new("snarl"),
-                ui,
-            );
-        });
     }
 }
 
@@ -424,7 +371,7 @@ impl App for DemoApp {
 struct ExprNode {
     text: String,
     bindings: Vec<String>,
-    values: Vec<f32>,
+    values: Vec<f64>,
     expr: Expr,
 }
 
@@ -438,7 +385,7 @@ impl ExprNode {
         }
     }
 
-    fn eval(&self) -> f32 {
+    fn eval(&self) -> f64 {
         self.expr.eval(&self.bindings, &self.values)
     }
 }
@@ -460,7 +407,7 @@ enum BinOp {
 #[derive(Clone)]
 enum Expr {
     Var(String),
-    Val(f32),
+    Val(f64),
     UnOp {
         op: UnOp,
         expr: Box<Expr>,
@@ -473,7 +420,7 @@ enum Expr {
 }
 
 impl Expr {
-    fn eval(&self, bindings: &[String], args: &[f32]) -> f32 {
+    fn eval(&self, bindings: &[String], args: &[f64]) -> f64 {
         let binding_index =
             |name: &str| bindings.iter().position(|binding| binding == name).unwrap();
 
@@ -565,17 +512,17 @@ impl syn::parse::Parse for Expr {
                 return Ok(expr);
             }
             lhs = expr;
-        } else if lookahead.peek(syn::LitFloat) {
-            let lit = input.parse::<syn::LitFloat>()?;
-            let value = lit.base10_parse::<f32>()?;
-            let expr = Expr::Val(value);
-            if input.is_empty() {
-                return Ok(expr);
-            }
-            lhs = expr;
+        // } else if lookahead.peek(syn::LitFloat) {
+        //     let lit = input.parse::<syn::LitFloat>()?;
+        //     let value = lit.base10_parse::<f64>()?;
+        //     let expr = Expr::Val(value);
+        //     if input.is_empty() {
+        //         return Ok(expr);
+        //     }
+        //     lhs = expr;
         } else if lookahead.peek(syn::LitInt) {
             let lit = input.parse::<syn::LitInt>()?;
-            let value = lit.base10_parse::<f32>()?;
+            let value = lit.base10_parse::<f64>()?;
             let expr = Expr::Val(value);
             if input.is_empty() {
                 return Ok(expr);
@@ -618,7 +565,7 @@ impl Expr {
             lhs = expr;
         } else if lookahead.peek(syn::LitFloat) {
             let lit = input.parse::<syn::LitFloat>()?;
-            let value = lit.base10_parse::<f32>()?;
+            let value = lit.base10_parse::<f64>()?;
             let expr = Expr::UnOp {
                 op,
                 expr: Box::new(Expr::Val(value)),
@@ -629,7 +576,7 @@ impl Expr {
             lhs = expr;
         } else if lookahead.peek(syn::LitInt) {
             let lit = input.parse::<syn::LitInt>()?;
-            let value = lit.base10_parse::<f32>()?;
+            let value = lit.base10_parse::<f64>()?;
             let expr = Expr::UnOp {
                 op,
                 expr: Box::new(Expr::Val(value)),
@@ -670,14 +617,14 @@ impl Expr {
             }
         } else if lookahead.peek(syn::LitFloat) {
             let lit = input.parse::<syn::LitFloat>()?;
-            let value = lit.base10_parse::<f32>()?;
+            let value = lit.base10_parse::<f64>()?;
             rhs = Box::new(Expr::Val(value));
             if input.is_empty() {
                 return Ok(Expr::BinOp { lhs, op, rhs });
             }
         } else if lookahead.peek(syn::LitInt) {
             let lit = input.parse::<syn::LitInt>()?;
-            let value = lit.base10_parse::<f32>()?;
+            let value = lit.base10_parse::<f64>()?;
             rhs = Box::new(Expr::Val(value));
             if input.is_empty() {
                 return Ok(Expr::BinOp { lhs, op, rhs });
@@ -711,6 +658,63 @@ impl Expr {
     }
 }
 
+pub struct DemoApp {
+    snarl: Snarl<DemoNode>,
+}
+
+impl DemoApp {
+    pub fn new() -> Self {
+        let mut snarl = Snarl::new();
+
+        snarl.add_node(DemoNode::Integer(42.0), pos2(10.0, 20.0));
+
+        snarl.add_node(DemoNode::ExprNode(ExprNode::new()), pos2(30.0, 80.0));
+
+        snarl.add_node(DemoNode::ExprNode(ExprNode::new()), pos2(40.0, 100.0));
+
+        // snarl.add_node(DemoNode::String("".to_owned()), pos2(20.0, 150.0));
+
+        // snarl.add_node(DemoNode::Show("".to_owned()), pos2(120.0, 20.0));
+
+        // snarl.add_node(DemoNode::Sink, pos2(190.0, 60.0));
+
+        DemoApp { snarl }
+    }
+}
+
+impl App for DemoApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui_extras::install_image_loaders(ctx);
+
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            // The top panel is often a good place for a menu bar:
+
+            egui::menu::bar(ui, |ui| {
+                ui.menu_button("File", |ui| {
+                    if ui.button("Quit").clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close)
+                    }
+                });
+                ui.add_space(16.0);
+
+                egui::widgets::global_dark_light_mode_switch(ui);
+            });
+        });
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            self.snarl.show(
+                &mut DemoViewer,
+                &SnarlStyle {
+                    collapsible: false,
+                    ..Default::default()
+                },
+                egui::Id::new("snarl"),
+                ui,
+            );
+        });
+    }
+}
+
 fn main() -> eframe::Result<()> {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -724,4 +728,9 @@ fn main() -> eframe::Result<()> {
         native_options,
         Box::new(|_| Box::new(DemoApp::new())),
     )
+}
+
+fn format_float(v: f64) -> String {
+    let v = (v * 1000.0).round() / 1000.0;
+    format!("{}", v)
 }
