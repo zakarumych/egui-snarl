@@ -21,8 +21,15 @@ impl<T> Default for Snarl<T> {
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct Node<T> {
+    /// Node generic value.
     value: RefCell<T>,
+
+    /// Position of the top-left corner of the node.
+    /// This does not include frame margin.
     pos: egui::Pos2,
+
+    /// Flag indicating that the node is open - not collapsed.
+    open: bool,
 }
 
 /// Output pin identifier. Cosists of node index and pin index.
@@ -157,6 +164,27 @@ impl<T> Snarl<T> {
         let idx = self.nodes.insert(Node {
             value: RefCell::new(node),
             pos,
+            open: true,
+        });
+        self.draw_order.push(idx);
+        idx
+    }
+
+    /// Adds a node to the Snarl in collapsed state.
+    /// Returns the index of the node.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use egui_snarl::Snarl;
+    /// let mut snarl = Snarl::<()>::new();
+    /// snarl.add_node(());
+    /// ```
+    pub fn add_node_collapsed(&mut self, node: T, pos: egui::Pos2) -> usize {
+        let idx = self.nodes.insert(Node {
+            value: RefCell::new(node),
+            pos,
+            open: false,
         });
         self.draw_order.push(idx);
         idx

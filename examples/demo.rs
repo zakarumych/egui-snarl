@@ -82,10 +82,6 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         Ok(())
     }
 
-    fn size_hint(&self, _node: &DemoNode) -> egui::Vec2 {
-        egui::vec2(30.0, 20.0)
-    }
-
     fn title(&mut self, node: &DemoNode) -> &str {
         match node {
             DemoNode::Sink => "Sink",
@@ -363,6 +359,45 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 let (_, r) = ui.allocate_at_least(egui::Vec2::ZERO, egui::Sense::hover());
                 InnerResponse::new(PinInfo::circle().with_fill(Color32::GOLD), r)
             }
+        }
+    }
+
+    fn input_color(&mut self, pin: &InPin<DemoNode>) -> Color32 {
+        match &*pin.node.borrow() {
+            DemoNode::Sink => {
+                assert_eq!(pin.id.input, 0, "Sink node has only one input");
+                match &*pin.remotes {
+                    [] => Color32::GRAY,
+                    [remote] => match *remote.node.borrow() {
+                        DemoNode::Sink => unreachable!("Sink node has no outputs"),
+                        DemoNode::Integer(_) => Color32::RED,
+                        DemoNode::String(_) => Color32::GREEN,
+                        DemoNode::ExprNode(_) => Color32::RED,
+                        DemoNode::Show(_) => Color32::GOLD,
+                    },
+                    _ => unreachable!("Sink input has only one wire"),
+                }
+            }
+            DemoNode::Integer(_) => {
+                unreachable!("Integer node has no inputs")
+            }
+            DemoNode::String(_) => {
+                unreachable!("String node has no inputs")
+            }
+            DemoNode::Show(_) => Color32::GREEN,
+            DemoNode::ExprNode(_) => Color32::RED,
+        }
+    }
+
+    fn output_color(&mut self, pin: &OutPin<DemoNode>) -> Color32 {
+        match &*pin.node.borrow() {
+            DemoNode::Sink => {
+                unreachable!("Sink node has no outputs")
+            }
+            DemoNode::Integer(_) => Color32::RED,
+            DemoNode::String(_) => Color32::GREEN,
+            DemoNode::Show(_) => Color32::GOLD,
+            DemoNode::ExprNode(_) => Color32::RED,
         }
     }
 }
@@ -666,9 +701,9 @@ impl DemoApp {
     pub fn new() -> Self {
         let mut snarl = Snarl::new();
 
-        snarl.add_node(DemoNode::Integer(42.0), pos2(10.0, 20.0));
+        // snarl.add_node(DemoNode::Integer(42.0), pos2(10.0, 20.0));
 
-        snarl.add_node(DemoNode::ExprNode(ExprNode::new()), pos2(30.0, 80.0));
+        // snarl.add_node(DemoNode::ExprNode(ExprNode::new()), pos2(30.0, 80.0));
 
         snarl.add_node(DemoNode::ExprNode(ExprNode::new()), pos2(40.0, 100.0));
 
@@ -685,6 +720,8 @@ impl DemoApp {
 impl App for DemoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui_extras::install_image_loaders(ctx);
+
+        ctx.style_mut(|style| style.animation_time = 5.0);
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
@@ -705,7 +742,7 @@ impl App for DemoApp {
             self.snarl.show(
                 &mut DemoViewer,
                 &SnarlStyle {
-                    collapsible: false,
+                    collapsible: true,
                     ..Default::default()
                 },
                 egui::Id::new("snarl"),

@@ -1,7 +1,12 @@
 use std::cell::RefCell;
 
 use egui::{
-    ahash::HashMap, collapsing_header::paint_default_icon, epaint::PathShape, layers::ShapeIdx, *,
+    ahash::{HashMap, HashMapExt},
+    collapsing_header::paint_default_icon,
+    epaint::{PathShape, Shadow},
+    layers::ShapeIdx,
+    style::Spacing,
+    *,
 };
 
 use crate::{wire_pins, InPinId, OutPinId, Snarl};
@@ -24,6 +29,9 @@ pub enum Effect<T> {
 
     /// Removes a node from snarl.
     RemoveNode { node: usize },
+
+    /// Opens/closes a node.
+    OpenNode { node: usize, open: bool },
 
     /// Executes a closure with mutable reference to the Snarl.
     Closure(Box<dyn FnOnce(&mut Snarl<T>)>),
@@ -67,6 +75,10 @@ impl<T> Effects<T> {
 
     pub fn remove_node(&mut self, node: usize) {
         self.effects.push(Effect::RemoveNode { node });
+    }
+
+    pub fn open_node(&mut self, node: usize, open: bool) {
+        self.effects.push(Effect::OpenNode { node, open });
     }
 }
 
@@ -135,7 +147,7 @@ impl<'a, T> InPin<'a, T> {
 /// Shape of a pin.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PinShape {
-    Cirle,
+    Circle,
     Triangle,
     Square,
 }
@@ -152,7 +164,7 @@ pub struct PinInfo {
 impl Default for PinInfo {
     fn default() -> Self {
         PinInfo {
-            shape: PinShape::Cirle,
+            shape: PinShape::Circle,
             size: 1.0,
             fill: Color32::GRAY,
             stroke: Stroke::new(1.0, Color32::BLACK),
@@ -183,7 +195,7 @@ impl PinInfo {
 
     pub fn circle() -> Self {
         PinInfo {
-            shape: PinShape::Cirle,
+            shape: PinShape::Circle,
             ..Default::default()
         }
     }
@@ -302,8 +314,6 @@ pub trait SnarlViewer<T> {
 
     fn node_picker(&mut self, ui: &mut Ui) -> egui::InnerResponse<Option<T>>;
 
-    fn size_hint(&self, node: &T) -> Vec2;
-
     fn title<'a>(&'a mut self, node: &'a T) -> &'a str;
 
     fn show_title(
@@ -336,6 +346,9 @@ pub trait SnarlViewer<T> {
         ui: &mut Ui,
         effects: &mut Effects<T>,
     ) -> egui::InnerResponse<PinInfo>;
+
+    fn input_color(&mut self, pin: &InPin<T>) -> Color32;
+    fn output_color(&mut self, pin: &OutPin<T>) -> Color32;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -402,11 +415,14 @@ enum AnyPin {
 /// Node UI state.
 #[derive(Clone, Copy, PartialEq)]
 struct NodeState {
-    /// Size required for the node to fit all its contents.
-    size: Vec2,
+    /// Size occupied by title.
+    title_size: Vec2,
 
-    /// Flag indicating that the node is open - not collapsed.
-    open: bool,
+    /// Size occupied by inputs.
+    inputs_size: Vec2,
+
+    /// Size occupied by outputs.
+    outputs_size: Vec2,
 }
 
 impl NodeState {
@@ -416,6 +432,64 @@ impl NodeState {
 
     fn store(&self, cx: &Context, id: Id) {
         cx.data_mut(|d| d.insert_temp(id, *self));
+    }
+
+    /// Finds node rect at specific position (excluding node frame margin).
+    fn node_rect(&self, frame: &Frame, spacing: &Spacing, pos: Pos2) -> Rect {
+        let width = self
+            .title_size
+            .x
+            .max(self.inputs_size.x + spacing.item_spacing.x + self.outputs_size.x);
+
+        let height = self.title_size.y
+            + frame.total_margin().bottom
+            + frame.total_margin().bottom
+            + self.inputs_size.y.max(self.outputs_size.y);
+
+        Rect::from_min_size(pos, vec2(width, height))
+    }
+
+    /// Finds title rect at specific position (excluding node frame margin).
+    fn title_rect(&self, spacing: &Spacing, pos: Pos2) -> Rect {
+        let width = self
+            .title_size
+            .x
+            .max(self.inputs_size.x + spacing.item_spacing.x + self.outputs_size.x);
+
+        let height = self.title_size.y;
+
+        Rect::from_min_size(pos, vec2(width, height))
+    }
+
+    /// Finds pins rect at specific position (excluding node frame margin).
+    fn pins_rect(&self, frame: &Frame, spacing: &Spacing, openness: f32, pos: Pos2) -> Rect {
+        let height = self.inputs_size.y.max(self.outputs_size.y);
+        let width = self
+            .title_size
+            .x
+            .max(self.inputs_size.x + spacing.item_spacing.x + self.outputs_size.x);
+
+        let moved =
+            (height + frame.total_margin().bottom + frame.total_margin().bottom) * (openness - 1.0);
+
+        let pos = pos
+            + vec2(
+                0.0,
+                self.title_size.y
+                    + frame.total_margin().bottom
+                    + frame.total_margin().bottom
+                    + moved,
+            );
+
+        Rect::from_min_size(pos, vec2(width, height))
+    }
+
+    fn initial(spacing: &Spacing) -> Self {
+        NodeState {
+            title_size: spacing.interact_size,
+            inputs_size: spacing.interact_size,
+            outputs_size: spacing.interact_size,
+        }
     }
 }
 
@@ -433,26 +507,34 @@ impl<T> Snarl<T> {
     fn apply_effect(&mut self, effect: Effect<T>) {
         match effect {
             Effect::Connect { from, to } => {
-                assert!(self.nodes.contains(from.node));
-                assert!(self.nodes.contains(to.node));
-                self.wires.insert(wire_pins(from, to));
+                if self.nodes.contains(from.node) && self.nodes.contains(to.node) {
+                    self.wires.insert(wire_pins(from, to));
+                }
             }
             Effect::Disconnect { from, to } => {
-                assert!(self.nodes.contains(from.node));
-                assert!(self.nodes.contains(to.node));
-                self.wires.remove(&wire_pins(from, to));
+                if self.nodes.contains(from.node) && self.nodes.contains(to.node) {
+                    self.wires.remove(&wire_pins(from, to));
+                }
             }
             Effect::DropOutputs { pin } => {
-                assert!(self.nodes.contains(pin.node));
-                self.wires.drop_outputs(pin);
+                if self.nodes.contains(pin.node) {
+                    self.wires.drop_outputs(pin);
+                }
             }
             Effect::DropInputs { pin } => {
-                assert!(self.nodes.contains(pin.node));
-                self.wires.drop_inputs(pin);
+                if self.nodes.contains(pin.node) {
+                    self.wires.drop_inputs(pin);
+                }
             }
             Effect::RemoveNode { node } => {
-                assert!(self.nodes.contains(node));
-                self.remove_node(node);
+                if self.nodes.contains(node) {
+                    self.remove_node(node);
+                }
+            }
+            Effect::OpenNode { node, open } => {
+                if self.nodes.contains(node) {
+                    self.nodes[node].open = open;
+                }
             }
             Effect::Closure(f) => f(self),
         }
@@ -515,11 +597,14 @@ impl<T> Snarl<T> {
                 let title_drag_space = style
                     .title_drag_space
                     .unwrap_or_else(|| vec2(ui.spacing().icon_width, ui.spacing().icon_width));
-                let input_output_spacing = style
-                    .input_output_spacing
-                    .unwrap_or_else(|| ui.spacing().item_spacing.x);
+                // let input_output_spacing = style
+                //     .input_output_spacing
+                //     .unwrap_or_else(|| ui.spacing().item_spacing.x);
 
                 let collapsible = style.collapsible;
+
+                let node_frame = Frame::window(ui.style());
+                let title_frame = node_frame.shadow(Shadow::NONE);
 
                 let wire_shape_idx = match style.wire_layer {
                     WireLayer::BehindNodes => Some(ui.painter().add(Shape::Noop)),
@@ -531,11 +616,11 @@ impl<T> Snarl<T> {
 
                 let r = ui.allocate_rect(max_rect, Sense::click_and_drag());
 
-                let mut input_positions = HashMap::with_hasher(egui::ahash::RandomState::new());
-                let mut output_positions = HashMap::with_hasher(egui::ahash::RandomState::new());
+                let mut input_positions = HashMap::new();
+                let mut output_positions = HashMap::new();
 
-                let mut input_colors = HashMap::with_hasher(egui::ahash::RandomState::new());
-                let mut output_colors = HashMap::with_hasher(egui::ahash::RandomState::new());
+                let mut input_colors = HashMap::new();
+                let mut output_colors = HashMap::new();
 
                 let mut part_wire_drag_released = false;
                 let mut pin_hovered = None;
@@ -543,23 +628,22 @@ impl<T> Snarl<T> {
                 for (order, &node_idx) in self.draw_order.iter().enumerate() {
                     let node = &self.nodes[node_idx];
 
-                    // Generate persistent id for the node.
-                    let node_id = ui.make_persistent_id(("snarl-node", node_idx));
+                    let node_pos = node.pos + vec2(max_rect.min.x, max_rect.min.y);
 
-                    let state = NodeState::load(ui.ctx(), node_id).unwrap_or_else(|| NodeState {
-                        size: viewer.size_hint(&node.value.borrow()),
-                        open: true,
-                    });
+                    // Generate persistent id for the node.
+                    let node_id = snarl_id.with(("snarl-node", node_idx));
+
+                    let openness = ui.ctx().animate_bool(node_id, node.open);
+
+                    let state = NodeState::load(ui.ctx(), node_id)
+                        .unwrap_or_else(|| NodeState::initial(ui.spacing()));
+
                     let mut new_state = state;
 
-                    let mut title_rect = Rect::ZERO;
-                    let mut inputs_rect = Rect::ZERO;
-                    let mut outputs_rect = Rect::ZERO;
+                    let node_rect = state.node_rect(&title_frame, ui.spacing(), node_pos);
 
-                    let node_rect = Rect::from_min_size(
-                        node.pos + vec2(max_rect.min.x, max_rect.min.y),
-                        state.size,
-                    );
+                    let title_rect = state.title_rect(ui.spacing(), node_pos);
+                    let pins_rect = state.pins_rect(&title_frame, ui.spacing(), openness, node_pos);
 
                     let r = ui.interact(node_rect, node_id, Sense::click_and_drag());
 
@@ -570,22 +654,19 @@ impl<T> Snarl<T> {
                         *node_order_to_top = Some(order);
                     }
 
-                    let frame = Frame::window(ui.style());
-                    let frame_rect = Rect::from_min_max(
-                        node_rect.min - frame.total_margin().left_top(),
-                        node_rect.max + frame.total_margin().right_bottom(),
-                    );
+                    // Rect for node + frame margin.
+                    let node_frame_rect = node_frame.total_margin().expand_rect(node_rect);
 
-                    let ref mut ui = ui.child_ui_with_id_source(
-                        frame_rect,
+                    // Rect for title + frame margin.
+                    let title_frame_rect = title_frame.total_margin().expand_rect(title_rect);
+
+                    let ref mut node_ui = ui.child_ui_with_id_source(
+                        node_frame_rect,
                         Layout::top_down(Align::Center),
-                        node_idx,
+                        node_id,
                     );
-                    ui.set_clip_rect(frame_rect);
-                    ui.painter().debug_rect(frame_rect, Color32::RED, "frame");
-                    ui.painter().debug_rect(node_rect, Color32::GREEN, "node");
 
-                    frame.show(ui, |ui| {
+                    node_frame.show(node_ui, |ui| {
                         // Collect pins
                         let inputs_count = viewer.inputs(&node.value.borrow());
                         let outputs_count = viewer.outputs(&node.value.borrow());
@@ -614,13 +695,13 @@ impl<T> Snarl<T> {
                             })
                             .collect::<Vec<_>>();
 
-                        let mut openness = 1.0;
-                        if collapsible {
-                            openness = ui.ctx().animate_bool(node_id, state.open);
-                        }
-
                         // Show node's title
-                        ui.vertical(|ui| {
+                        let ref mut title_ui = ui.child_ui_with_id_source(
+                            title_frame_rect,
+                            Layout::top_down(Align::Center),
+                            node_id,
+                        );
+                        title_frame.show(title_ui, |ui| {
                             let r = ui.horizontal(|ui| {
                                 if collapsible {
                                     let (_, r) = ui.allocate_exact_size(
@@ -630,7 +711,8 @@ impl<T> Snarl<T> {
                                     paint_default_icon(ui, openness, &r);
 
                                     if r.clicked_by(PointerButton::Primary) {
-                                        new_state.open = !state.open;
+                                        // Toggle node's openness.
+                                        effects.open_node(node_idx, !node.open);
                                     }
                                 }
 
@@ -644,39 +726,37 @@ impl<T> Snarl<T> {
                                     effects,
                                 );
                             });
-                            title_rect = r.response.rect;
-                            let r = ui.separator();
-                            title_rect.max.y = r.rect.max.y;
+                            new_state.title_size = r.response.rect.size();
+                            ui.advance_cursor_after_rect(title_rect);
                         });
 
-                        // let r = r.response.interact(Sense::click_and_drag());
-
-                        // if r.dragged_by(PointerButton::Primary) {
-                        //     *node_moved = Some((node_idx, r.drag_delta()));
-                        //     *node_order_to_top = Some(order);
-                        // } else if r.clicked_by(PointerButton::Primary) {
-                        //     *node_order_to_top = Some(order);
-                        // }
+                        let min_pin_y = title_frame_rect.center().y;
+                        let input_x = title_frame_rect.left_center().x
+                            + title_frame.total_margin().left
+                            + pin_size * 0.5;
+                        let output_x = title_frame_rect.right_center().x
+                            - title_frame.total_margin().right
+                            - pin_size * 0.5;
 
                         if true {
-                            //openness > 0.0 {
-                            // if openness < 1.0 {
-                            //     let pins_height = frame_rect.size().y
-                            //         - title_rect.size().y
-                            //         - frame.total_margin().top;
-
-                            //     let opened_height = pins_height * openness
-                            //         + title_rect.size().y
-                            //         + frame.total_margin().top;
-
-                            //     ui.set_clip_rect(Rect::from_min_size(
-                            //         frame_rect.min,
-                            //         vec2(frame_rect.size().x, opened_height),
-                            //     ));
-                            // }
+                            if (openness < 1.0 && node.open) || (openness > 0.0 && !node.open) {
+                                ui.ctx().request_repaint();
+                            }
 
                             // Show pins.
-                            ui.horizontal(|ui| {
+                            let ref mut pins_ui = ui.child_ui_with_id_source(
+                                pins_rect,
+                                Layout::top_down(Align::Center),
+                                node_id,
+                            );
+
+                            let pins_clip_rect = pins_ui
+                                .clip_rect()
+                                .intersect(Rect::everything_below(title_frame_rect.max.y));
+
+                            pins_ui.set_clip_rect(pins_clip_rect);
+
+                            pins_ui.horizontal(|ui| {
                                 // Input pins on the left.
                                 let r = ui.with_layout(Layout::top_down(Align::Min), |ui| {
                                     for in_pin in inputs {
@@ -694,15 +774,17 @@ impl<T> Snarl<T> {
 
                                                 // Place pin shape on the left from pin content.
                                                 let x = r.response.rect.left()
-                                                    - pin_size / 2.0
+                                                    - pin_size * 0.5
                                                     - ui.style().spacing.item_spacing.x;
 
                                                 // Centered vertically.
-                                                let y = (r.response.rect.top()
-                                                    + r.response.rect.bottom())
-                                                    / 2.0;
+                                                let y = min_pin_y.max(
+                                                    (r.response.rect.top()
+                                                        + r.response.rect.bottom())
+                                                        * 0.5,
+                                                );
 
-                                                let pin_pos = pos2(x, y);
+                                                let pin_pos = pos2(input_x, y);
 
                                                 // Interact with pin shape.
                                                 let r = ui.interact(
@@ -745,7 +827,7 @@ impl<T> Snarl<T> {
                                     }
                                 });
 
-                                inputs_rect = r.response.rect;
+                                new_state.inputs_size = r.response.rect.size();
 
                                 // Output pins on the right.
                                 let r = ui.with_layout(Layout::top_down(Align::Max), |ui| {
@@ -764,15 +846,17 @@ impl<T> Snarl<T> {
 
                                                 // Place pin shape on the right from pin content.
                                                 let x = r.response.rect.right()
-                                                    + pin_size / 2.0
+                                                    + pin_size * 0.5
                                                     + ui.style().spacing.item_spacing.x;
 
                                                 // Centered vertically.
-                                                let y = (r.response.rect.top()
-                                                    + r.response.rect.bottom())
-                                                    / 2.0;
+                                                let y = min_pin_y.max(
+                                                    (r.response.rect.top()
+                                                        + r.response.rect.bottom())
+                                                        * 0.5,
+                                                );
 
-                                                let pin_pos = pos2(x, y);
+                                                let pin_pos = pos2(output_x, y);
 
                                                 let r = ui.interact(
                                                     Rect::from_center_size(
@@ -814,8 +898,33 @@ impl<T> Snarl<T> {
                                     }
                                 });
 
-                                outputs_rect = r.response.rect;
+                                new_state.outputs_size = r.response.rect.size();
+                                ui.allocate_space(ui.available_size());
                             });
+
+                            let pins_rect =
+                                new_state.pins_rect(&title_frame, ui.spacing(), openness, node_pos);
+
+                            ui.allocate_rect(
+                                pins_rect.intersect(Rect::everything_below(title_frame_rect.max.y)),
+                                Sense::hover(),
+                            );
+
+                            // ui.painter()
+                            //     .debug_rect(title_frame_rect, Color32::GREEN, "title");
+                            // ui.painter()
+                            //     .debug_rect(pins_clip_rect, Color32::RED, "pins_clip");
+                        } else {
+                            for in_pin in inputs {
+                                let pin_pos = pos2(input_x, min_pin_y);
+                                input_positions.insert(in_pin.id, pin_pos);
+                                input_colors.insert(in_pin.id, viewer.input_color(&in_pin));
+                            }
+                            for out_pin in outputs {
+                                let pin_pos = pos2(output_x, min_pin_y);
+                                output_positions.insert(out_pin.id, pin_pos);
+                                output_colors.insert(out_pin.id, viewer.output_color(&out_pin));
+                            }
                         }
                     });
 
@@ -826,17 +935,17 @@ impl<T> Snarl<T> {
                     // ui.painter()
                     //     .debug_rect(outputs_rect, Color32::GREEN, "Outputs rect");
 
-                    let mut new_node_size = inputs_rect.size()
-                        + outputs_rect.size()
-                        + vec2(input_output_spacing, title_rect.size().y);
-
-                    new_node_size.x = new_node_size.x.max(title_rect.size().x);
-
-                    new_state.size = new_node_size;
                     if new_state != state {
                         new_state.store(ui.ctx(), node_id);
                         ui.ctx().request_repaint();
                     }
+
+                    // ui.painter()
+                    //     .debug_rect(node_rect, Color32::WHITE, "node_rect");
+                    // ui.painter()
+                    //     .debug_rect(title_rect, Color32::GREEN, "title_rect");
+                    // ui.painter()
+                    //     .debug_rect(pins_rect, Color32::RED, "pins_rect");
                 }
 
                 let part_wire = get_part_wire(ui, snarl_id);
@@ -963,29 +1072,6 @@ impl<T> Snarl<T> {
                         _ => {}
                     }
                 }
-
-                // Drag nodes
-
-                // if r.dragged_by(PointerButton::Primary) {
-                //     if let Some(pos) = r.interact_pointer_pos() {
-                //         for (order, &node_idx) in self.draw_order.iter().enumerate().rev() {
-                //             if node_rects[&node_idx].contains(pos) {
-                //                 *node_moved = Some((node_idx, r.drag_delta()));
-                //                 *node_order_to_top = Some(order);
-                //                 break;
-                //             }
-                //         }
-                //     }
-                // } else if r.clicked_by(PointerButton::Primary) {
-                //     if let Some(pos) = r.interact_pointer_pos() {
-                //         for (order, &node_idx) in self.draw_order.iter().enumerate().rev() {
-                //             if node_rects[&node_idx].contains(pos) {
-                //                 *node_order_to_top = Some(order);
-                //                 break;
-                //             }
-                //         }
-                //     }
-                // }
             });
     }
 }
@@ -1302,7 +1388,7 @@ fn hit_bezier(pos: Pos2, points: &[Pos2; 6], threshold: f32) -> bool {
 fn draw_pin(painter: &Painter, pin: PinInfo, pos: Pos2, base_size: f32) {
     let size = base_size * pin.size;
     match pin.shape {
-        PinShape::Cirle => {
+        PinShape::Circle => {
             painter.circle(pos, size * 0.5, pin.fill, pin.stroke);
         }
         PinShape::Triangle => {
