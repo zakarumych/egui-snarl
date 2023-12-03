@@ -701,9 +701,9 @@ impl DemoApp {
     pub fn new() -> Self {
         let mut snarl = Snarl::new();
 
-        // snarl.add_node(DemoNode::Integer(42.0), pos2(10.0, 20.0));
+        snarl.add_node(DemoNode::Integer(42.0), pos2(10.0, 20.0));
 
-        // snarl.add_node(DemoNode::ExprNode(ExprNode::new()), pos2(30.0, 80.0));
+        snarl.add_node(DemoNode::ExprNode(ExprNode::new()), pos2(30.0, 80.0));
 
         snarl.add_node(DemoNode::ExprNode(ExprNode::new()), pos2(40.0, 100.0));
 
@@ -721,7 +721,7 @@ impl App for DemoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui_extras::install_image_loaders(ctx);
 
-        ctx.style_mut(|style| style.animation_time = 5.0);
+        // ctx.style_mut(|style| style.animation_time = 1.0);
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:

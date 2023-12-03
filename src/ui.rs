@@ -1,12 +1,13 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, hash::Hash};
 
 use egui::{
     ahash::{HashMap, HashMapExt},
     collapsing_header::paint_default_icon,
     epaint::{PathShape, Shadow},
-    layers::ShapeIdx,
-    style::Spacing,
-    *,
+    pos2,
+    style::{Interaction, ScrollStyle, Spacing, WidgetVisuals, Widgets},
+    vec2, Align, Color32, Context, FontId, Frame, Grid, Id, Layout, Margin, Painter, PointerButton,
+    Pos2, Rect, Response, Rounding, Sense, Shape, Stroke, Style, Ui, Vec2, Visuals,
 };
 
 use crate::{wire_pins, InPinId, OutPinId, Snarl};
@@ -493,6 +494,93 @@ impl NodeState {
     }
 }
 
+#[derive(Clone, Copy, PartialEq)]
+struct SnarlState {
+    /// Where viewport's left-top in graph's space.
+    offset: Vec2,
+
+    /// Scale of the viewport.
+    scale: f32,
+}
+
+impl Default for SnarlState {
+    fn default() -> Self {
+        SnarlState {
+            offset: Vec2::ZERO,
+            scale: 1.0,
+        }
+    }
+}
+
+struct ZoomState {
+    offset: Vec2,
+    scale: f32,
+}
+
+impl ZoomState {
+    fn graph_point_to_screen(&self, point: Pos2, viewport: Rect) -> Pos2 {
+        point * self.scale - self.offset + viewport.min.to_vec2()
+    }
+}
+
+impl SnarlState {
+    fn load(cx: &Context, id: Id) -> Option<Self> {
+        cx.data_mut(|d| d.get_temp(id))
+    }
+
+    fn store(&self, cx: &Context, id: Id) {
+        cx.data_mut(|d| d.insert_temp(id, *self));
+    }
+
+    fn get_zoom(&self, id: Id, cx: &Context, style: &Style) -> ZoomState {
+        let x = cx.animate_value_with_time(
+            id.with("zoom-offset-x"),
+            self.offset.x,
+            style.animation_time,
+        );
+        let y = cx.animate_value_with_time(
+            id.with("zoom-offset-y"),
+            self.offset.y,
+            style.animation_time,
+        );
+
+        let scale =
+            cx.animate_value_with_time(id.with("zoom-scale"), self.scale, style.animation_time);
+
+        ZoomState {
+            offset: vec2(x, y),
+            scale,
+        }
+    }
+
+    fn apply_scale_wrt_screen_point(&mut self, delta_scale: f32, pivot: Pos2, viewport: Rect) {
+        let a = pivot + self.offset - viewport.min.to_vec2();
+
+        self.offset += a * delta_scale - a;
+        self.scale *= delta_scale;
+    }
+
+    // fn screen_point_to_graph(&self, point: Pos2, viewport: Rect) -> Pos2 {
+    //     (point + self.offset - viewport.min.to_vec2()) / self.scale
+    // }
+
+    // fn graph_size_to_screen(&self, size: Vec2) -> Vec2 {
+    //     size * self.scale
+    // }
+
+    // fn screen_size_to_graph(&self, size: Vec2) -> Vec2 {
+    //     size / self.scale
+    // }
+
+    // fn graph_distance_to_screen(&self, distance: f32) -> f32 {
+    //     distance * self.scale
+    // }
+
+    // fn screen_distance_to_graph(&self, distance: f32) -> f32 {
+    //     distance / self.scale
+    // }
+}
+
 impl<T> Snarl<T> {
     fn apply_effects(&mut self, effects: Effects<T>, cx: &Context) {
         if effects.effects.is_empty() {
@@ -540,7 +628,7 @@ impl<T> Snarl<T> {
         }
     }
 
-    pub fn show<V>(&mut self, viewer: &mut V, style: &SnarlStyle, snarl_id: Id, ui: &mut Ui)
+    pub fn show<V>(&mut self, viewer: &mut V, style: &SnarlStyle, id_source: impl Hash, ui: &mut Ui)
     where
         V: SnarlViewer<T>,
     {
@@ -551,7 +639,7 @@ impl<T> Snarl<T> {
         self._show(
             viewer,
             style,
-            snarl_id,
+            id_source,
             ui,
             &mut effects,
             &mut node_moved,
@@ -576,7 +664,7 @@ impl<T> Snarl<T> {
         &self,
         viewer: &mut V,
         style: &SnarlStyle,
-        snarl_id: Id,
+        id_source: impl Hash,
         ui: &mut Ui,
         effects: &mut Effects<T>,
         node_moved: &mut Option<(usize, Vec2)>,
@@ -584,26 +672,36 @@ impl<T> Snarl<T> {
     ) where
         V: SnarlViewer<T>,
     {
+        let snarl_id = ui.make_persistent_id(id_source);
+
+        let snarl_state = SnarlState::load(ui.ctx(), snarl_id).unwrap_or_default();
+        let zoom = snarl_state.get_zoom(snarl_id, ui.ctx(), ui.style());
+        let mut new_snarl_state = snarl_state;
+
         Frame::none()
             .fill(ui.visuals().widgets.inactive.bg_fill)
             .stroke(ui.visuals().widgets.inactive.bg_stroke)
             .show(ui, |ui| {
+                let mut node_style: Style = (**ui.style()).clone();
+                node_style.zoom(zoom.scale);
+
                 let pin_size = style
                     .pin_size
-                    .unwrap_or_else(|| ui.spacing().interact_size.y * 0.5);
+                    .unwrap_or_else(|| node_style.spacing.interact_size.y * 0.5);
 
                 let wire_frame_size = style.wire_frame_size.unwrap_or(pin_size * 5.0);
                 let wire_width = style.wire_width.unwrap_or_else(|| pin_size * 0.2);
-                let title_drag_space = style
-                    .title_drag_space
-                    .unwrap_or_else(|| vec2(ui.spacing().icon_width, ui.spacing().icon_width));
+                let title_drag_space = style.title_drag_space.unwrap_or_else(|| {
+                    vec2(node_style.spacing.icon_width, node_style.spacing.icon_width)
+                });
+
                 // let input_output_spacing = style
                 //     .input_output_spacing
-                //     .unwrap_or_else(|| ui.spacing().item_spacing.x);
+                //     .unwrap_or_else(|| node_style.spacing.item_spacing.x);
 
                 let collapsible = style.collapsible;
 
-                let node_frame = Frame::window(ui.style());
+                let node_frame = Frame::window(&node_style);
                 let title_frame = node_frame.shadow(Shadow::NONE);
 
                 let wire_shape_idx = match style.wire_layer {
@@ -628,22 +726,24 @@ impl<T> Snarl<T> {
                 for (order, &node_idx) in self.draw_order.iter().enumerate() {
                     let node = &self.nodes[node_idx];
 
-                    let node_pos = node.pos + vec2(max_rect.min.x, max_rect.min.y);
+                    let node_pos = zoom.graph_point_to_screen(node.pos, max_rect);
 
                     // Generate persistent id for the node.
                     let node_id = snarl_id.with(("snarl-node", node_idx));
 
                     let openness = ui.ctx().animate_bool(node_id, node.open);
 
-                    let state = NodeState::load(ui.ctx(), node_id)
-                        .unwrap_or_else(|| NodeState::initial(ui.spacing()));
+                    let node_state = NodeState::load(ui.ctx(), node_id)
+                        .unwrap_or_else(|| NodeState::initial(&node_style.spacing));
 
-                    let mut new_state = state;
+                    let mut new_state = node_state;
 
-                    let node_rect = state.node_rect(&title_frame, ui.spacing(), node_pos);
+                    let node_rect =
+                        node_state.node_rect(&title_frame, &node_style.spacing, node_pos);
 
-                    let title_rect = state.title_rect(ui.spacing(), node_pos);
-                    let pins_rect = state.pins_rect(&title_frame, ui.spacing(), openness, node_pos);
+                    let title_rect = node_state.title_rect(&node_style.spacing, node_pos);
+                    let pins_rect =
+                        node_state.pins_rect(&title_frame, &node_style.spacing, openness, node_pos);
 
                     let r = ui.interact(node_rect, node_id, Sense::click_and_drag());
 
@@ -665,6 +765,7 @@ impl<T> Snarl<T> {
                         Layout::top_down(Align::Center),
                         node_id,
                     );
+                    node_ui.set_style(node_style.clone());
 
                     node_frame.show(node_ui, |ui| {
                         // Collect pins
@@ -705,7 +806,10 @@ impl<T> Snarl<T> {
                             let r = ui.horizontal(|ui| {
                                 if collapsible {
                                     let (_, r) = ui.allocate_exact_size(
-                                        vec2(ui.spacing().icon_width, ui.spacing().icon_width),
+                                        vec2(
+                                            node_style.spacing.icon_width,
+                                            node_style.spacing.icon_width,
+                                        ),
                                         Sense::click(),
                                     );
                                     paint_default_icon(ui, openness, &r);
@@ -759,72 +863,66 @@ impl<T> Snarl<T> {
                             pins_ui.horizontal(|ui| {
                                 // Input pins on the left.
                                 let r = ui.with_layout(Layout::top_down(Align::Min), |ui| {
-                                    for in_pin in inputs {
-                                        // Show input pin.
-                                        ui.with_layout(
-                                            Layout::left_to_right(Align::Center),
-                                            |ui| {
-                                                // Allocate space for pin shape.
-                                                let (pin_id, _) =
-                                                    ui.allocate_space(vec2(pin_size, pin_size));
+                                    Grid::new((node_id, "inputs")).show(ui, |ui| {
+                                        for in_pin in inputs {
+                                            // Show input pin.
+                                            // ui.with_layout(
+                                            //     Layout::left_to_right(Align::Center),
+                                            //     |ui| {
+                                            // Allocate space for pin shape.
+                                            let (pin_id, _) =
+                                                ui.allocate_space(vec2(pin_size, pin_size));
 
-                                                // Show input content
-                                                let r = viewer.show_input(&in_pin, ui, effects);
-                                                let pin_info = r.inner;
+                                            // Show input content
+                                            let r = viewer.show_input(&in_pin, ui, effects);
+                                            ui.end_row();
 
-                                                // Place pin shape on the left from pin content.
-                                                let x = r.response.rect.left()
-                                                    - pin_size * 0.5
-                                                    - ui.style().spacing.item_spacing.x;
+                                            let pin_info = r.inner;
 
-                                                // Centered vertically.
-                                                let y = min_pin_y.max(
-                                                    (r.response.rect.top()
-                                                        + r.response.rect.bottom())
-                                                        * 0.5,
-                                                );
+                                            // Centered vertically.
+                                            let y = min_pin_y.max(
+                                                (r.response.rect.top() + r.response.rect.bottom())
+                                                    * 0.5,
+                                            );
 
-                                                let pin_pos = pos2(input_x, y);
+                                            let pin_pos = pos2(input_x, y);
 
-                                                // Interact with pin shape.
-                                                let r = ui.interact(
-                                                    Rect::from_center_size(
-                                                        pin_pos,
-                                                        vec2(pin_size, pin_size),
-                                                    ),
-                                                    pin_id,
-                                                    Sense::click_and_drag(),
-                                                );
+                                            // Interact with pin shape.
+                                            let r = ui.interact(
+                                                Rect::from_center_size(
+                                                    pin_pos,
+                                                    vec2(pin_size, pin_size),
+                                                ),
+                                                pin_id,
+                                                Sense::click_and_drag(),
+                                            );
 
-                                                let mut pin_size = pin_size;
-                                                if r.hovered() {
-                                                    pin_size *= 1.2;
-                                                }
+                                            let mut pin_size = pin_size;
+                                            if r.hovered() {
+                                                pin_size *= 1.2;
+                                            }
 
-                                                draw_pin(ui.painter(), pin_info, pin_pos, pin_size);
+                                            draw_pin(ui.painter(), pin_info, pin_pos, pin_size);
 
-                                                if r.clicked_by(PointerButton::Secondary) {
-                                                    let _ = viewer.drop_inputs(&in_pin, effects);
-                                                }
-                                                if r.drag_started_by(PointerButton::Primary) {
-                                                    set_part_wire(
-                                                        ui,
-                                                        snarl_id,
-                                                        AnyPin::In(in_pin.id),
-                                                    );
-                                                }
-                                                if r.drag_released_by(PointerButton::Primary) {
-                                                    part_wire_drag_released = true;
-                                                }
-                                                if r.hovered() {
-                                                    pin_hovered = Some(AnyPin::In(in_pin.id));
-                                                }
+                                            if r.clicked_by(PointerButton::Secondary) {
+                                                let _ = viewer.drop_inputs(&in_pin, effects);
+                                            }
+                                            if r.drag_started_by(PointerButton::Primary) {
+                                                set_part_wire(ui, snarl_id, AnyPin::In(in_pin.id));
+                                            }
+                                            if r.drag_released_by(PointerButton::Primary) {
+                                                part_wire_drag_released = true;
+                                            }
+                                            if r.hovered() {
+                                                pin_hovered = Some(AnyPin::In(in_pin.id));
+                                            }
 
-                                                input_positions.insert(in_pin.id, pin_pos);
-                                                input_colors.insert(in_pin.id, pin_info.fill);
-                                            },
-                                        );
-                                    }
+                                            input_positions.insert(in_pin.id, pin_pos);
+                                            input_colors.insert(in_pin.id, pin_info.fill);
+                                            //     },
+                                            // );
+                                        }
+                                    });
                                 });
 
                                 new_state.inputs_size = r.response.rect.size();
@@ -843,11 +941,6 @@ impl<T> Snarl<T> {
                                                 // Show output content
                                                 let r = viewer.show_output(&out_pin, ui, effects);
                                                 let pin_info = r.inner;
-
-                                                // Place pin shape on the right from pin content.
-                                                let x = r.response.rect.right()
-                                                    + pin_size * 0.5
-                                                    + ui.style().spacing.item_spacing.x;
 
                                                 // Centered vertically.
                                                 let y = min_pin_y.max(
@@ -902,8 +995,12 @@ impl<T> Snarl<T> {
                                 ui.allocate_space(ui.available_size());
                             });
 
-                            let pins_rect =
-                                new_state.pins_rect(&title_frame, ui.spacing(), openness, node_pos);
+                            let pins_rect = new_state.pins_rect(
+                                &title_frame,
+                                &node_style.spacing,
+                                openness,
+                                node_pos,
+                            );
 
                             ui.allocate_rect(
                                 pins_rect.intersect(Rect::everything_below(title_frame_rect.max.y)),
@@ -935,7 +1032,7 @@ impl<T> Snarl<T> {
                     // ui.painter()
                     //     .debug_rect(outputs_rect, Color32::GREEN, "Outputs rect");
 
-                    if new_state != state {
+                    if new_state != node_state {
                         new_state.store(ui.ctx(), node_id);
                         ui.ctx().request_repaint();
                     }
@@ -1071,6 +1168,23 @@ impl<T> Snarl<T> {
                         }
                         _ => {}
                     }
+                }
+
+                ui.advance_cursor_after_rect(Rect::from_min_size(max_rect.min, Vec2::ZERO));
+
+                if ui.button("+").clicked() {
+                    new_snarl_state.apply_scale_wrt_screen_point(1.1, max_rect.center(), max_rect);
+
+                    new_snarl_state.store(ui.ctx(), snarl_id);
+                }
+                if ui.button("-").clicked() {
+                    new_snarl_state.apply_scale_wrt_screen_point(
+                        1.0 / 1.1,
+                        max_rect.center(),
+                        max_rect,
+                    );
+
+                    new_snarl_state.store(ui.ctx(), snarl_id);
                 }
             });
     }
@@ -1272,7 +1386,7 @@ fn draw_bezier(shapes: &mut Vec<Shape>, points: &[Pos2; 6], stroke: Stroke) {
         path.push(sample_bezier(points, t));
     }
 
-    let shape = Shape::Path(epaint::PathShape {
+    let shape = Shape::Path(PathShape {
         points: path,
         closed: false,
         fill: Color32::TRANSPARENT,
@@ -1433,4 +1547,156 @@ fn mix_colors(a: Color32, b: Color32) -> Color32 {
         ob / 2 + ib / 2,
         oa / 2 + ia / 2,
     )
+}
+
+fn zoom_ui(zoom: f32, ui: &mut Ui) {
+    ui.style_mut().zoom(zoom);
+}
+
+trait Zoom {
+    fn zoom(&mut self, zoom: f32);
+}
+
+impl Zoom for f32 {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        *self *= zoom;
+    }
+}
+
+impl Zoom for Vec2 {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        *self *= zoom;
+    }
+}
+
+impl Zoom for Rounding {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        self.nw.zoom(zoom);
+        self.ne.zoom(zoom);
+        self.se.zoom(zoom);
+        self.sw.zoom(zoom);
+    }
+}
+
+impl Zoom for Margin {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        self.left.zoom(zoom);
+        self.right.zoom(zoom);
+        self.top.zoom(zoom);
+        self.bottom.zoom(zoom);
+    }
+}
+
+impl Zoom for Shadow {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        self.extrusion.zoom(zoom);
+    }
+}
+
+impl Zoom for Stroke {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        self.width.zoom(zoom);
+    }
+}
+
+impl Zoom for WidgetVisuals {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        self.bg_stroke.zoom(zoom);
+        self.rounding.zoom(zoom);
+        self.fg_stroke.zoom(zoom);
+        self.expansion.zoom(zoom);
+    }
+}
+
+impl Zoom for Interaction {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        self.resize_grab_radius_corner.zoom(zoom);
+        self.resize_grab_radius_side.zoom(zoom);
+    }
+}
+
+impl Zoom for Widgets {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        self.noninteractive.zoom(zoom);
+        self.inactive.zoom(zoom);
+        self.hovered.zoom(zoom);
+        self.active.zoom(zoom);
+        self.open.zoom(zoom);
+    }
+}
+
+impl Zoom for Visuals {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        self.clip_rect_margin.zoom(zoom);
+        self.menu_rounding.zoom(zoom);
+        self.popup_shadow.zoom(zoom);
+        self.resize_corner_size.zoom(zoom);
+        self.selection.stroke.zoom(zoom);
+        self.text_cursor.zoom(zoom);
+        self.widgets.zoom(zoom);
+        self.window_rounding.zoom(zoom);
+        self.window_shadow.zoom(zoom);
+        self.window_stroke.zoom(zoom);
+    }
+}
+
+impl Zoom for ScrollStyle {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        self.bar_inner_margin.zoom(zoom);
+        self.bar_outer_margin.zoom(zoom);
+        self.bar_width.zoom(zoom);
+        self.floating_allocated_width.zoom(zoom);
+        self.floating_width.zoom(zoom);
+        self.handle_min_length.zoom(zoom);
+    }
+}
+
+impl Zoom for Spacing {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        self.button_padding.zoom(zoom);
+        self.combo_height.zoom(zoom);
+        self.combo_width.zoom(zoom);
+        self.icon_spacing.zoom(zoom);
+        self.icon_width.zoom(zoom);
+        self.icon_width_inner.zoom(zoom);
+        self.indent.zoom(zoom);
+        self.interact_size.zoom(zoom);
+        self.item_spacing.zoom(zoom);
+        self.menu_margin.zoom(zoom);
+        self.scroll.zoom(zoom);
+        self.slider_width.zoom(zoom);
+        self.text_edit_width.zoom(zoom);
+        self.tooltip_width.zoom(zoom);
+        self.window_margin.zoom(zoom);
+    }
+}
+
+impl Zoom for FontId {
+    fn zoom(&mut self, zoom: f32) {
+        self.size.zoom(zoom);
+    }
+}
+
+impl Zoom for Style {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        for font_id in self.text_styles.values_mut() {
+            font_id.zoom(zoom);
+        }
+        self.interaction.zoom(zoom);
+        self.spacing.zoom(zoom);
+        self.visuals.zoom(zoom);
+    }
 }
