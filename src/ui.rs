@@ -453,7 +453,7 @@ impl<T> Snarl<T> {
                                 (node_id, "inputs"),
                             );
 
-                            inputs_ui.set_clip_rect(pins_clip_rect);
+                            inputs_ui.set_clip_rect(pins_clip_rect.intersect(viewport));
 
                             let mut inputs_rect = pins_rect;
 
@@ -540,7 +540,7 @@ impl<T> Snarl<T> {
                                 (node_id, "outputs"),
                             );
 
-                            outputs_ui.set_clip_rect(pins_clip_rect);
+                            outputs_ui.set_clip_rect(pins_clip_rect.intersect(viewport));
 
                             let mut outputs_rect = pins_rect;
 
