@@ -1,11 +1,16 @@
-use egui::Context;
+use std::cell::RefCell;
 
-use crate::{wire_pins, InPinId, OutPinId, Snarl};
+use egui::{Context, Pos2};
+
+use crate::{wire_pins, InPinId, Node, OutPinId, Snarl};
 
 /// Error returned from methods where `Viewer` forbids the operation.
 pub struct Forbidden;
 
 pub enum Effect<T> {
+    /// Adds a new node to the Snarl.
+    Insert { node: T, pos: Pos2 },
+
     /// Adds connection between two nodes.
     Connect { from: OutPinId, to: InPinId },
 
@@ -48,6 +53,10 @@ impl<T> Effects<T> {
         }
     }
 
+    pub fn insert(&mut self, node: T, pos: Pos2) {
+        self.effects.push(Effect::Insert { node, pos });
+    }
+
     pub fn connect(&mut self, from: OutPinId, to: InPinId) {
         self.effects.push(Effect::Connect { from, to });
     }
@@ -86,6 +95,14 @@ impl<T> Snarl<T> {
 
     fn apply_effect(&mut self, effect: Effect<T>) {
         match effect {
+            Effect::Insert { node, pos } => {
+                let idx = self.nodes.insert(Node {
+                    value: RefCell::new(node),
+                    pos,
+                    open: true,
+                });
+                self.draw_order.push(idx);
+            }
             Effect::Connect { from, to } => {
                 if self.nodes.contains(from.node) && self.nodes.contains(to.node) {
                     self.wires.insert(wire_pins(from, to));

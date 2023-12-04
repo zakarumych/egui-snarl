@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap};
 
 use eframe::App;
-use egui::{pos2, Color32, InnerResponse, Ui};
+use egui::{Color32, InnerResponse, Ui};
 use egui_snarl::{
     ui::{Effects, Forbidden, InPin, OutPin, PinInfo, SnarlStyle, SnarlViewer},
     InPinId, Snarl,
@@ -21,7 +21,7 @@ enum DemoNode {
     String(String),
 
     /// Converts URI to Image
-    Show(String),
+    ShowImage(String),
 
     /// Expression node with a single output.
     /// It has number of inputs equal to number of variables in the expression.
@@ -54,22 +54,22 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             (_, DemoNode::String(_)) => {
                 unreachable!("String node has no inputs")
             }
-            (DemoNode::Integer(_), DemoNode::Show(_)) => {
+            (DemoNode::Integer(_), DemoNode::ShowImage(_)) => {
                 return Err(Forbidden);
             }
-            (DemoNode::Show(_), DemoNode::Show(_)) => {
+            (DemoNode::ShowImage(_), DemoNode::ShowImage(_)) => {
                 return Err(Forbidden);
             }
-            (DemoNode::String(_), DemoNode::Show(_)) => {}
+            (DemoNode::String(_), DemoNode::ShowImage(_)) => {}
             (DemoNode::ExprNode(_), DemoNode::ExprNode(_)) => {}
             (DemoNode::Integer(_), DemoNode::ExprNode(_)) => {}
             (DemoNode::String(_), DemoNode::ExprNode(_)) => {
                 return Err(Forbidden);
             }
-            (DemoNode::Show(_), DemoNode::ExprNode(_)) => {
+            (DemoNode::ShowImage(_), DemoNode::ExprNode(_)) => {
                 return Err(Forbidden);
             }
-            (DemoNode::ExprNode(_), DemoNode::Show(_)) => {
+            (DemoNode::ExprNode(_), DemoNode::ShowImage(_)) => {
                 return Err(Forbidden);
             }
         }
@@ -87,7 +87,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             DemoNode::Sink => "Sink",
             DemoNode::Integer(_) => "Integer",
             DemoNode::String(_) => "String",
-            DemoNode::Show(_) => "Show",
+            DemoNode::ShowImage(_) => "Show image",
             DemoNode::ExprNode(_) => "Expr",
         }
     }
@@ -99,13 +99,20 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         inputs: &[InPin<DemoNode>],
         _outputs: &[OutPin<DemoNode>],
         ui: &mut Ui,
+        _scale: f32,
         effects: &mut Effects<DemoNode>,
     ) -> egui::Response {
         match &mut *node.borrow_mut() {
             DemoNode::Sink => ui.label("Sink"),
             DemoNode::Integer(value) => ui.add(egui::DragValue::new(value)),
-            DemoNode::String(value) => ui.text_edit_singleline(value),
-            DemoNode::Show(_) => ui.label("Show"),
+            DemoNode::String(value) => {
+                let edit = egui::TextEdit::singleline(value)
+                    .clip_text(false)
+                    .desired_width(0.0)
+                    .margin(ui.spacing().item_spacing);
+                ui.add(edit)
+            }
+            DemoNode::ShowImage(_) => ui.label("Show image"),
             DemoNode::ExprNode(expr_node) => {
                 let edit = egui::TextEdit::singleline(&mut expr_node.text)
                     .clip_text(false)
@@ -172,7 +179,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             DemoNode::Integer(_) => 0,
             DemoNode::String(_) => 0,
             // DemoNode::Add(values) => values.len() + 1,
-            DemoNode::Show(_) => 1,
+            DemoNode::ShowImage(_) => 1,
             DemoNode::ExprNode(expr_node) => expr_node.bindings.len(),
         }
     }
@@ -183,7 +190,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             DemoNode::Integer(_) => 1,
             DemoNode::String(_) => 1,
             // DemoNode::Add(_) => 1,
-            DemoNode::Show(_) => 1,
+            DemoNode::ShowImage(_) => 1,
             DemoNode::ExprNode(_) => 1,
         }
     }
@@ -192,6 +199,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         &mut self,
         pin: &InPin<DemoNode>,
         ui: &mut Ui,
+        scale: f32,
         _effects: &mut Effects<DemoNode>,
     ) -> egui::InnerResponse<PinInfo> {
         let demo_node = pin.node.borrow().clone();
@@ -221,11 +229,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                             let r = ui.label(format_float(expr.eval()));
                             InnerResponse::new(PinInfo::square().with_fill(Color32::RED), r)
                         }
-                        DemoNode::Show(ref uri) => {
-                            assert_eq!(remote.id.output, 0, "Show node has only one output");
+                        DemoNode::ShowImage(ref uri) => {
+                            assert_eq!(remote.id.output, 0, "ShowImage node has only one output");
 
                             let image = egui::Image::new(uri)
-                                .fit_to_original_size(1.0)
+                                .fit_to_original_size(scale)
                                 .show_loading_spinner(true);
                             let r = ui.add(image);
 
@@ -241,26 +249,35 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             DemoNode::String(_) => {
                 unreachable!("String node has no inputs")
             }
-            DemoNode::Show(_) => match &*pin.remotes {
+            DemoNode::ShowImage(_) => match &*pin.remotes {
                 [] => match &mut *pin.node.borrow_mut() {
-                    DemoNode::Show(uri) => {
-                        let r = ui.text_edit_singleline(uri);
+                    DemoNode::ShowImage(uri) => {
+                        let edit = egui::TextEdit::singleline(uri)
+                            .clip_text(false)
+                            .desired_width(0.0)
+                            .margin(ui.spacing().item_spacing);
+                        let r = ui.add(edit);
                         InnerResponse::new(PinInfo::triangle().with_fill(Color32::GREEN), r)
                     }
                     _ => unreachable!(),
                 },
                 [remote] => match remote.node.borrow().clone() {
                     DemoNode::Sink => unreachable!("Sink node has no outputs"),
-                    DemoNode::Show(_) => {
-                        unreachable!("Show node has no outputs")
+                    DemoNode::ShowImage(_) => {
+                        unreachable!("ShowImage node has no outputs")
                     }
                     DemoNode::Integer(_) | DemoNode::ExprNode(_) => {
                         unreachable!("Invalid connection")
                     }
                     DemoNode::String(value) => match &mut *pin.node.borrow_mut() {
-                        DemoNode::Show(uri) => {
+                        DemoNode::ShowImage(uri) => {
                             *uri = value.clone();
-                            let r = ui.text_edit_singleline(&mut &**uri);
+                            let mut uri = &**uri;
+                            let edit = egui::TextEdit::singleline(&mut uri)
+                                .clip_text(false)
+                                .desired_width(0.0)
+                                .margin(ui.spacing().item_spacing);
+                            let r = ui.add(edit);
                             InnerResponse::new(PinInfo::triangle().with_fill(Color32::GREEN), r)
                         }
                         _ => unreachable!(),
@@ -313,8 +330,8 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                                     }
                                     PinInfo::square().with_fill(Color32::RED)
                                 }
-                                DemoNode::Show(_) => {
-                                    unreachable!("Show node has no outputs")
+                                DemoNode::ShowImage(_) => {
+                                    unreachable!("ShowImage node has no outputs")
                                 }
                                 DemoNode::String(_) => {
                                     unreachable!("Invalid connection")
@@ -335,6 +352,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         &mut self,
         pin: &OutPin<DemoNode>,
         ui: &mut Ui,
+        _scale: f32,
         _effects: &mut Effects<DemoNode>,
     ) -> egui::InnerResponse<PinInfo> {
         match *pin.node.borrow_mut() {
@@ -359,7 +377,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 let r = ui.label(format_float(value));
                 InnerResponse::new(PinInfo::square().with_fill(Color32::RED), r)
             }
-            DemoNode::Show(_) => {
+            DemoNode::ShowImage(_) => {
                 let (_, r) = ui.allocate_at_least(egui::Vec2::ZERO, egui::Sense::hover());
                 InnerResponse::new(PinInfo::circle().with_fill(Color32::GOLD), r)
             }
@@ -377,7 +395,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         DemoNode::Integer(_) => Color32::RED,
                         DemoNode::String(_) => Color32::GREEN,
                         DemoNode::ExprNode(_) => Color32::RED,
-                        DemoNode::Show(_) => Color32::GOLD,
+                        DemoNode::ShowImage(_) => Color32::GOLD,
                     },
                     _ => unreachable!("Sink input has only one wire"),
                 }
@@ -388,7 +406,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             DemoNode::String(_) => {
                 unreachable!("String node has no inputs")
             }
-            DemoNode::Show(_) => Color32::GREEN,
+            DemoNode::ShowImage(_) => Color32::GREEN,
             DemoNode::ExprNode(_) => Color32::RED,
         }
     }
@@ -400,8 +418,55 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             }
             DemoNode::Integer(_) => Color32::RED,
             DemoNode::String(_) => Color32::GREEN,
-            DemoNode::Show(_) => Color32::GOLD,
+            DemoNode::ShowImage(_) => Color32::GOLD,
             DemoNode::ExprNode(_) => Color32::RED,
+        }
+    }
+
+    fn graph_menu(
+        &mut self,
+        pos: egui::Pos2,
+        ui: &mut Ui,
+        _scale: f32,
+        effects: &mut Effects<DemoNode>,
+    ) {
+        ui.label("Add node");
+        if ui.button("Integer").clicked() {
+            effects.insert(DemoNode::Integer(0.0), pos);
+            ui.close_menu();
+        }
+        if ui.button("Expr").clicked() {
+            effects.insert(DemoNode::ExprNode(ExprNode::new()), pos);
+            ui.close_menu();
+        }
+        if ui.button("String").clicked() {
+            effects.insert(DemoNode::String("".to_owned()), pos);
+            ui.close_menu();
+        }
+        if ui.button("Show image").clicked() {
+            effects.insert(DemoNode::ShowImage("".to_owned()), pos);
+            ui.close_menu();
+        }
+        if ui.button("Sink").clicked() {
+            effects.insert(DemoNode::Sink, pos);
+            ui.close_menu();
+        }
+    }
+
+    fn node_menu(
+        &mut self,
+        idx: usize,
+        _node: &RefCell<DemoNode>,
+        _inputs: &[InPin<DemoNode>],
+        _outputs: &[OutPin<DemoNode>],
+        ui: &mut Ui,
+        _scale: f32,
+        effects: &mut Effects<DemoNode>,
+    ) {
+        ui.label("Node menu");
+        if ui.button("Remove").clicked() {
+            effects.remove_node(idx);
+            ui.close_menu();
         }
     }
 }
@@ -703,19 +768,7 @@ pub struct DemoApp {
 
 impl DemoApp {
     pub fn new() -> Self {
-        let mut snarl = Snarl::new();
-
-        snarl.add_node(DemoNode::Integer(42.0), pos2(10.0, 20.0));
-
-        snarl.add_node(DemoNode::ExprNode(ExprNode::new()), pos2(30.0, 80.0));
-
-        snarl.add_node(DemoNode::ExprNode(ExprNode::new()), pos2(40.0, 100.0));
-
-        // snarl.add_node(DemoNode::String("".to_owned()), pos2(20.0, 150.0));
-
-        // snarl.add_node(DemoNode::Show("".to_owned()), pos2(120.0, 20.0));
-
-        // snarl.add_node(DemoNode::Sink, pos2(190.0, 60.0));
+        let snarl = Snarl::new();
 
         DemoApp { snarl }
     }

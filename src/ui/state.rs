@@ -3,14 +3,9 @@ use egui::{style::Spacing, vec2, Context, Frame, Id, Pos2, Rect, Vec2};
 /// Node UI state.
 #[derive(Clone, Copy, PartialEq)]
 pub struct NodeState {
-    /// Size occupied by title.
-    pub title_size: Vec2,
-
-    /// Size occupied by inputs.
-    pub inputs_size: Vec2,
-
-    /// Size occupied by outputs.
-    pub outputs_size: Vec2,
+    /// Node size for this frame.
+    /// It is updated to fit content.
+    pub size: Vec2,
 }
 
 impl NodeState {
@@ -24,59 +19,62 @@ impl NodeState {
 
     /// Finds node rect at specific position (excluding node frame margin).
     pub fn node_rect(&self, frame: &Frame, spacing: &Spacing, pos: Pos2) -> Rect {
-        let width = self
-            .title_size
-            .x
-            .max(self.inputs_size.x + spacing.item_spacing.x + self.outputs_size.x);
+        // let width = self
+        //     .title_size
+        //     .x
+        //     .max(self.inputs_size.x + spacing.item_spacing.x + self.outputs_size.x);
 
-        let height = self.title_size.y
-            + frame.total_margin().bottom
-            + frame.total_margin().bottom
-            + self.inputs_size.y.max(self.outputs_size.y);
+        // let height = self.title_size.y
+        //     + frame.total_margin().bottom
+        //     + frame.total_margin().bottom
+        //     + self.inputs_size.y.max(self.outputs_size.y);
 
-        Rect::from_min_size(pos, vec2(width, height))
+        // Rect::from_min_size(pos, vec2(width, height))
+
+        Rect::from_min_size(pos, self.size)
     }
 
-    /// Finds title rect at specific position (excluding node frame margin).
-    pub fn title_rect(&self, spacing: &Spacing, pos: Pos2) -> Rect {
-        let width = self
-            .title_size
-            .x
-            .max(self.inputs_size.x + spacing.item_spacing.x + self.outputs_size.x);
+    // /// Finds title rect at specific position (excluding node frame margin).
+    // pub fn title_rect(&self, spacing: &Spacing, pos: Pos2) -> Rect {
+    //     let width = self
+    //         .title_size
+    //         .x
+    //         .max(self.inputs_size.x + spacing.item_spacing.x + self.outputs_size.x);
 
-        let height = self.title_size.y;
+    //     let height = self.title_size.y;
 
-        Rect::from_min_size(pos, vec2(width, height))
-    }
+    //     Rect::from_min_size(pos, vec2(width, height))
+    // }
 
-    /// Finds pins rect at specific position (excluding node frame margin).
-    pub fn pins_rect(&self, frame: &Frame, spacing: &Spacing, openness: f32, pos: Pos2) -> Rect {
-        let height = self.inputs_size.y.max(self.outputs_size.y);
-        let width = self
-            .title_size
-            .x
-            .max(self.inputs_size.x + spacing.item_spacing.x + self.outputs_size.x);
+    // /// Finds pins rect at specific position (excluding node frame margin).
+    // pub fn pins_rect(&self, frame: &Frame, spacing: &Spacing, openness: f32, pos: Pos2) -> Rect {
+    //     let height = self.inputs_size.y.max(self.outputs_size.y);
+    //     let width = self
+    //         .title_size
+    //         .x
+    //         .max(self.inputs_size.x + spacing.item_spacing.x + self.outputs_size.x);
 
-        let moved =
-            (height + frame.total_margin().bottom + frame.total_margin().bottom) * (openness - 1.0);
+    //     let moved =
+    //         (height + frame.total_margin().bottom + frame.total_margin().bottom) * (openness - 1.0);
 
-        let pos = pos
-            + vec2(
-                0.0,
-                self.title_size.y
-                    + frame.total_margin().bottom
-                    + frame.total_margin().bottom
-                    + moved,
-            );
+    //     let pos = pos
+    //         + vec2(
+    //             0.0,
+    //             self.title_size.y
+    //                 + frame.total_margin().bottom
+    //                 + frame.total_margin().bottom
+    //                 + moved,
+    //         );
 
-        Rect::from_min_size(pos, vec2(width, height))
-    }
+    //     Rect::from_min_size(pos, vec2(width, height))
+    // }
 
     pub fn initial(spacing: &Spacing) -> Self {
         NodeState {
-            title_size: spacing.interact_size,
-            inputs_size: spacing.interact_size,
-            outputs_size: spacing.interact_size,
+            // title_size: spacing.interact_size,
+            // inputs_size: spacing.interact_size,
+            // outputs_size: spacing.interact_size,
+            size: spacing.interact_size * 3.0,
         }
     }
 }
@@ -124,6 +122,11 @@ impl SnarlState {
     }
 
     #[inline(always)]
+    pub fn pan(&mut self, delta: Vec2) {
+        self.offset += delta;
+    }
+
+    #[inline(always)]
     pub fn scale(&self) -> f32 {
         self.scale
     }
@@ -131,6 +134,11 @@ impl SnarlState {
     #[inline(always)]
     pub fn set_scale(&mut self, scale: f32) {
         self.target_scale = scale;
+    }
+
+    #[inline(always)]
+    pub fn graph_center(&self) -> Pos2 {
+        (self.offset / self.scale).to_pos2()
     }
 
     #[inline(always)]

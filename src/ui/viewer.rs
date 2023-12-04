@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use egui::{Color32, Response, Ui};
+use egui::{Color32, Pos2, Response, Ui};
 
 use super::{
     effect::{Effects, Forbidden},
@@ -115,9 +115,10 @@ pub trait SnarlViewer<T> {
         inputs: &[InPin<T>],
         outputs: &[OutPin<T>],
         ui: &mut Ui,
+        scale: f32,
         effects: &mut Effects<T>,
     ) -> Response {
-        let _ = (idx, node, inputs, outputs, effects);
+        let _ = (idx, node, inputs, outputs, scale, effects);
         ui.label(self.title(&*node.borrow()))
     }
 
@@ -129,6 +130,7 @@ pub trait SnarlViewer<T> {
         &mut self,
         pin: &InPin<T>,
         ui: &mut Ui,
+        scale: f32,
         effects: &mut Effects<T>,
     ) -> egui::InnerResponse<PinInfo>;
 
@@ -136,9 +138,33 @@ pub trait SnarlViewer<T> {
         &mut self,
         pin: &OutPin<T>,
         ui: &mut Ui,
+        scale: f32,
         effects: &mut Effects<T>,
     ) -> egui::InnerResponse<PinInfo>;
 
     fn input_color(&mut self, pin: &InPin<T>) -> Color32;
     fn output_color(&mut self, pin: &OutPin<T>) -> Color32;
+
+    /// Show context menu for the snarl.
+    ///
+    /// This can be used to implement menu for adding new nodes.
+    fn graph_menu(&mut self, pos: Pos2, ui: &mut Ui, scale: f32, effects: &mut Effects<T>) {
+        let _ = (pos, ui, scale, effects);
+    }
+
+    /// Show context menu for the snarl.
+    ///
+    /// This can be used to implement menu for adding new nodes.
+    fn node_menu(
+        &mut self,
+        idx: usize,
+        node: &RefCell<T>,
+        inputs: &[InPin<T>],
+        outputs: &[OutPin<T>],
+        ui: &mut Ui,
+        scale: f32,
+        effects: &mut Effects<T>,
+    ) {
+        let _ = (idx, node, inputs, outputs, ui, scale, effects);
+    }
 }
