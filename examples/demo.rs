@@ -31,10 +31,6 @@ enum DemoNode {
 struct DemoViewer;
 
 impl SnarlViewer<DemoNode> for DemoViewer {
-    fn node_picker(&mut self, _ui: &mut Ui) -> egui::InnerResponse<Option<DemoNode>> {
-        todo!()
-    }
-
     #[inline]
     fn connect(
         &mut self,

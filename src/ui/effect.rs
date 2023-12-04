@@ -4,7 +4,7 @@ use egui::{Context, Pos2};
 
 use crate::{wire_pins, InPinId, Node, OutPinId, Snarl};
 
-/// Error returned from methods where `Viewer` forbids the operation.
+/// Error returned from methods where [`SnarlViewer`] forbids the operation.
 pub struct Forbidden;
 
 pub enum Effect<T> {
@@ -33,6 +33,8 @@ pub enum Effect<T> {
     Closure(Box<dyn FnOnce(&mut Snarl<T>)>),
 }
 
+/// Contained for deferred execution of effects.
+/// It is populated by [`SnarlViewer`] methods and then applied to the Snarl.
 pub struct Effects<T> {
     effects: Vec<Effect<T>>,
 }
@@ -47,36 +49,52 @@ impl<T> Default for Effects<T> {
 }
 
 impl<T> Effects<T> {
+    #[inline(always)]
+    #[doc(hidden)]
     pub fn new() -> Self {
         Effects {
             effects: Vec::new(),
         }
     }
 
+    /// Inserts a new node to the Snarl.
+    #[inline(always)]
     pub fn insert(&mut self, node: T, pos: Pos2) {
         self.effects.push(Effect::Insert { node, pos });
     }
 
+    /// Connects two nodes.
+    #[inline(always)]
     pub fn connect(&mut self, from: OutPinId, to: InPinId) {
         self.effects.push(Effect::Connect { from, to });
     }
 
+    /// Disconnects two nodes.
+    #[inline(always)]
     pub fn disconnect(&mut self, from: OutPinId, to: InPinId) {
         self.effects.push(Effect::Disconnect { from, to });
     }
 
+    /// Removes all connections from the output pin.
+    #[inline(always)]
     pub fn drop_inputs(&mut self, pin: InPinId) {
         self.effects.push(Effect::DropInputs { pin });
     }
 
+    /// Removes all connections to the input pin.
+    #[inline(always)]
     pub fn drop_outputs(&mut self, pin: OutPinId) {
         self.effects.push(Effect::DropOutputs { pin });
     }
 
+    /// Removes a node from the Snarl.
+    #[inline(always)]
     pub fn remove_node(&mut self, node: usize) {
         self.effects.push(Effect::RemoveNode { node });
     }
 
+    /// Opens/closes a node.
+    #[inline(always)]
     pub fn open_node(&mut self, node: usize, open: bool) {
         self.effects.push(Effect::OpenNode { node, open });
     }

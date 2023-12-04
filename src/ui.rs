@@ -38,6 +38,7 @@ pub enum BackgroundPattern {
     Grid { spacing: Vec2, angle: f32 },
 }
 
+/// Style for rendering Snarl.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SnarlStyle {
     /// Size of pins.
@@ -89,19 +90,8 @@ impl Default for SnarlStyle {
     }
 }
 
-impl SnarlStyle {
-    pub fn upscale_wire_frame(mut self, upscale: bool) -> Self {
-        self.upscale_wire_frame = upscale;
-        self
-    }
-
-    pub fn downscale_wire_frame(mut self, downscale: bool) -> Self {
-        self.downscale_wire_frame = downscale;
-        self
-    }
-}
-
 impl<T> Snarl<T> {
+    /// Render [`Snarl`] using given viewer and style into the [`Ui`].
     pub fn show<V>(&mut self, viewer: &mut V, style: &SnarlStyle, id_source: impl Hash, ui: &mut Ui)
     where
         V: SnarlViewer<T>,
@@ -292,8 +282,7 @@ impl<T> Snarl<T> {
 
                     let mut new_state = node_state;
 
-                    let node_rect =
-                        node_state.node_rect(&header_frame, &node_style.spacing, node_pos);
+                    let node_rect = node_state.node_rect(node_pos);
 
                     // let header_rect = node_state.header_rect(&node_style.spacing, node_pos);
                     // let pins_rect =

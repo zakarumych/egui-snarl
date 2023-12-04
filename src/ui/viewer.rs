@@ -104,10 +104,10 @@ pub trait SnarlViewer<T> {
         Ok(())
     }
 
-    fn node_picker(&mut self, ui: &mut Ui) -> egui::InnerResponse<Option<T>>;
-
+    /// Returns title of the node.
     fn title<'a>(&'a mut self, node: &'a T) -> &'a str;
 
+    /// Renders the node's header.
     fn show_header(
         &mut self,
         idx: usize,
@@ -122,10 +122,13 @@ pub trait SnarlViewer<T> {
         ui.label(self.title(&*node.borrow()))
     }
 
+    /// Returns number of output pins of the node.
     fn outputs(&mut self, node: &T) -> usize;
 
+    /// Returns number of input pins of the node.
     fn inputs(&mut self, node: &T) -> usize;
 
+    /// Renders the node's input pin.
     fn show_input(
         &mut self,
         pin: &InPin<T>,
@@ -134,6 +137,7 @@ pub trait SnarlViewer<T> {
         effects: &mut Effects<T>,
     ) -> egui::InnerResponse<PinInfo>;
 
+    /// Renders the node's output pin.
     fn show_output(
         &mut self,
         pin: &OutPin<T>,
@@ -142,7 +146,12 @@ pub trait SnarlViewer<T> {
         effects: &mut Effects<T>,
     ) -> egui::InnerResponse<PinInfo>;
 
+    /// Returns color of the node's input pin.
+    /// Called when pin in not visible.
     fn input_color(&mut self, pin: &InPin<T>) -> Color32;
+
+    /// Returns color of the node's output pin.
+    /// Called when pin in not visible.
     fn output_color(&mut self, pin: &OutPin<T>) -> Color32;
 
     /// Show context menu for the snarl.

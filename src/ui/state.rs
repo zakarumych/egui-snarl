@@ -1,4 +1,4 @@
-use egui::{style::Spacing, vec2, Context, Frame, Id, Pos2, Rect, Vec2};
+use egui::{style::Spacing, Context, Id, Pos2, Rect, Vec2};
 
 /// Node UI state.
 #[derive(Clone, Copy, PartialEq)]
@@ -18,56 +18,9 @@ impl NodeState {
     }
 
     /// Finds node rect at specific position (excluding node frame margin).
-    pub fn node_rect(&self, frame: &Frame, spacing: &Spacing, pos: Pos2) -> Rect {
-        // let width = self
-        //     .title_size
-        //     .x
-        //     .max(self.inputs_size.x + spacing.item_spacing.x + self.outputs_size.x);
-
-        // let height = self.title_size.y
-        //     + frame.total_margin().bottom
-        //     + frame.total_margin().bottom
-        //     + self.inputs_size.y.max(self.outputs_size.y);
-
-        // Rect::from_min_size(pos, vec2(width, height))
-
+    pub fn node_rect(&self, pos: Pos2) -> Rect {
         Rect::from_min_size(pos, self.size)
     }
-
-    // /// Finds title rect at specific position (excluding node frame margin).
-    // pub fn title_rect(&self, spacing: &Spacing, pos: Pos2) -> Rect {
-    //     let width = self
-    //         .title_size
-    //         .x
-    //         .max(self.inputs_size.x + spacing.item_spacing.x + self.outputs_size.x);
-
-    //     let height = self.title_size.y;
-
-    //     Rect::from_min_size(pos, vec2(width, height))
-    // }
-
-    // /// Finds pins rect at specific position (excluding node frame margin).
-    // pub fn pins_rect(&self, frame: &Frame, spacing: &Spacing, openness: f32, pos: Pos2) -> Rect {
-    //     let height = self.inputs_size.y.max(self.outputs_size.y);
-    //     let width = self
-    //         .title_size
-    //         .x
-    //         .max(self.inputs_size.x + spacing.item_spacing.x + self.outputs_size.x);
-
-    //     let moved =
-    //         (height + frame.total_margin().bottom + frame.total_margin().bottom) * (openness - 1.0);
-
-    //     let pos = pos
-    //         + vec2(
-    //             0.0,
-    //             self.title_size.y
-    //                 + frame.total_margin().bottom
-    //                 + frame.total_margin().bottom
-    //                 + moved,
-    //         );
-
-    //     Rect::from_min_size(pos, vec2(width, height))
-    // }
 
     pub fn initial(spacing: &Spacing) -> Self {
         NodeState {

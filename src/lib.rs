@@ -36,7 +36,10 @@ struct Node<T> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OutPinId {
+    /// Node index.
     pub node: usize,
+
+    /// Output pin index.
     pub output: usize,
 }
 
@@ -44,7 +47,10 @@ pub struct OutPinId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct InPinId {
+    /// Node index.
     pub node: usize,
+
+    /// Input pin index.
     pub input: usize,
 }
 
@@ -78,53 +84,56 @@ struct Wires {
 }
 
 impl Wires {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Wires {
             wires: HashSet::with_hasher(egui::ahash::RandomState::new()),
         }
     }
 
-    pub fn insert(&mut self, wire: Wire) -> bool {
+    fn insert(&mut self, wire: Wire) -> bool {
         self.wires.insert(wire)
     }
 
-    pub fn remove(&mut self, wire: &Wire) -> bool {
+    fn remove(&mut self, wire: &Wire) -> bool {
         self.wires.remove(wire)
     }
 
-    pub fn drop_node(&mut self, node: usize) {
+    fn drop_node(&mut self, node: usize) {
         self.wires
             .retain(|wire| wire.out_pin.node != node && wire.in_pin.node != node);
     }
 
-    pub fn drop_inputs(&mut self, pin: InPinId) {
+    fn drop_inputs(&mut self, pin: InPinId) {
         self.wires.retain(|wire| wire.in_pin != pin);
     }
 
-    pub fn drop_outputs(&mut self, pin: OutPinId) {
+    fn drop_outputs(&mut self, pin: OutPinId) {
         self.wires.retain(|wire| wire.out_pin != pin);
     }
 
-    pub fn wired_inputs(&self, out_pin: OutPinId) -> impl Iterator<Item = InPinId> + '_ {
+    fn wired_inputs(&self, out_pin: OutPinId) -> impl Iterator<Item = InPinId> + '_ {
         self.wires
             .iter()
             .filter(move |wire| wire.out_pin == out_pin)
             .map(|wire| (wire.in_pin))
     }
 
-    pub fn wired_outputs(&self, in_pin: InPinId) -> impl Iterator<Item = OutPinId> + '_ {
+    fn wired_outputs(&self, in_pin: InPinId) -> impl Iterator<Item = OutPinId> + '_ {
         self.wires
             .iter()
             .filter(move |wire| wire.in_pin == in_pin)
             .map(|wire| (wire.out_pin))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = Wire> + '_ {
+    fn iter(&self) -> impl Iterator<Item = Wire> + '_ {
         self.wires.iter().copied()
     }
 }
 
-/// Snarl is node-graph container.
+/// Snarl is generic node-graph container.
+///
+/// It holds graph state - positioned nodes and wires between their pins.
+/// It can be rendered using [`Snarl::show`].
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Snarl<T> {
