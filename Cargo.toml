@@ -2,6 +2,9 @@
 name = "egui-snarl"
 version = "0.1.0"
 edition = "2021"
+description = "Node-graphs for egui"
+license = "MIT OR Apache-2.0"
+documentation = "https://docs.rs/egui-snarl"
 
 [features]
 serde = ["dep:serde", "egui/serde", "slab/serde"]
@@ -14,8 +17,7 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 [dev-dependencies]
 eframe = { version = "0.24", features = ["serde"] }
 egui_extras = { version = "0.24", features = ["all_loaders"] }
-syn = { version = "1.0", features = ["extra-traits"] }
+syn = { version = "2.0", features = ["extra-traits"] }
 
 [[example]]
 name = "demo"
-# required-features = ["serde"]
