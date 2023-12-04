@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use egui::{epaint::PathShape, vec2, Color32, Painter, Pos2, Shape, Stroke, Vec2};
+use egui::{epaint::PathShape, vec2, Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2};
 
 use crate::{InPinId, OutPinId, Snarl};
 
@@ -73,15 +73,21 @@ pub enum AnyPin {
 }
 
 /// Shape of a pin.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PinShape {
+    /// Circle shape.
     Circle,
+
+    /// Triangle shape.
     Triangle,
+
+    /// Square shape.
     Square,
+
+    /// Custom shape.
+    Custom(Box<dyn FnOnce(&Painter, Rect, Color32, Stroke)>),
 }
 
 /// Information about a pin returned by `SnarlViewer::show_input` and `SnarlViewer::show_output`.
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PinInfo {
     pub shape: PinShape,
     pub size: f32,
@@ -178,5 +184,11 @@ pub fn draw_pin(painter: &Painter, pin: PinInfo, pos: Pos2, base_size: f32) {
                 stroke: pin.stroke,
             }));
         }
+        PinShape::Custom(f) => f(
+            painter,
+            Rect::from_center_size(pos, vec2(size, size)),
+            pin.fill,
+            pin.stroke,
+        ),
     }
 }

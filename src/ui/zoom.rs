@@ -52,7 +52,11 @@ impl Zoom for Shadow {
 impl Zoom for Stroke {
     #[inline(always)]
     fn zoom(&mut self, zoom: f32) {
-        self.width.zoom(zoom);
+        self.width *= zoom;
+        if self.width < 1.0 {
+            self.color.gamma_multiply(self.width);
+            self.width = 1.0;
+        }
     }
 }
 
@@ -143,6 +147,9 @@ impl Zoom for FontId {
 impl Zoom for Style {
     #[inline(always)]
     fn zoom(&mut self, zoom: f32) {
+        if let Some(font_id) = &mut self.override_font_id {
+            font_id.zoom(zoom);
+        }
         for font_id in self.text_styles.values_mut() {
             font_id.zoom(zoom);
         }

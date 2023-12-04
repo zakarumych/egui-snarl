@@ -1,6 +1,4 @@
-use egui::{style::Spacing, vec2, Context, Frame, Id, Pos2, Rect, Style, Vec2};
-
-use super::Zoom;
+use egui::{style::Spacing, vec2, Context, Frame, Id, Pos2, Rect, Vec2};
 
 /// Node UI state.
 #[derive(Clone, Copy, PartialEq)]
@@ -90,6 +88,8 @@ pub struct SnarlState {
 
     /// Scale of the viewport.
     scale: f32,
+
+    target_scale: f32,
 }
 
 impl Default for SnarlState {
@@ -97,79 +97,69 @@ impl Default for SnarlState {
         SnarlState {
             offset: Vec2::ZERO,
             scale: 1.0,
+            target_scale: 1.0,
         }
-    }
-}
-
-pub struct ZoomState {
-    pub offset: Vec2,
-    pub scale: f32,
-}
-
-impl ZoomState {
-    pub fn graph_point_to_screen(&self, point: Pos2, viewport: Rect) -> Pos2 {
-        point * self.scale - self.offset + viewport.min.to_vec2()
-    }
-
-    pub fn zoom_style(&self, style: &mut Style) {
-        style.zoom(self.scale);
     }
 }
 
 impl SnarlState {
+    #[inline(always)]
     pub fn load(cx: &Context, id: Id) -> Option<Self> {
         cx.data_mut(|d| d.get_temp(id))
     }
 
+    #[inline(always)]
     pub fn store(&self, cx: &Context, id: Id) {
         cx.data_mut(|d| d.insert_temp(id, *self));
     }
 
-    pub fn get_zoom(&self, id: Id, cx: &Context, style: &Style) -> ZoomState {
-        let x = cx.animate_value_with_time(
-            id.with("zoom-offset-x"),
-            self.offset.x,
-            style.animation_time,
-        );
-        let y = cx.animate_value_with_time(
-            id.with("zoom-offset-y"),
-            self.offset.y,
-            style.animation_time,
-        );
+    #[inline(always)]
+    pub fn animate(&mut self, id: Id, cx: &Context, pivot: Pos2, viewport: Rect) {
+        let new_scale = cx.animate_value_with_time(id.with("zoom-scale"), self.target_scale, 0.1);
 
-        let scale =
-            cx.animate_value_with_time(id.with("zoom-scale"), self.scale, style.animation_time);
+        let a = pivot + self.offset - viewport.center().to_vec2();
 
-        ZoomState {
-            offset: vec2(x, y),
-            scale,
-        }
+        self.offset += a * new_scale / self.scale - a;
+        self.scale = new_scale;
     }
 
-    pub fn apply_scale_wrt_screen_point(&mut self, delta_scale: f32, pivot: Pos2, viewport: Rect) {
-        let a = pivot + self.offset - viewport.min.to_vec2();
-
-        self.offset += a * delta_scale - a;
-        self.scale *= delta_scale;
+    #[inline(always)]
+    pub fn scale(&self) -> f32 {
+        self.scale
     }
 
-    // fn screen_point_to_graph(&self, point: Pos2, viewport: Rect) -> Pos2 {
-    //     (point + self.offset - viewport.min.to_vec2()) / self.scale
-    // }
+    #[inline(always)]
+    pub fn set_scale(&mut self, scale: f32) {
+        self.target_scale = scale;
+    }
 
-    // fn graph_size_to_screen(&self, size: Vec2) -> Vec2 {
-    //     size * self.scale
-    // }
+    #[inline(always)]
+    pub fn screen_pos_to_graph(&self, pos: Pos2, viewport: Rect) -> Pos2 {
+        (pos + self.offset - viewport.center().to_vec2()) / self.scale
+    }
 
-    // fn screen_size_to_graph(&self, size: Vec2) -> Vec2 {
-    //     size / self.scale
-    // }
+    #[inline(always)]
+    pub fn graph_pos_to_screen(&self, pos: Pos2, viewport: Rect) -> Pos2 {
+        pos * self.scale - self.offset + viewport.center().to_vec2()
+    }
 
-    // fn graph_distance_to_screen(&self, distance: f32) -> f32 {
-    //     distance * self.scale
-    // }
+    #[inline(always)]
+    pub fn graph_vec_to_screen(&self, size: Vec2) -> Vec2 {
+        size * self.scale
+    }
 
-    // fn screen_distance_to_graph(&self, distance: f32) -> f32 {
-    //     distance / self.scale
-    // }
+    #[inline(always)]
+    pub fn screen_vec_to_graph(&self, size: Vec2) -> Vec2 {
+        size / self.scale
+    }
+
+    #[inline(always)]
+    pub fn graph_value_to_screen(&self, value: f32) -> f32 {
+        value * self.scale
+    }
+
+    #[inline(always)]
+    pub fn screen_value_to_graph(&self, value: f32) -> f32 {
+        value / self.scale
+    }
 }

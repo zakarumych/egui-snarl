@@ -92,7 +92,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         }
     }
 
-    fn show_title(
+    fn show_header(
         &mut self,
         node_idx: usize,
         node: &RefCell<DemoNode>,
@@ -107,7 +107,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             DemoNode::String(value) => ui.text_edit_singleline(value),
             DemoNode::Show(_) => ui.label("Show"),
             DemoNode::ExprNode(expr_node) => {
-                let edit = egui::TextEdit::singleline(&mut expr_node.text).clip_text(false);
+                let edit = egui::TextEdit::singleline(&mut expr_node.text)
+                    .clip_text(false)
+                    .desired_width(0.0)
+                    .margin(ui.spacing().item_spacing);
+
                 let r = ui.add(edit);
                 if r.changed() {
                     match syn::parse_str(&expr_node.text) {
@@ -743,6 +747,7 @@ impl App for DemoApp {
                 &mut DemoViewer,
                 &SnarlStyle {
                     collapsible: true,
+                    // background_pattern_stroke: Some(egui::Stroke::new(1.0, egui::Color32::WHITE)),
                     ..Default::default()
                 },
                 egui::Id::new("snarl"),

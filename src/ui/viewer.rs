@@ -108,7 +108,7 @@ pub trait SnarlViewer<T> {
 
     fn title<'a>(&'a mut self, node: &'a T) -> &'a str;
 
-    fn show_title(
+    fn show_header(
         &mut self,
         idx: usize,
         node: &RefCell<T>,

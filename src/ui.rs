@@ -1,16 +1,15 @@
-use std::{cell::RefCell, hash::Hash};
+use std::hash::Hash;
 
 use egui::{
     ahash::{HashMap, HashMapExt},
     collapsing_header::paint_default_icon,
-    epaint::{PathShape, Shadow},
-    pos2,
-    style::{Interaction, ScrollStyle, Spacing, WidgetVisuals, Widgets},
-    vec2, Align, Color32, Context, FontId, Frame, Grid, Id, Layout, Margin, Painter, PointerButton,
-    Pos2, Rect, Response, Rounding, Sense, Shape, Stroke, Style, Ui, Vec2, Visuals,
+    emath::Rot2,
+    epaint::Shadow,
+    pos2, vec2, Align, Color32, Frame, Layout, PointerButton, Pos2, Rect, Sense, Shape, Stroke,
+    Style, Ui, Vec2,
 };
 
-use crate::{wire_pins, InPinId, OutPinId, Snarl};
+use crate::{InPinId, OutPinId, Snarl};
 
 mod effect;
 mod pin;
@@ -32,17 +31,38 @@ use self::{
     wire::{draw_wire, get_part_wire, hit_wire, mix_colors, set_part_wire, take_part_wire},
 };
 
+/// Background pattern show beneath nodes and wires.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BackgroundPattern {
+    /// Linear grid.
+    Grid { spacing: Vec2, angle: f32 },
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SnarlStyle {
+    /// Size of pins.
     pub pin_size: Option<f32>,
+
+    /// Width of wires.
     pub wire_width: Option<f32>,
+
+    /// Size of wire frame which controls curvature of wires.
     pub wire_frame_size: Option<f32>,
+
+    /// Whether to downscale wire frame when nodes are close.
     pub downscale_wire_frame: bool,
+
+    /// Weather to upscale wire frame when nodes are close.
     pub upscale_wire_frame: bool,
+
     pub wire_layer: WireLayer,
     pub title_drag_space: Option<Vec2>,
     pub input_output_spacing: Option<f32>,
     pub collapsible: bool,
+
+    pub bg_fill: Option<Color32>,
+    pub bg_pattern: Option<BackgroundPattern>,
+    pub background_pattern_stroke: Option<Stroke>,
 }
 
 impl Default for SnarlStyle {
@@ -58,6 +78,13 @@ impl Default for SnarlStyle {
             title_drag_space: None,
             input_output_spacing: None,
             collapsible: true,
+
+            bg_fill: None,
+            bg_pattern: Some(BackgroundPattern::Grid {
+                spacing: vec2(5.0, 5.0),
+                angle: 1.0,
+            }),
+            background_pattern_stroke: None,
         }
     }
 }
@@ -122,15 +149,87 @@ impl<T> Snarl<T> {
         let snarl_id = ui.make_persistent_id(id_source);
 
         let snarl_state = SnarlState::load(ui.ctx(), snarl_id).unwrap_or_default();
-        let zoom = snarl_state.get_zoom(snarl_id, ui.ctx(), ui.style());
         let mut new_snarl_state = snarl_state;
 
+        // Draw background pattern.
+        let bg_fill = style
+            .bg_fill
+            .unwrap_or_else(|| ui.visuals().widgets.noninteractive.bg_fill);
+
+        let bg_stroke = style
+            .background_pattern_stroke
+            .unwrap_or_else(|| ui.visuals().widgets.noninteractive.bg_stroke);
+
         Frame::none()
-            .fill(ui.visuals().widgets.inactive.bg_fill)
-            .stroke(ui.visuals().widgets.inactive.bg_stroke)
+            .fill(bg_fill)
+            .stroke(bg_stroke)
             .show(ui, |ui| {
+                let viewport = ui.max_rect();
+                ui.set_clip_rect(viewport);
+
+                let pivot = ui
+                    .ctx()
+                    .input(|i| i.pointer.hover_pos())
+                    .unwrap_or_else(|| viewport.center());
+
+                new_snarl_state.animate(snarl_id, ui.ctx(), pivot, viewport);
+
                 let mut node_style: Style = (**ui.style()).clone();
-                zoom.zoom_style(&mut node_style);
+                node_style.zoom(new_snarl_state.scale());
+
+                match style.bg_pattern {
+                    None => {}
+                    Some(BackgroundPattern::Grid { spacing, angle }) => {
+                        let stroke = Stroke::new(
+                            bg_stroke.width * new_snarl_state.scale().max(1.0),
+                            bg_stroke
+                                .color
+                                .gamma_multiply(new_snarl_state.scale().min(1.0)),
+                        );
+
+                        let spacing = ui.spacing().icon_width * spacing;
+
+                        let rot = Rot2::from_angle(angle);
+                        let rot_inv = rot.inverse();
+
+                        let graph_viewport = Rect::from_min_max(
+                            new_snarl_state.screen_pos_to_graph(viewport.min, viewport),
+                            new_snarl_state.screen_pos_to_graph(viewport.max, viewport),
+                        );
+
+                        let pattern_bounds = graph_viewport.rotate_bb(rot_inv);
+
+                        let min_x = (pattern_bounds.min.x / spacing.x).ceil();
+                        let max_x = (pattern_bounds.max.x / spacing.x).floor();
+
+                        for x in 0..=(max_x - min_x) as i64 {
+                            let x = (x as f32 + min_x) * spacing.x;
+
+                            let top = (rot * vec2(x, pattern_bounds.min.y)).to_pos2();
+                            let bottom = (rot * vec2(x, pattern_bounds.max.y)).to_pos2();
+
+                            let top = new_snarl_state.graph_pos_to_screen(top, viewport);
+                            let bottom = new_snarl_state.graph_pos_to_screen(bottom, viewport);
+
+                            ui.painter().line_segment([top, bottom], stroke);
+                        }
+
+                        let min_y = (pattern_bounds.min.y / spacing.y).ceil();
+                        let max_y = (pattern_bounds.max.y / spacing.y).floor();
+
+                        for y in 0..=(max_y - min_y) as i64 {
+                            let y = (y as f32 + min_y) * spacing.y;
+
+                            let top = (rot * vec2(pattern_bounds.min.x, y)).to_pos2();
+                            let bottom = (rot * vec2(pattern_bounds.max.x, y)).to_pos2();
+
+                            let top = new_snarl_state.graph_pos_to_screen(top, viewport);
+                            let bottom = new_snarl_state.graph_pos_to_screen(bottom, viewport);
+
+                            ui.painter().line_segment([top, bottom], stroke);
+                        }
+                    }
+                }
 
                 let pin_size = style
                     .pin_size
@@ -142,10 +241,6 @@ impl<T> Snarl<T> {
                     vec2(node_style.spacing.icon_width, node_style.spacing.icon_width)
                 });
 
-                // let input_output_spacing = style
-                //     .input_output_spacing
-                //     .unwrap_or_else(|| node_style.spacing.item_spacing.x);
-
                 let collapsible = style.collapsible;
 
                 let node_frame = Frame::window(&node_style);
@@ -156,10 +251,7 @@ impl<T> Snarl<T> {
                     WireLayer::AboveNodes => None,
                 };
 
-                let max_rect = ui.max_rect();
-                ui.set_clip_rect(max_rect);
-
-                let r = ui.allocate_rect(max_rect, Sense::click_and_drag());
+                let r = ui.allocate_rect(viewport, Sense::click_and_drag());
 
                 let mut input_positions = HashMap::new();
                 let mut output_positions = HashMap::new();
@@ -173,7 +265,7 @@ impl<T> Snarl<T> {
                 for (order, &node_idx) in self.draw_order.iter().enumerate() {
                     let node = &self.nodes[node_idx];
 
-                    let node_pos = zoom.graph_point_to_screen(node.pos, max_rect);
+                    let node_pos = new_snarl_state.graph_pos_to_screen(node.pos, viewport);
 
                     // Generate persistent id for the node.
                     let node_id = snarl_id.with(("snarl-node", node_idx));
@@ -195,7 +287,10 @@ impl<T> Snarl<T> {
                     let r = ui.interact(node_rect, node_id, Sense::click_and_drag());
 
                     if r.dragged_by(PointerButton::Primary) {
-                        *node_moved = Some((node_idx, r.drag_delta()));
+                        *node_moved = Some((
+                            node_idx,
+                            new_snarl_state.screen_vec_to_graph(r.drag_delta()),
+                        ));
                         *node_order_to_top = Some(order);
                     } else if r.clicked_by(PointerButton::Primary) {
                         *node_order_to_top = Some(order);
@@ -268,7 +363,7 @@ impl<T> Snarl<T> {
                                 }
 
                                 ui.allocate_exact_size(title_drag_space, Sense::hover());
-                                viewer.show_title(
+                                viewer.show_header(
                                     node_idx,
                                     &node.value,
                                     &inputs,
@@ -310,93 +405,106 @@ impl<T> Snarl<T> {
                             pins_ui.horizontal(|ui| {
                                 // Input pins on the left.
                                 let r = ui.with_layout(Layout::top_down(Align::Min), |ui| {
-                                    Grid::new((node_id, "inputs")).show(ui, |ui| {
-                                        for in_pin in inputs {
-                                            // Show input pin.
-                                            // ui.with_layout(
-                                            //     Layout::left_to_right(Align::Center),
-                                            //     |ui| {
-                                            // Allocate space for pin shape.
-                                            let (pin_id, _) =
-                                                ui.allocate_space(vec2(pin_size, pin_size));
+                                    // let r = Grid::new((node_id, "inputs")).min_col_width(0.0).show(ui, |ui| {
+                                    for in_pin in inputs {
+                                        // Show input pin.
+                                        ui.with_layout(
+                                            Layout::left_to_right(Align::Center),
+                                            |ui| {
+                                                // Allocate space for pin shape.
+                                                let (pin_id, _) =
+                                                    ui.allocate_space(vec2(pin_size, pin_size));
 
-                                            // Show input content
-                                            let r = viewer.show_input(&in_pin, ui, effects);
-                                            ui.end_row();
+                                                // Show input content
+                                                let r = viewer.show_input(&in_pin, ui, effects);
+                                                let pin_info = r.inner;
+                                                let r = r.response;
+                                                ui.end_row();
 
-                                            let pin_info = r.inner;
+                                                // Centered vertically.
+                                                let y = min_pin_y
+                                                    .max((r.rect.min.y + r.rect.max.y) * 0.5);
 
-                                            // Centered vertically.
-                                            let y = min_pin_y.max(
-                                                (r.response.rect.top() + r.response.rect.bottom())
-                                                    * 0.5,
-                                            );
+                                                let pin_pos = pos2(input_x, y);
 
-                                            let pin_pos = pos2(input_x, y);
+                                                input_positions.insert(in_pin.id, pin_pos);
+                                                input_colors.insert(in_pin.id, pin_info.fill);
 
-                                            // Interact with pin shape.
-                                            let r = ui.interact(
-                                                Rect::from_center_size(
-                                                    pin_pos,
-                                                    vec2(pin_size, pin_size),
-                                                ),
-                                                pin_id,
-                                                Sense::click_and_drag(),
-                                            );
+                                                // Interact with pin shape.
+                                                let r = ui.interact(
+                                                    Rect::from_center_size(
+                                                        pin_pos,
+                                                        vec2(pin_size, pin_size),
+                                                    ),
+                                                    pin_id,
+                                                    Sense::click_and_drag(),
+                                                );
 
-                                            let mut pin_size = pin_size;
-                                            if r.hovered() {
-                                                pin_size *= 1.2;
-                                            }
+                                                let mut pin_size = pin_size;
+                                                if r.hovered() {
+                                                    pin_size *= 1.2;
+                                                }
 
-                                            draw_pin(ui.painter(), pin_info, pin_pos, pin_size);
+                                                draw_pin(ui.painter(), pin_info, pin_pos, pin_size);
 
-                                            if r.clicked_by(PointerButton::Secondary) {
-                                                let _ = viewer.drop_inputs(&in_pin, effects);
-                                            }
-                                            if r.drag_started_by(PointerButton::Primary) {
-                                                set_part_wire(ui, snarl_id, AnyPin::In(in_pin.id));
-                                            }
-                                            if r.drag_released_by(PointerButton::Primary) {
-                                                part_wire_drag_released = true;
-                                            }
-                                            if r.hovered() {
-                                                pin_hovered = Some(AnyPin::In(in_pin.id));
-                                            }
-
-                                            input_positions.insert(in_pin.id, pin_pos);
-                                            input_colors.insert(in_pin.id, pin_info.fill);
-                                            //     },
-                                            // );
-                                        }
-                                    });
+                                                if r.clicked_by(PointerButton::Secondary) {
+                                                    let _ = viewer.drop_inputs(&in_pin, effects);
+                                                }
+                                                if r.drag_started_by(PointerButton::Primary) {
+                                                    set_part_wire(
+                                                        ui,
+                                                        snarl_id,
+                                                        AnyPin::In(in_pin.id),
+                                                    );
+                                                }
+                                                if r.drag_released_by(PointerButton::Primary) {
+                                                    part_wire_drag_released = true;
+                                                }
+                                                if r.hovered() {
+                                                    pin_hovered = Some(AnyPin::In(in_pin.id));
+                                                }
+                                            },
+                                        );
+                                    }
                                 });
 
                                 new_state.inputs_size = r.response.rect.size();
 
                                 // Output pins on the right.
                                 let r = ui.with_layout(Layout::top_down(Align::Max), |ui| {
+                                    // let r = Grid::new((node_id, "outputs")).min_col_width(0.0).show(ui, |ui| {
+
                                     for out_pin in outputs {
                                         // Show output pin.
                                         ui.with_layout(
                                             Layout::right_to_left(Align::Center),
                                             |ui| {
                                                 // Allocate space for pin shape.
-                                                let (pin_id, _) =
-                                                    ui.allocate_space(vec2(pin_size, pin_size));
+
+                                                let (pin_id, _) = ui
+                                                    .with_layout(
+                                                        Layout::right_to_left(Align::Center),
+                                                        |ui| {
+                                                            ui.allocate_space(vec2(
+                                                                pin_size, pin_size,
+                                                            ))
+                                                        },
+                                                    )
+                                                    .inner;
 
                                                 // Show output content
                                                 let r = viewer.show_output(&out_pin, ui, effects);
                                                 let pin_info = r.inner;
+                                                let r = r.response;
 
                                                 // Centered vertically.
-                                                let y = min_pin_y.max(
-                                                    (r.response.rect.top()
-                                                        + r.response.rect.bottom())
-                                                        * 0.5,
-                                                );
+                                                let y = min_pin_y
+                                                    .max((r.rect.min.y + r.rect.max.y) * 0.5);
 
                                                 let pin_pos = pos2(output_x, y);
+
+                                                output_positions.insert(out_pin.id, pin_pos);
+                                                output_colors.insert(out_pin.id, pin_info.fill);
 
                                                 let r = ui.interact(
                                                     Rect::from_center_size(
@@ -430,9 +538,6 @@ impl<T> Snarl<T> {
                                                 if r.hovered() {
                                                     pin_hovered = Some(AnyPin::Out(out_pin.id));
                                                 }
-
-                                                output_positions.insert(out_pin.id, pin_pos);
-                                                output_colors.insert(out_pin.id, pin_info.fill);
                                             },
                                         );
                                     }
@@ -617,20 +722,27 @@ impl<T> Snarl<T> {
                     }
                 }
 
-                ui.advance_cursor_after_rect(Rect::from_min_size(max_rect.min, Vec2::ZERO));
+                ui.advance_cursor_after_rect(Rect::from_min_size(viewport.min, Vec2::ZERO));
 
-                if ui.button("+").clicked() {
-                    new_snarl_state.apply_scale_wrt_screen_point(1.1, max_rect.center(), max_rect);
+                // Zooming
+                let (scroll_delta, hover_pos) = ui
+                    .ctx()
+                    .input(|i| (i.scroll_delta.y, i.pointer.hover_pos()));
 
-                    new_snarl_state.store(ui.ctx(), snarl_id);
+                match hover_pos {
+                    Some(hover_pos) if r.rect.contains(hover_pos) => {
+                        if scroll_delta != 0.0 {
+                            let new_scale = (new_snarl_state.scale()
+                                * (1.0 + scroll_delta * 0.005))
+                                .clamp(0.1, 2.0);
+
+                            new_snarl_state.set_scale(new_scale);
+                        }
+                    }
+                    _ => {}
                 }
-                if ui.button("-").clicked() {
-                    new_snarl_state.apply_scale_wrt_screen_point(
-                        1.0 / 1.1,
-                        max_rect.center(),
-                        max_rect,
-                    );
 
+                if snarl_state != new_snarl_state {
                     new_snarl_state.store(ui.ctx(), snarl_id);
                 }
             });
