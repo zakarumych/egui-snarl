@@ -78,13 +78,13 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         Ok(())
     }
 
-    fn title(&mut self, node: &DemoNode) -> &str {
+    fn title(&mut self, node: &DemoNode) -> String {
         match node {
-            DemoNode::Sink => "Sink",
-            DemoNode::Integer(_) => "Integer",
-            DemoNode::String(_) => "String",
-            DemoNode::ShowImage(_) => "Show image",
-            DemoNode::ExprNode(_) => "Expr",
+            DemoNode::Sink => "Sink".to_owned(),
+            DemoNode::Integer(_) => "Integer".to_owned(),
+            DemoNode::String(_) => "String".to_owned(),
+            DemoNode::ShowImage(_) => "Show image".to_owned(),
+            DemoNode::ExprNode(_) => "Expr".to_owned(),
         }
     }
 
@@ -380,7 +380,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         }
     }
 
-    fn input_color(&mut self, pin: &InPin<DemoNode>) -> Color32 {
+    fn input_color(&mut self, pin: &InPin<DemoNode>, _style: &egui::Style) -> Color32 {
         match &*pin.node.borrow() {
             DemoNode::Sink => {
                 assert_eq!(pin.id.input, 0, "Sink node has only one input");
@@ -407,7 +407,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         }
     }
 
-    fn output_color(&mut self, pin: &OutPin<DemoNode>) -> Color32 {
+    fn output_color(&mut self, pin: &OutPin<DemoNode>, _style: &egui::Style) -> Color32 {
         match &*pin.node.borrow() {
             DemoNode::Sink => {
                 unreachable!("Sink node has no outputs")
@@ -428,23 +428,23 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     ) {
         ui.label("Add node");
         if ui.button("Integer").clicked() {
-            effects.insert(DemoNode::Integer(0.0), pos);
+            effects.insert_node(DemoNode::Integer(0.0), pos);
             ui.close_menu();
         }
         if ui.button("Expr").clicked() {
-            effects.insert(DemoNode::ExprNode(ExprNode::new()), pos);
+            effects.insert_node(DemoNode::ExprNode(ExprNode::new()), pos);
             ui.close_menu();
         }
         if ui.button("String").clicked() {
-            effects.insert(DemoNode::String("".to_owned()), pos);
+            effects.insert_node(DemoNode::String("".to_owned()), pos);
             ui.close_menu();
         }
         if ui.button("Show image").clicked() {
-            effects.insert(DemoNode::ShowImage("".to_owned()), pos);
+            effects.insert_node(DemoNode::ShowImage("".to_owned()), pos);
             ui.close_menu();
         }
         if ui.button("Sink").clicked() {
-            effects.insert(DemoNode::Sink, pos);
+            effects.insert_node(DemoNode::Sink, pos);
             ui.close_menu();
         }
     }

@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use egui::{Context, Pos2};
+use egui::Pos2;
 
 use crate::{wire_pins, InPinId, Node, OutPinId, Snarl};
 
@@ -9,7 +9,13 @@ pub struct Forbidden;
 
 pub enum Effect<T> {
     /// Adds a new node to the Snarl.
-    Insert { node: T, pos: Pos2 },
+    InsertNode { node: T, pos: Pos2 },
+
+    /// Removes a node from snarl.
+    RemoveNode { node: usize },
+
+    /// Opens/closes a node.
+    OpenNode { node: usize, open: bool },
 
     /// Adds connection between two nodes.
     Connect { from: OutPinId, to: InPinId },
@@ -22,12 +28,6 @@ pub enum Effect<T> {
 
     /// Removes all connections to the input pin.
     DropInputs { pin: InPinId },
-
-    /// Removes a node from snarl.
-    RemoveNode { node: usize },
-
-    /// Opens/closes a node.
-    OpenNode { node: usize, open: bool },
 
     /// Executes a closure with mutable reference to the Snarl.
     Closure(Box<dyn FnOnce(&mut Snarl<T>)>),
@@ -57,10 +57,29 @@ impl<T> Effects<T> {
         }
     }
 
+    /// Returns `true` if there are no effects.
+    /// Returns `false` otherwise.
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.effects.is_empty()
+    }
+
     /// Inserts a new node to the Snarl.
     #[inline(always)]
-    pub fn insert(&mut self, node: T, pos: Pos2) {
-        self.effects.push(Effect::Insert { node, pos });
+    pub fn insert_node(&mut self, node: T, pos: Pos2) {
+        self.effects.push(Effect::InsertNode { node, pos });
+    }
+
+    /// Removes a node from the Snarl.
+    #[inline(always)]
+    pub fn remove_node(&mut self, node: usize) {
+        self.effects.push(Effect::RemoveNode { node });
+    }
+
+    /// Opens/closes a node.
+    #[inline(always)]
+    pub fn open_node(&mut self, node: usize, open: bool) {
+        self.effects.push(Effect::OpenNode { node, open });
     }
 
     /// Connects two nodes.
@@ -86,40 +105,37 @@ impl<T> Effects<T> {
     pub fn drop_outputs(&mut self, pin: OutPinId) {
         self.effects.push(Effect::DropOutputs { pin });
     }
-
-    /// Removes a node from the Snarl.
-    #[inline(always)]
-    pub fn remove_node(&mut self, node: usize) {
-        self.effects.push(Effect::RemoveNode { node });
-    }
-
-    /// Opens/closes a node.
-    #[inline(always)]
-    pub fn open_node(&mut self, node: usize, open: bool) {
-        self.effects.push(Effect::OpenNode { node, open });
-    }
 }
 
 impl<T> Snarl<T> {
-    pub(crate) fn apply_effects(&mut self, effects: Effects<T>, cx: &Context) {
+    pub fn apply_effects(&mut self, effects: Effects<T>) {
         if effects.effects.is_empty() {
             return;
         }
-        cx.request_repaint();
         for effect in effects.effects {
             self.apply_effect(effect);
         }
     }
 
-    fn apply_effect(&mut self, effect: Effect<T>) {
+    pub fn apply_effect(&mut self, effect: Effect<T>) {
         match effect {
-            Effect::Insert { node, pos } => {
+            Effect::InsertNode { node, pos } => {
                 let idx = self.nodes.insert(Node {
                     value: RefCell::new(node),
                     pos,
                     open: true,
                 });
                 self.draw_order.push(idx);
+            }
+            Effect::RemoveNode { node } => {
+                if self.nodes.contains(node) {
+                    self.remove_node(node);
+                }
+            }
+            Effect::OpenNode { node, open } => {
+                if self.nodes.contains(node) {
+                    self.nodes[node].open = open;
+                }
             }
             Effect::Connect { from, to } => {
                 if self.nodes.contains(from.node) && self.nodes.contains(to.node) {
@@ -139,16 +155,6 @@ impl<T> Snarl<T> {
             Effect::DropInputs { pin } => {
                 if self.nodes.contains(pin.node) {
                     self.wires.drop_inputs(pin);
-                }
-            }
-            Effect::RemoveNode { node } => {
-                if self.nodes.contains(node) {
-                    self.remove_node(node);
-                }
-            }
-            Effect::OpenNode { node, open } => {
-                if self.nodes.contains(node) {
-                    self.nodes[node].open = open;
                 }
             }
             Effect::Closure(f) => f(self),

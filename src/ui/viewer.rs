@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use egui::{Color32, Pos2, Response, Ui};
+use egui::{Color32, Pos2, Response, Style, Ui};
 
 use super::{
     effect::{Effects, Forbidden},
@@ -12,22 +12,77 @@ use super::{
 /// It can extract necessary data from the nodes and controls their
 /// response to certain events.
 pub trait SnarlViewer<T> {
-    /// Called to create new node in the Snarl.
-    ///
-    /// Returns response with effects to be applied to the Snarl after the node is added.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Forbidden` error if the node cannot be added.
-    #[inline]
-    fn add_node(
+    /// Returns title of the node.
+    fn title(&mut self, node: &T) -> String;
+
+    /// Renders the node's header.
+    fn show_header(
         &mut self,
         idx: usize,
-        node: &T,
+        node: &RefCell<T>,
+        inputs: &[InPin<T>],
+        outputs: &[OutPin<T>],
+        ui: &mut Ui,
+        scale: f32,
         effects: &mut Effects<T>,
-    ) -> Result<(), Forbidden> {
-        let _ = (idx, node, effects);
-        Ok(())
+    ) -> Response {
+        let _ = (idx, node, inputs, outputs, scale, effects);
+        ui.label(self.title(&*node.borrow()))
+    }
+
+    /// Returns number of output pins of the node.
+    fn outputs(&mut self, node: &T) -> usize;
+
+    /// Returns number of input pins of the node.
+    fn inputs(&mut self, node: &T) -> usize;
+
+    /// Renders the node's input pin.
+    fn show_input(
+        &mut self,
+        pin: &InPin<T>,
+        ui: &mut Ui,
+        scale: f32,
+        effects: &mut Effects<T>,
+    ) -> egui::InnerResponse<PinInfo>;
+
+    /// Renders the node's output pin.
+    fn show_output(
+        &mut self,
+        pin: &OutPin<T>,
+        ui: &mut Ui,
+        scale: f32,
+        effects: &mut Effects<T>,
+    ) -> egui::InnerResponse<PinInfo>;
+
+    /// Returns color of the node's input pin.
+    /// Called when pin in not visible.
+    fn input_color(&mut self, pin: &InPin<T>, style: &Style) -> Color32;
+
+    /// Returns color of the node's output pin.
+    /// Called when pin in not visible.
+    fn output_color(&mut self, pin: &OutPin<T>, style: &Style) -> Color32;
+
+    /// Show context menu for the snarl.
+    ///
+    /// This can be used to implement menu for adding new nodes.
+    fn graph_menu(&mut self, pos: Pos2, ui: &mut Ui, scale: f32, effects: &mut Effects<T>) {
+        let _ = (pos, ui, scale, effects);
+    }
+
+    /// Show context menu for the snarl.
+    ///
+    /// This can be used to implement menu for adding new nodes.
+    fn node_menu(
+        &mut self,
+        idx: usize,
+        node: &RefCell<T>,
+        inputs: &[InPin<T>],
+        outputs: &[OutPin<T>],
+        ui: &mut Ui,
+        scale: f32,
+        effects: &mut Effects<T>,
+    ) {
+        let _ = (idx, node, inputs, outputs, ui, scale, effects);
     }
 
     /// Asks the viewer to connect two pins.
@@ -75,105 +130,5 @@ pub trait SnarlViewer<T> {
     fn drop_inputs(&mut self, pin: &InPin<T>, effects: &mut Effects<T>) -> Result<(), Forbidden> {
         effects.drop_inputs(pin.id);
         Ok(())
-    }
-
-    /// Called when a node is about to be removed.
-    ///
-    /// # Arguments
-    ///
-    /// * `node` - Node that is about to be removed.
-    /// * `inputs` - Array of input pins connected to the node.
-    /// * `outputs` - Array of output pins connected to the node.
-    ///
-    /// Returns response with effects to be applied to the Snarl after the node is removed.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Forbidden` error if the node cannot be removed.
-    #[inline]
-    fn remove_node(
-        &mut self,
-        idx: usize,
-        node: &RefCell<T>,
-        inputs: &[InPin<T>],
-        outputs: &[OutPin<T>],
-        effects: &mut Effects<T>,
-    ) -> Result<(), Forbidden> {
-        let _ = (idx, node, inputs, outputs);
-        effects.remove_node(idx);
-        Ok(())
-    }
-
-    /// Returns title of the node.
-    fn title<'a>(&'a mut self, node: &'a T) -> &'a str;
-
-    /// Renders the node's header.
-    fn show_header(
-        &mut self,
-        idx: usize,
-        node: &RefCell<T>,
-        inputs: &[InPin<T>],
-        outputs: &[OutPin<T>],
-        ui: &mut Ui,
-        scale: f32,
-        effects: &mut Effects<T>,
-    ) -> Response {
-        let _ = (idx, node, inputs, outputs, scale, effects);
-        ui.label(self.title(&*node.borrow()))
-    }
-
-    /// Returns number of output pins of the node.
-    fn outputs(&mut self, node: &T) -> usize;
-
-    /// Returns number of input pins of the node.
-    fn inputs(&mut self, node: &T) -> usize;
-
-    /// Renders the node's input pin.
-    fn show_input(
-        &mut self,
-        pin: &InPin<T>,
-        ui: &mut Ui,
-        scale: f32,
-        effects: &mut Effects<T>,
-    ) -> egui::InnerResponse<PinInfo>;
-
-    /// Renders the node's output pin.
-    fn show_output(
-        &mut self,
-        pin: &OutPin<T>,
-        ui: &mut Ui,
-        scale: f32,
-        effects: &mut Effects<T>,
-    ) -> egui::InnerResponse<PinInfo>;
-
-    /// Returns color of the node's input pin.
-    /// Called when pin in not visible.
-    fn input_color(&mut self, pin: &InPin<T>) -> Color32;
-
-    /// Returns color of the node's output pin.
-    /// Called when pin in not visible.
-    fn output_color(&mut self, pin: &OutPin<T>) -> Color32;
-
-    /// Show context menu for the snarl.
-    ///
-    /// This can be used to implement menu for adding new nodes.
-    fn graph_menu(&mut self, pos: Pos2, ui: &mut Ui, scale: f32, effects: &mut Effects<T>) {
-        let _ = (pos, ui, scale, effects);
-    }
-
-    /// Show context menu for the snarl.
-    ///
-    /// This can be used to implement menu for adding new nodes.
-    fn node_menu(
-        &mut self,
-        idx: usize,
-        node: &RefCell<T>,
-        inputs: &[InPin<T>],
-        outputs: &[OutPin<T>],
-        ui: &mut Ui,
-        scale: f32,
-        effects: &mut Effects<T>,
-    ) {
-        let _ = (idx, node, inputs, outputs, ui, scale, effects);
     }
 }

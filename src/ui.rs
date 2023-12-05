@@ -109,7 +109,11 @@ impl<T> Snarl<T> {
             &mut node_moved,
             &mut node_order_to_top,
         );
-        self.apply_effects(effects, ui.ctx());
+
+        if !effects.is_empty() {
+            ui.ctx().request_repaint();
+            self.apply_effects(effects);
+        }
 
         if let Some((node_idx, delta)) = node_moved {
             ui.ctx().request_repaint();
@@ -657,12 +661,14 @@ impl<T> Snarl<T> {
                             for in_pin in inputs {
                                 let pin_pos = pos2(input_x, min_pin_y);
                                 input_positions.insert(in_pin.id, pin_pos);
-                                input_colors.insert(in_pin.id, viewer.input_color(&in_pin));
+                                input_colors
+                                    .insert(in_pin.id, viewer.input_color(&in_pin, &node_style));
                             }
                             for out_pin in outputs {
                                 let pin_pos = pos2(output_x, min_pin_y);
                                 output_positions.insert(out_pin.id, pin_pos);
-                                output_colors.insert(out_pin.id, viewer.output_color(&out_pin));
+                                output_colors
+                                    .insert(out_pin.id, viewer.output_color(&out_pin, &node_style));
                             }
                         }
                     });

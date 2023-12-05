@@ -231,4 +231,116 @@ impl<T> Snarl<T> {
         };
         self.wires.insert(wire)
     }
+
+    pub fn nodes(&self) -> NodesIter<'_, T> {
+        NodesIter {
+            nodes: self.nodes.iter(),
+        }
+    }
+
+    pub fn nodes_mut(&mut self) -> NodesIterMut<'_, T> {
+        NodesIterMut {
+            nodes: self.nodes.iter_mut(),
+        }
+    }
+
+    pub fn node_indices(&self) -> NodesIndicesIter<'_, T> {
+        NodesIndicesIter {
+            nodes: self.nodes.iter(),
+        }
+    }
+
+    pub fn nodes_indices_mut(&mut self) -> NodesIndicesIterMut<'_, T> {
+        NodesIndicesIterMut {
+            nodes: self.nodes.iter_mut(),
+        }
+    }
+}
+
+pub struct NodesIter<'a, T> {
+    nodes: slab::Iter<'a, Node<T>>,
+}
+
+impl<'a, T> Iterator for NodesIter<'a, T> {
+    type Item = &'a RefCell<T>;
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.nodes.size_hint()
+    }
+
+    fn next(&mut self) -> Option<&'a RefCell<T>> {
+        let (_, node) = self.nodes.next()?;
+        Some(&node.value)
+    }
+
+    fn nth(&mut self, n: usize) -> Option<&'a RefCell<T>> {
+        let (_, node) = self.nodes.nth(n)?;
+        Some(&node.value)
+    }
+}
+
+pub struct NodesIterMut<'a, T> {
+    nodes: slab::IterMut<'a, Node<T>>,
+}
+
+impl<'a, T> Iterator for NodesIterMut<'a, T> {
+    type Item = &'a mut T;
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.nodes.size_hint()
+    }
+
+    fn next(&mut self) -> Option<&'a mut T> {
+        let (_, node) = self.nodes.next()?;
+        Some(node.value.get_mut())
+    }
+
+    fn nth(&mut self, n: usize) -> Option<&'a mut T> {
+        let (_, node) = self.nodes.nth(n)?;
+        Some(node.value.get_mut())
+    }
+}
+
+pub struct NodesIndicesIter<'a, T> {
+    nodes: slab::Iter<'a, Node<T>>,
+}
+
+impl<'a, T> Iterator for NodesIndicesIter<'a, T> {
+    type Item = (usize, &'a RefCell<T>);
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.nodes.size_hint()
+    }
+
+    fn next(&mut self) -> Option<(usize, &'a RefCell<T>)> {
+        let (idx, node) = self.nodes.next()?;
+        Some((idx, &node.value))
+    }
+
+    fn nth(&mut self, n: usize) -> Option<(usize, &'a RefCell<T>)> {
+        let (idx, node) = self.nodes.nth(n)?;
+        Some((idx, &node.value))
+    }
+}
+
+pub struct NodesIndicesIterMut<'a, T> {
+    nodes: slab::IterMut<'a, Node<T>>,
+}
+
+impl<'a, T> Iterator for NodesIndicesIterMut<'a, T> {
+    type Item = (usize, &'a mut T);
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.nodes.size_hint()
+    }
+
+    fn next(&mut self) -> Option<(usize, &'a mut T)> {
+        let (idx, node) = self.nodes.next()?;
+        Some((idx, node.value.get_mut()))
+    }
+
+    fn nth(&mut self, n: usize) -> Option<(usize, &'a mut T)> {
+        let (idx, node) = self.nodes.nth(n)?;
+        Some((idx, node.value.get_mut()))
+    }
 }
