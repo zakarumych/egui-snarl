@@ -1,11 +1,8 @@
-use std::cell::RefCell;
-
 use egui::{Color32, Pos2, Response, Style, Ui};
 
-use super::{
-    effect::{Effects, Forbidden},
-    pin::{InPin, OutPin, PinInfo},
-};
+use crate::Snarl;
+
+use super::pin::{InPin, OutPin, PinInfo};
 
 /// SnarlViewer is a trait for viewing a Snarl.
 ///
@@ -19,15 +16,14 @@ pub trait SnarlViewer<T> {
     fn show_header(
         &mut self,
         idx: usize,
-        node: &RefCell<T>,
-        inputs: &[InPin<T>],
-        outputs: &[OutPin<T>],
+        inputs: &[InPin],
+        outputs: &[OutPin],
         ui: &mut Ui,
         scale: f32,
-        effects: &mut Effects<T>,
+        snarl: &mut Snarl<T>,
     ) -> Response {
-        let _ = (idx, node, inputs, outputs, scale, effects);
-        ui.label(self.title(&*node.borrow()))
+        let _ = (idx, inputs, outputs, scale);
+        ui.label(self.title(snarl.get_node(idx)))
     }
 
     /// Returns number of output pins of the node.
@@ -39,34 +35,34 @@ pub trait SnarlViewer<T> {
     /// Renders the node's input pin.
     fn show_input(
         &mut self,
-        pin: &InPin<T>,
+        pin: &InPin,
         ui: &mut Ui,
         scale: f32,
-        effects: &mut Effects<T>,
+        snarl: &mut Snarl<T>,
     ) -> egui::InnerResponse<PinInfo>;
 
     /// Renders the node's output pin.
     fn show_output(
         &mut self,
-        pin: &OutPin<T>,
+        pin: &OutPin,
         ui: &mut Ui,
         scale: f32,
-        effects: &mut Effects<T>,
+        snarl: &mut Snarl<T>,
     ) -> egui::InnerResponse<PinInfo>;
 
     /// Returns color of the node's input pin.
     /// Called when pin in not visible.
-    fn input_color(&mut self, pin: &InPin<T>, style: &Style) -> Color32;
+    fn input_color(&mut self, pin: &InPin, style: &Style, snarl: &mut Snarl<T>) -> Color32;
 
     /// Returns color of the node's output pin.
     /// Called when pin in not visible.
-    fn output_color(&mut self, pin: &OutPin<T>, style: &Style) -> Color32;
+    fn output_color(&mut self, pin: &OutPin, style: &Style, snarl: &mut Snarl<T>) -> Color32;
 
     /// Show context menu for the snarl.
     ///
     /// This can be used to implement menu for adding new nodes.
-    fn graph_menu(&mut self, pos: Pos2, ui: &mut Ui, scale: f32, effects: &mut Effects<T>) {
-        let _ = (pos, ui, scale, effects);
+    fn graph_menu(&mut self, pos: Pos2, ui: &mut Ui, scale: f32, snarl: &mut Snarl<T>) {
+        let _ = (pos, ui, scale, snarl);
     }
 
     /// Show context menu for the snarl.
@@ -75,14 +71,13 @@ pub trait SnarlViewer<T> {
     fn node_menu(
         &mut self,
         idx: usize,
-        node: &RefCell<T>,
-        inputs: &[InPin<T>],
-        outputs: &[OutPin<T>],
+        inputs: &[InPin],
+        outputs: &[OutPin],
         ui: &mut Ui,
         scale: f32,
-        effects: &mut Effects<T>,
+        snarl: &mut Snarl<T>,
     ) {
-        let _ = (idx, node, inputs, outputs, ui, scale, effects);
+        let _ = (idx, inputs, outputs, ui, scale, snarl);
     }
 
     /// Asks the viewer to connect two pins.
@@ -90,26 +85,14 @@ pub trait SnarlViewer<T> {
     /// This is usually happens when user drags a wire from one node's output pin to another node's input pin or vice versa.
     /// By default this method connects the pins and returns `Ok(())`.
     #[inline]
-    fn connect(
-        &mut self,
-        from: &OutPin<T>,
-        to: &InPin<T>,
-        effects: &mut Effects<T>,
-    ) -> Result<(), Forbidden> {
-        effects.connect(from.id, to.id);
-        Ok(())
+    fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<T>) {
+        snarl.connect(from.id, to.id);
     }
 
     /// Asks the viewer to disconnect two pins.
     #[inline]
-    fn disconnect(
-        &mut self,
-        from: &OutPin<T>,
-        to: &InPin<T>,
-        effects: &mut Effects<T>,
-    ) -> Result<(), Forbidden> {
-        effects.disconnect(from.id, to.id);
-        Ok(())
+    fn disconnect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<T>) {
+        snarl.disconnect(from.id, to.id);
     }
 
     /// Asks the viewer to disconnect all wires from the output pin.
@@ -117,9 +100,8 @@ pub trait SnarlViewer<T> {
     /// This is usually happens when right-clicking on an output pin.
     /// By default this method disconnects the pins and returns `Ok(())`.
     #[inline]
-    fn drop_outputs(&mut self, pin: &OutPin<T>, effects: &mut Effects<T>) -> Result<(), Forbidden> {
-        effects.drop_outputs(pin.id);
-        Ok(())
+    fn drop_outputs(&mut self, pin: &OutPin, snarl: &mut Snarl<T>) {
+        snarl.drop_outputs(pin.id);
     }
 
     /// Asks the viewer to disconnect all wires from the input pin.
@@ -127,8 +109,7 @@ pub trait SnarlViewer<T> {
     /// This is usually happens when right-clicking on an input pin.
     /// By default this method disconnects the pins and returns `Ok(())`.
     #[inline]
-    fn drop_inputs(&mut self, pin: &InPin<T>, effects: &mut Effects<T>) -> Result<(), Forbidden> {
-        effects.drop_inputs(pin.id);
-        Ok(())
+    fn drop_inputs(&mut self, pin: &InPin, snarl: &mut Snarl<T>) {
+        snarl.drop_inputs(pin.id);
     }
 }

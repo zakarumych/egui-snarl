@@ -4,9 +4,6 @@ use egui::Pos2;
 
 use crate::{wire_pins, InPinId, Node, OutPinId, Snarl};
 
-/// Error returned from methods where [`SnarlViewer`] forbids the operation.
-pub struct Forbidden;
-
 pub enum Effect<T> {
     /// Adds a new node to the Snarl.
     InsertNode { pos: Pos2, node: T },

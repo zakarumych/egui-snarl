@@ -7,8 +7,6 @@
 
 pub mod ui;
 
-use std::cell::RefCell;
-
 use egui::ahash::HashSet;
 use slab::Slab;
 
@@ -22,7 +20,7 @@ impl<T> Default for Snarl<T> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct Node<T> {
     /// Node generic value.
-    value: RefCell<T>,
+    value: T,
 
     /// Position of the top-left corner of the node.
     /// This does not include frame margin.
@@ -64,10 +62,6 @@ pub struct InPinId {
 struct Wire {
     out_pin: OutPinId,
     in_pin: InPinId,
-}
-
-fn wire_pins(out_pin: OutPinId, in_pin: InPinId) -> Wire {
-    Wire { out_pin, in_pin }
 }
 
 #[derive(Clone, Debug)]
@@ -183,57 +177,6 @@ pub struct Snarl<T> {
     wires: Wires,
 }
 
-// #[cfg(feature = "serde")]
-// mod serde_nodes {
-//     use super::*;
-
-//     fn serialize<S, T>(nodes: &Slab<Node<T>>, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//         T: serde::Serialize,
-//     {
-//         use serde::ser::SerializeMap;
-
-//         let mut map = serializer.serialize_map(Some(nodes.len()))?;
-//         for (idx, node) in nodes.iter() {
-//             map.serialize_entry(&idx, &node)?;
-//         }
-//         map.end()
-//     }
-
-//     fn deserialize<'de, D, T>(deserializer: D) -> Slab<Node<T>>
-//     where
-//         D: serde::Deserializer<'de>,
-//         T: serde::Deserialize<'de>,
-//     {
-//         struct Visitor<T>(std::marker::PhantomData<T>);
-
-//         impl<'de, T> serde::de::Visitor<'de> for Visitor<T>
-//         where
-//             T: serde::Deserialize<'de>,
-//         {
-//             type Value = Slab<Node<T>>;
-
-//             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-//                 formatter.write_str("a map of nodes")
-//             }
-
-//             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-//             where
-//                 A: serde::de::MapAccess<'de>,
-//             {
-//                 let mut nodes = Slab::new();
-//                 while let Some((idx, node)) = map.next_entry()? {
-//                     let next = nodes.insert()
-//                 }
-//                 Ok(nodes)
-//             }
-//         }
-
-//         deserializer.deserialize_map(Visitor(std::marker::PhantomData))
-//     }
-// }
-
 impl<T> Snarl<T> {
     /// Create a new empty Snarl.
     ///
@@ -263,7 +206,7 @@ impl<T> Snarl<T> {
     /// ```
     pub fn insert_node(&mut self, pos: egui::Pos2, node: T) -> usize {
         let idx = self.nodes.insert(Node {
-            value: RefCell::new(node),
+            value: node,
             pos,
             open: true,
         });
@@ -283,7 +226,7 @@ impl<T> Snarl<T> {
     /// ```
     pub fn add_node_collapsed(&mut self, pos: egui::Pos2, node: T) -> usize {
         let idx = self.nodes.insert(Node {
-            value: RefCell::new(node),
+            value: node,
             pos,
             open: false,
         });
@@ -292,6 +235,7 @@ impl<T> Snarl<T> {
     }
 
     /// Opens or collapses a node.
+    #[track_caller]
     pub fn open_node(&mut self, node: usize, open: bool) {
         self.nodes[node].open = open;
     }
@@ -307,8 +251,9 @@ impl<T> Snarl<T> {
     /// let node = snarl.insert_node(());
     /// snarl.remove_node(node);
     /// ```
+    #[track_caller]
     pub fn remove_node(&mut self, idx: usize) -> T {
-        let value = self.nodes.remove(idx).value.into_inner();
+        let value = self.nodes.remove(idx).value;
         self.wires.drop_node(idx);
         let order = self.draw_order.iter().position(|&i| i == idx).unwrap();
         self.draw_order.remove(order);
@@ -318,6 +263,7 @@ impl<T> Snarl<T> {
     /// Connects two nodes.
     /// Returns true if the connection was successful.
     /// Returns false if the connection already exists.
+    #[track_caller]
     pub fn connect(&mut self, from: OutPinId, to: InPinId) -> bool {
         debug_assert!(self.nodes.contains(from.node));
         debug_assert!(self.nodes.contains(to.node));
@@ -327,6 +273,44 @@ impl<T> Snarl<T> {
             in_pin: to,
         };
         self.wires.insert(wire)
+    }
+
+    #[track_caller]
+    pub fn disconnect(&mut self, from: OutPinId, to: InPinId) {
+        debug_assert!(self.nodes.contains(from.node));
+        debug_assert!(self.nodes.contains(to.node));
+
+        let wire = Wire {
+            out_pin: from,
+            in_pin: to,
+        };
+        self.wires.remove(&wire);
+    }
+
+    #[track_caller]
+    pub fn drop_inputs(&mut self, pin: InPinId) {
+        debug_assert!(self.nodes.contains(pin.node));
+
+        self.wires.drop_inputs(pin);
+    }
+
+    #[track_caller]
+    pub fn drop_outputs(&mut self, pin: OutPinId) {
+        debug_assert!(self.nodes.contains(pin.node));
+
+        self.wires.drop_outputs(pin);
+    }
+
+    /// Returns reference to the node.
+    #[track_caller]
+    pub fn get_node(&self, idx: usize) -> &T {
+        &self.nodes[idx].value
+    }
+
+    /// Returns mutable reference to the node.
+    #[track_caller]
+    pub fn get_node_mut(&mut self, idx: usize) -> &mut T {
+        &mut self.nodes[idx].value
     }
 
     pub fn nodes(&self) -> NodesIter<'_, T> {
@@ -359,18 +343,18 @@ pub struct NodesIter<'a, T> {
 }
 
 impl<'a, T> Iterator for NodesIter<'a, T> {
-    type Item = &'a RefCell<T>;
+    type Item = &'a T;
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.nodes.size_hint()
     }
 
-    fn next(&mut self) -> Option<&'a RefCell<T>> {
+    fn next(&mut self) -> Option<&'a T> {
         let (_, node) = self.nodes.next()?;
         Some(&node.value)
     }
 
-    fn nth(&mut self, n: usize) -> Option<&'a RefCell<T>> {
+    fn nth(&mut self, n: usize) -> Option<&'a T> {
         let (_, node) = self.nodes.nth(n)?;
         Some(&node.value)
     }
@@ -389,12 +373,12 @@ impl<'a, T> Iterator for NodesIterMut<'a, T> {
 
     fn next(&mut self) -> Option<&'a mut T> {
         let (_, node) = self.nodes.next()?;
-        Some(node.value.get_mut())
+        Some(&mut node.value)
     }
 
     fn nth(&mut self, n: usize) -> Option<&'a mut T> {
         let (_, node) = self.nodes.nth(n)?;
-        Some(node.value.get_mut())
+        Some(&mut node.value)
     }
 }
 
@@ -403,18 +387,18 @@ pub struct NodesIndicesIter<'a, T> {
 }
 
 impl<'a, T> Iterator for NodesIndicesIter<'a, T> {
-    type Item = (usize, &'a RefCell<T>);
+    type Item = (usize, &'a T);
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.nodes.size_hint()
     }
 
-    fn next(&mut self) -> Option<(usize, &'a RefCell<T>)> {
+    fn next(&mut self) -> Option<(usize, &'a T)> {
         let (idx, node) = self.nodes.next()?;
         Some((idx, &node.value))
     }
 
-    fn nth(&mut self, n: usize) -> Option<(usize, &'a RefCell<T>)> {
+    fn nth(&mut self, n: usize) -> Option<(usize, &'a T)> {
         let (idx, node) = self.nodes.nth(n)?;
         Some((idx, &node.value))
     }
@@ -433,11 +417,11 @@ impl<'a, T> Iterator for NodesIndicesIterMut<'a, T> {
 
     fn next(&mut self) -> Option<(usize, &'a mut T)> {
         let (idx, node) = self.nodes.next()?;
-        Some((idx, node.value.get_mut()))
+        Some((idx, &mut node.value))
     }
 
     fn nth(&mut self, n: usize) -> Option<(usize, &'a mut T)> {
         let (idx, node) = self.nodes.nth(n)?;
-        Some((idx, node.value.get_mut()))
+        Some((idx, &mut node.value))
     }
 }

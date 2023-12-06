@@ -1,37 +1,9 @@
-use egui::{epaint::PathShape, pos2, Color32, Id, Pos2, Rect, Shape, Stroke, Ui};
-
-use super::AnyPin;
+use egui::{epaint::PathShape, pos2, Color32, Pos2, Rect, Shape, Stroke};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WireLayer {
     BehindNodes,
     AboveNodes,
-}
-
-#[derive(Clone, Copy)]
-struct PartWire(AnyPin);
-
-pub fn get_part_wire(ui: &Ui, id: Id) -> Option<AnyPin> {
-    match ui.memory(|m| m.data.get_temp::<PartWire>(id)) {
-        Some(PartWire(pin)) => Some(pin),
-        None => None,
-    }
-}
-
-pub fn set_part_wire(ui: &Ui, id: Id, pin: AnyPin) {
-    ui.memory_mut(|m| m.data.insert_temp(id, PartWire(pin)));
-}
-
-pub fn take_part_wire(ui: &Ui, id: Id) -> Option<AnyPin> {
-    let part_wire = ui.memory_mut(|m| {
-        let value = m.data.get_temp::<PartWire>(id);
-        m.data.remove::<PartWire>(id);
-        value
-    });
-    match part_wire {
-        Some(PartWire(pin)) => Some(pin),
-        None => None,
-    }
 }
 
 /// Returns 6th degree bezier curve for the wire

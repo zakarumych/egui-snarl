@@ -1,67 +1,35 @@
-use std::cell::RefCell;
-
 use egui::{epaint::PathShape, vec2, Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2};
 
 use crate::{InPinId, OutPinId, Snarl};
 
-#[derive(Clone, Copy, Debug)]
-pub struct RemoteOutPin<'a, T> {
+/// Node and its output pin.
+#[derive(Clone, Debug)]
+pub struct OutPin {
     pub id: OutPinId,
-    pub node: &'a RefCell<T>,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct RemoteInPin<'a, T> {
-    pub id: InPinId,
-    pub node: &'a RefCell<T>,
+    pub remotes: Vec<InPinId>,
 }
 
 /// Node and its output pin.
 #[derive(Clone, Debug)]
-pub struct OutPin<'a, T> {
-    pub id: OutPinId,
-    pub node: &'a RefCell<T>,
-    pub remotes: Vec<RemoteInPin<'a, T>>,
-}
-
-/// Node and its output pin.
-#[derive(Clone, Debug)]
-pub struct InPin<'a, T> {
+pub struct InPin {
     pub id: InPinId,
-    pub node: &'a RefCell<T>,
-    pub remotes: Vec<RemoteOutPin<'a, T>>,
+    pub remotes: Vec<OutPinId>,
 }
 
-impl<'a, T> OutPin<'a, T> {
-    pub fn output(snarl: &'a Snarl<T>, pin: OutPinId) -> Self {
+impl OutPin {
+    pub fn output<T>(snarl: &Snarl<T>, pin: OutPinId) -> Self {
         OutPin {
             id: pin,
-            node: &snarl.nodes[pin.node].value,
-            remotes: snarl
-                .wires
-                .wired_inputs(pin)
-                .map(|pin| RemoteInPin {
-                    node: &snarl.nodes[pin.node].value,
-                    id: pin,
-                })
-                .collect(),
+            remotes: snarl.wires.wired_inputs(pin).collect(),
         }
     }
 }
 
-impl<'a, T> InPin<'a, T> {
-    pub fn input(snarl: &'a Snarl<T>, pin: InPinId) -> Self {
+impl InPin {
+    pub fn input<T>(snarl: &Snarl<T>, pin: InPinId) -> Self {
         InPin {
             id: pin,
-            node: &snarl.nodes[pin.node].value,
-            remotes: snarl
-                .wires
-                .wired_outputs(pin)
-                .map(|pin| RemoteOutPin {
-                    node: &snarl.nodes[pin.node].value,
-                    id: pin,
-                })
-                .collect(),
+            remotes: snarl.wires.wired_outputs(pin).collect(),
         }
     }
 }
