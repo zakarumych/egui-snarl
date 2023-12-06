@@ -167,9 +167,9 @@ impl<T> Snarl<T> {
     /// ```
     /// # use egui_snarl::Snarl;
     /// let mut snarl = Snarl::<()>::new();
-    /// snarl.add_node(());
+    /// snarl.insert_node(());
     /// ```
-    pub fn add_node(&mut self, node: T, pos: egui::Pos2) -> usize {
+    pub fn insert_node(&mut self, pos: egui::Pos2, node: T) -> usize {
         let idx = self.nodes.insert(Node {
             value: RefCell::new(node),
             pos,
@@ -187,9 +187,9 @@ impl<T> Snarl<T> {
     /// ```
     /// # use egui_snarl::Snarl;
     /// let mut snarl = Snarl::<()>::new();
-    /// snarl.add_node(());
+    /// snarl.insert_node(());
     /// ```
-    pub fn add_node_collapsed(&mut self, node: T, pos: egui::Pos2) -> usize {
+    pub fn add_node_collapsed(&mut self, pos: egui::Pos2, node: T) -> usize {
         let idx = self.nodes.insert(Node {
             value: RefCell::new(node),
             pos,
@@ -197,6 +197,11 @@ impl<T> Snarl<T> {
         });
         self.draw_order.push(idx);
         idx
+    }
+
+    /// Opens or collapses a node.
+    pub fn open_node(&mut self, node: usize, open: bool) {
+        self.nodes[node].open = open;
     }
 
     /// Removes a node from the Snarl.
@@ -207,7 +212,7 @@ impl<T> Snarl<T> {
     /// ```
     /// # use egui_snarl::Snarl;
     /// let mut snarl = Snarl::<()>::new();
-    /// let node = snarl.add_node(());
+    /// let node = snarl.insert_node(());
     /// snarl.remove_node(node);
     /// ```
     pub fn remove_node(&mut self, idx: usize) -> T {

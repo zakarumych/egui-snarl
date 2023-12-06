@@ -64,6 +64,10 @@ pub struct SnarlStyle {
     pub bg_fill: Option<Color32>,
     pub bg_pattern: Option<BackgroundPattern>,
     pub background_pattern_stroke: Option<Stroke>,
+
+    pub min_scale: f32,
+    pub max_scale: f32,
+    pub scale_velocity: f32,
 }
 
 impl Default for SnarlStyle {
@@ -86,6 +90,10 @@ impl Default for SnarlStyle {
                 angle: 1.0,
             }),
             background_pattern_stroke: None,
+
+            min_scale: 0.1,
+            max_scale: 2.0,
+            scale_velocity: 0.005,
         }
     }
 }
@@ -142,9 +150,6 @@ impl<T> Snarl<T> {
     {
         let snarl_id = ui.make_persistent_id(id_source);
 
-        let snarl_state = SnarlState::load(ui.ctx(), snarl_id).unwrap_or_default();
-        let mut new_snarl_state = snarl_state;
-
         // Draw background pattern.
         let bg_fill = style
             .bg_fill
@@ -167,19 +172,18 @@ impl<T> Snarl<T> {
 
                 let pivot = hover_pos.unwrap_or_else(|| viewport.center());
 
-                new_snarl_state.animate(snarl_id, ui.ctx(), pivot, viewport);
+                let mut snarl_state =
+                    SnarlState::load(ui.ctx(), snarl_id, pivot, viewport, self, style);
 
                 let mut node_style: Style = (**ui.style()).clone();
-                node_style.zoom(new_snarl_state.scale());
+                node_style.zoom(snarl_state.scale());
 
                 match style.bg_pattern {
                     None => {}
                     Some(BackgroundPattern::Grid { spacing, angle }) => {
                         let stroke = Stroke::new(
-                            bg_stroke.width * new_snarl_state.scale().max(1.0),
-                            bg_stroke
-                                .color
-                                .gamma_multiply(new_snarl_state.scale().min(1.0)),
+                            bg_stroke.width * snarl_state.scale().max(1.0),
+                            bg_stroke.color.gamma_multiply(snarl_state.scale().min(1.0)),
                         );
 
                         let spacing = ui.spacing().icon_width * spacing;
@@ -188,8 +192,8 @@ impl<T> Snarl<T> {
                         let rot_inv = rot.inverse();
 
                         let graph_viewport = Rect::from_min_max(
-                            new_snarl_state.screen_pos_to_graph(viewport.min, viewport),
-                            new_snarl_state.screen_pos_to_graph(viewport.max, viewport),
+                            snarl_state.screen_pos_to_graph(viewport.min, viewport),
+                            snarl_state.screen_pos_to_graph(viewport.max, viewport),
                         );
 
                         let pattern_bounds = graph_viewport.rotate_bb(rot_inv);
@@ -203,8 +207,8 @@ impl<T> Snarl<T> {
                             let top = (rot * vec2(x, pattern_bounds.min.y)).to_pos2();
                             let bottom = (rot * vec2(x, pattern_bounds.max.y)).to_pos2();
 
-                            let top = new_snarl_state.graph_pos_to_screen(top, viewport);
-                            let bottom = new_snarl_state.graph_pos_to_screen(bottom, viewport);
+                            let top = snarl_state.graph_pos_to_screen(top, viewport);
+                            let bottom = snarl_state.graph_pos_to_screen(bottom, viewport);
 
                             ui.painter().line_segment([top, bottom], stroke);
                         }
@@ -218,8 +222,8 @@ impl<T> Snarl<T> {
                             let top = (rot * vec2(pattern_bounds.min.x, y)).to_pos2();
                             let bottom = (rot * vec2(pattern_bounds.max.x, y)).to_pos2();
 
-                            let top = new_snarl_state.graph_pos_to_screen(top, viewport);
-                            let bottom = new_snarl_state.graph_pos_to_screen(bottom, viewport);
+                            let top = snarl_state.graph_pos_to_screen(top, viewport);
+                            let bottom = snarl_state.graph_pos_to_screen(bottom, viewport);
 
                             ui.painter().line_segment([top, bottom], stroke);
                         }
@@ -252,11 +256,11 @@ impl<T> Snarl<T> {
                 match hover_pos {
                     Some(hover_pos) if bg_r.rect.contains(hover_pos) => {
                         if scroll_delta != 0.0 {
-                            let new_scale = (new_snarl_state.scale()
-                                * (1.0 + scroll_delta * 0.005))
-                                .clamp(0.1, 2.0);
+                            let new_scale = (snarl_state.scale()
+                                * (1.0 + scroll_delta * style.scale_velocity))
+                                .clamp(style.min_scale, style.max_scale);
 
-                            new_snarl_state.set_scale(new_scale);
+                            snarl_state.set_scale(new_scale);
                         }
                     }
                     _ => {}
@@ -274,7 +278,7 @@ impl<T> Snarl<T> {
                 for (order, &node_idx) in self.draw_order.iter().enumerate() {
                     let node = &self.nodes[node_idx];
 
-                    let node_pos = new_snarl_state.graph_pos_to_screen(node.pos, viewport);
+                    let node_pos = snarl_state.graph_pos_to_screen(node.pos, viewport);
 
                     // Generate persistent id for the node.
                     let node_id = snarl_id.with(("snarl-node", node_idx));
@@ -296,10 +300,8 @@ impl<T> Snarl<T> {
                     let r = ui.interact(node_rect, node_id, Sense::click_and_drag());
 
                     if r.dragged_by(PointerButton::Primary) {
-                        *node_moved = Some((
-                            node_idx,
-                            new_snarl_state.screen_vec_to_graph(r.drag_delta()),
-                        ));
+                        *node_moved =
+                            Some((node_idx, snarl_state.screen_vec_to_graph(r.drag_delta())));
                         *node_order_to_top = Some(order);
                     } else if r.clicked_by(PointerButton::Primary) {
                         *node_order_to_top = Some(order);
@@ -340,7 +342,7 @@ impl<T> Snarl<T> {
                             &inputs,
                             &outputs,
                             ui,
-                            new_snarl_state.scale(),
+                            snarl_state.scale(),
                             effects,
                         );
                     });
@@ -396,7 +398,7 @@ impl<T> Snarl<T> {
                                     &inputs,
                                     &outputs,
                                     ui,
-                                    new_snarl_state.scale(),
+                                    snarl_state.scale(),
                                     effects,
                                 );
 
@@ -478,7 +480,7 @@ impl<T> Snarl<T> {
                                                 let r = viewer.show_input(
                                                     &in_pin,
                                                     ui,
-                                                    new_snarl_state.scale(),
+                                                    snarl_state.scale(),
                                                     effects,
                                                 );
                                                 let pin_info = r.inner;
@@ -575,7 +577,7 @@ impl<T> Snarl<T> {
                                                 let r = viewer.show_output(
                                                     &out_pin,
                                                     ui,
-                                                    new_snarl_state.scale(),
+                                                    snarl_state.scale(),
                                                     effects,
                                                 );
                                                 let pin_info = r.inner;
@@ -741,14 +743,14 @@ impl<T> Snarl<T> {
 
                 if bg_r.hovered() {
                     if bg_r.dragged_by(PointerButton::Primary) {
-                        new_snarl_state.pan(-bg_r.drag_delta());
+                        snarl_state.pan(-bg_r.drag_delta());
                     }
                 }
                 bg_r.context_menu(|ui| {
                     viewer.graph_menu(
-                        new_snarl_state.screen_pos_to_graph(ui.cursor().min, viewport),
+                        snarl_state.screen_pos_to_graph(ui.cursor().min, viewport),
                         ui,
-                        new_snarl_state.scale(),
+                        snarl_state.scale(),
                         effects,
                     );
                 });
@@ -843,9 +845,7 @@ impl<T> Snarl<T> {
 
                 ui.advance_cursor_after_rect(Rect::from_min_size(viewport.min, Vec2::ZERO));
 
-                if snarl_state != new_snarl_state {
-                    new_snarl_state.store(ui.ctx(), snarl_id);
-                }
+                snarl_state.store(ui.ctx(), snarl_id);
             });
     }
 }

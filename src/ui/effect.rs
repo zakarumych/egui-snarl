@@ -9,7 +9,7 @@ pub struct Forbidden;
 
 pub enum Effect<T> {
     /// Adds a new node to the Snarl.
-    InsertNode { node: T, pos: Pos2 },
+    InsertNode { pos: Pos2, node: T },
 
     /// Removes a node from snarl.
     RemoveNode { node: usize },
@@ -66,7 +66,7 @@ impl<T> Effects<T> {
 
     /// Inserts a new node to the Snarl.
     #[inline(always)]
-    pub fn insert_node(&mut self, node: T, pos: Pos2) {
+    pub fn insert_node(&mut self, pos: Pos2, node: T) {
         self.effects.push(Effect::InsertNode { node, pos });
     }
 

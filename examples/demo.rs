@@ -1,13 +1,13 @@
 use std::{cell::RefCell, collections::HashMap};
 
-use eframe::App;
+use eframe::{App, CreationContext};
 use egui::{Color32, InnerResponse, Ui};
 use egui_snarl::{
     ui::{Effects, Forbidden, InPin, OutPin, PinInfo, SnarlStyle, SnarlViewer},
     InPinId, Snarl,
 };
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 enum DemoNode {
     /// Node with single input.
     /// Displays the value of the input.
@@ -428,23 +428,23 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     ) {
         ui.label("Add node");
         if ui.button("Integer").clicked() {
-            effects.insert_node(DemoNode::Integer(0.0), pos);
+            effects.insert_node(pos, DemoNode::Integer(0.0));
             ui.close_menu();
         }
         if ui.button("Expr").clicked() {
-            effects.insert_node(DemoNode::ExprNode(ExprNode::new()), pos);
+            effects.insert_node(pos, DemoNode::ExprNode(ExprNode::new()));
             ui.close_menu();
         }
         if ui.button("String").clicked() {
-            effects.insert_node(DemoNode::String("".to_owned()), pos);
+            effects.insert_node(pos, DemoNode::String("".to_owned()));
             ui.close_menu();
         }
         if ui.button("Show image").clicked() {
-            effects.insert_node(DemoNode::ShowImage("".to_owned()), pos);
+            effects.insert_node(pos, DemoNode::ShowImage("".to_owned()));
             ui.close_menu();
         }
         if ui.button("Sink").clicked() {
-            effects.insert_node(DemoNode::Sink, pos);
+            effects.insert_node(pos, DemoNode::Sink);
             ui.close_menu();
         }
     }
@@ -467,7 +467,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct ExprNode {
     text: String,
     bindings: Vec<String>,
@@ -490,13 +490,13 @@ impl ExprNode {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
 enum UnOp {
     Pos,
     Neg,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
 enum BinOp {
     Add,
     Sub,
@@ -504,7 +504,7 @@ enum BinOp {
     Div,
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 enum Expr {
     Var(String),
     Val(f64),
@@ -763,8 +763,18 @@ pub struct DemoApp {
 }
 
 impl DemoApp {
-    pub fn new() -> Self {
-        let snarl = Snarl::new();
+    pub fn new(cx: &CreationContext) -> Self {
+        let snarl = match cx.storage {
+            None => Snarl::new(),
+            Some(storage) => {
+                let snarl = storage
+                    .get_string("snarl")
+                    .and_then(|snarl| serde_json::from_str(&snarl).ok())
+                    .unwrap_or_else(Snarl::new);
+
+                snarl
+            }
+        };
 
         DemoApp { snarl }
     }
@@ -804,6 +814,11 @@ impl App for DemoApp {
             );
         });
     }
+
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        let snarl = serde_json::to_string(&self.snarl).unwrap();
+        storage.set_string("snarl", snarl);
+    }
 }
 
 fn main() -> eframe::Result<()> {
@@ -817,7 +832,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "egui-snarl demo",
         native_options,
-        Box::new(|_| Box::new(DemoApp::new())),
+        Box::new(|cx| Box::new(DemoApp::new(cx))),
     )
 }
 
