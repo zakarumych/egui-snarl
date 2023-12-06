@@ -13,8 +13,11 @@ pub struct NodeState {
 }
 
 impl NodeState {
-    pub fn load(cx: &Context, id: Id) -> Option<Self> {
-        cx.data_mut(|d| d.get_temp(id))
+    pub fn load(cx: &Context, id: Id, spacing: &Spacing) -> Self {
+        match cx.data_mut(|d| d.get_temp(id)) {
+            Some(state) => state,
+            None => Self::initial(spacing),
+        }
     }
 
     pub fn store(&self, cx: &Context, id: Id) {
@@ -26,7 +29,7 @@ impl NodeState {
         Rect::from_min_size(pos, self.size)
     }
 
-    pub fn initial(spacing: &Spacing) -> Self {
+    fn initial(spacing: &Spacing) -> Self {
         NodeState {
             // title_size: spacing.interact_size,
             // inputs_size: spacing.interact_size,
@@ -58,7 +61,6 @@ struct SnarlStateData {
 }
 
 impl SnarlState {
-    #[inline(always)]
     pub fn load<T>(
         cx: &Context,
         id: Id,
@@ -95,8 +97,7 @@ impl SnarlState {
         }
     }
 
-    #[inline(always)]
-    pub fn initial<T>(viewport: Rect, snarl: &Snarl<T>, style: &SnarlStyle) -> Self {
+    fn initial<T>(viewport: Rect, snarl: &Snarl<T>, style: &SnarlStyle) -> Self {
         if snarl.nodes.is_empty() {
             let scale = 1.0f32.clamp(style.min_scale, style.max_scale);
 

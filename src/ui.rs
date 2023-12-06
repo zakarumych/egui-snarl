@@ -21,13 +21,13 @@ mod zoom;
 pub use self::{
     effect::{Effect, Effects, Forbidden},
     pin::{AnyPin, InPin, OutPin, PinInfo, PinShape, RemoteInPin, RemoteOutPin},
-    state::{NodeState, SnarlState},
     viewer::SnarlViewer,
     wire::WireLayer,
     zoom::Zoom,
 };
 use self::{
     pin::draw_pin,
+    state::{NodeState, SnarlState},
     wire::{draw_wire, get_part_wire, hit_wire, mix_colors, set_part_wire, take_part_wire},
 };
 
@@ -70,16 +70,15 @@ pub struct SnarlStyle {
     pub scale_velocity: f32,
 }
 
-impl Default for SnarlStyle {
-    #[inline]
-    fn default() -> Self {
+impl SnarlStyle {
+    pub const fn new() -> Self {
         SnarlStyle {
             pin_size: None,
             wire_width: None,
             wire_frame_size: None,
             downscale_wire_frame: false,
             upscale_wire_frame: true,
-            wire_layer: WireLayer::default(),
+            wire_layer: WireLayer::BehindNodes,
             header_drag_space: None,
             input_output_spacing: None,
             collapsible: true,
@@ -95,6 +94,13 @@ impl Default for SnarlStyle {
             max_scale: 2.0,
             scale_velocity: 0.005,
         }
+    }
+}
+
+impl Default for SnarlStyle {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -256,6 +262,7 @@ impl<T> Snarl<T> {
                 match hover_pos {
                     Some(hover_pos) if bg_r.rect.contains(hover_pos) => {
                         if scroll_delta != 0.0 {
+                            dbg!(scroll_delta);
                             let new_scale = (snarl_state.scale()
                                 * (1.0 + scroll_delta * style.scale_velocity))
                                 .clamp(style.min_scale, style.max_scale);
@@ -285,8 +292,7 @@ impl<T> Snarl<T> {
 
                     let openness = ui.ctx().animate_bool(node_id, node.open);
 
-                    let node_state = NodeState::load(ui.ctx(), node_id)
-                        .unwrap_or_else(|| NodeState::initial(&node_style.spacing));
+                    let node_state = NodeState::load(ui.ctx(), node_id, &node_style.spacing);
 
                     let mut new_state = node_state;
 

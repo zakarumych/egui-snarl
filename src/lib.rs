@@ -62,10 +62,7 @@ pub struct InPinId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct Wire {
-    #[cfg_attr(feature = "serde", serde(flatten))]
     out_pin: OutPinId,
-
-    #[cfg_attr(feature = "serde", serde(flatten))]
     in_pin: InPinId,
 }
 
@@ -74,13 +71,56 @@ fn wire_pins(out_pin: OutPinId, in_pin: InPinId) -> Wire {
 }
 
 #[derive(Clone, Debug)]
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(transparent)
-)]
 struct Wires {
     wires: HashSet<Wire>,
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Wires {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeSeq;
+
+        let mut seq = serializer.serialize_seq(Some(self.wires.len()))?;
+        for wire in &self.wires {
+            seq.serialize_element(&wire)?;
+        }
+        seq.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Wires {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = HashSet<Wire>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a sequence of wires")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut wires = HashSet::with_hasher(egui::ahash::RandomState::new());
+                while let Some(wire) = seq.next_element()? {
+                    wires.insert(wire);
+                }
+                Ok(wires)
+            }
+        }
+
+        let wires = deserializer.deserialize_seq(Visitor)?;
+        Ok(Wires { wires })
+    }
 }
 
 impl Wires {
@@ -137,10 +177,62 @@ impl Wires {
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Snarl<T> {
+    // #[cfg_attr(feature = "serde", serde(with = "serde_nodes"))]
     nodes: Slab<Node<T>>,
     draw_order: Vec<usize>,
     wires: Wires,
 }
+
+// #[cfg(feature = "serde")]
+// mod serde_nodes {
+//     use super::*;
+
+//     fn serialize<S, T>(nodes: &Slab<Node<T>>, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//         T: serde::Serialize,
+//     {
+//         use serde::ser::SerializeMap;
+
+//         let mut map = serializer.serialize_map(Some(nodes.len()))?;
+//         for (idx, node) in nodes.iter() {
+//             map.serialize_entry(&idx, &node)?;
+//         }
+//         map.end()
+//     }
+
+//     fn deserialize<'de, D, T>(deserializer: D) -> Slab<Node<T>>
+//     where
+//         D: serde::Deserializer<'de>,
+//         T: serde::Deserialize<'de>,
+//     {
+//         struct Visitor<T>(std::marker::PhantomData<T>);
+
+//         impl<'de, T> serde::de::Visitor<'de> for Visitor<T>
+//         where
+//             T: serde::Deserialize<'de>,
+//         {
+//             type Value = Slab<Node<T>>;
+
+//             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+//                 formatter.write_str("a map of nodes")
+//             }
+
+//             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+//             where
+//                 A: serde::de::MapAccess<'de>,
+//             {
+//                 let mut nodes = Slab::new();
+//                 while let Some((idx, node)) = map.next_entry()? {
+//                     let next = nodes.insert()
+//                 }
+//                 Ok(nodes)
+//             }
+//         }
+
+//         deserializer.deserialize_map(Visitor(std::marker::PhantomData))
+//     }
+// }
 
 impl<T> Snarl<T> {
     /// Create a new empty Snarl.

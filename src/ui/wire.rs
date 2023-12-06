@@ -8,13 +8,6 @@ pub enum WireLayer {
     AboveNodes,
 }
 
-impl Default for WireLayer {
-    #[inline]
-    fn default() -> Self {
-        WireLayer::BehindNodes
-    }
-}
-
 #[derive(Clone, Copy)]
 struct PartWire(AnyPin);
 
