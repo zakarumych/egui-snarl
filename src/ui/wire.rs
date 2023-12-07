@@ -1,4 +1,4 @@
-use egui::{epaint::PathShape, pos2, Color32, Pos2, Rect, Shape, Stroke};
+use egui::{epaint::PathShape, pos2, Color32, Pos2, Rect, Shape, Stroke, Ui};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WireLayer {
@@ -121,6 +121,7 @@ fn wire_bezier(
 }
 
 pub fn draw_wire(
+    ui: &mut Ui,
     shapes: &mut Vec<Shape>,
     frame_size: f32,
     upscale: bool,
@@ -129,11 +130,12 @@ pub fn draw_wire(
     to: Pos2,
     stroke: Stroke,
 ) {
-    draw_bezier(
-        shapes,
-        &wire_bezier(frame_size, upscale, downscale, from, to),
-        stroke,
-    );
+    let points = wire_bezier(frame_size, upscale, downscale, from, to);
+
+    let bb = Rect::from_points(&points);
+    if ui.is_rect_visible(bb) {
+        draw_bezier(shapes, &points, stroke);
+    }
 }
 
 pub fn hit_wire(
@@ -159,13 +161,20 @@ fn bezier_reference_size(points: &[Pos2; 6]) -> f32 {
         + (p5 - p4).length()
 }
 
+const MAX_BEZIER_SAMPLES: usize = 100;
+
 fn bezier_samples_number(points: &[Pos2; 6], threshold: f32) -> usize {
     let reference_size = bezier_reference_size(points);
-    (reference_size / threshold).ceil() as usize
+    ((reference_size / threshold).ceil() as usize).min(MAX_BEZIER_SAMPLES)
 }
 
-fn draw_bezier(shapes: &mut Vec<Shape>, points: &[Pos2; 6], stroke: Stroke) {
+fn draw_bezier(shapes: &mut Vec<Shape>, points: &[Pos2; 6], mut stroke: Stroke) {
     assert!(points.len() > 0);
+
+    if stroke.width < 1.0 {
+        stroke.color = stroke.color.gamma_multiply(stroke.width);
+        stroke.width = 1.0;
+    }
 
     let samples = bezier_samples_number(points, stroke.width);
 

@@ -728,7 +728,7 @@ impl<T> Snarl<T> {
                                 style.downscale_wire_frame,
                                 from,
                                 to,
-                                wire_width * 1.5,
+                                wire_width.max(1.5),
                             );
 
                             if hit {
@@ -783,6 +783,7 @@ impl<T> Snarl<T> {
                     }
 
                     draw_wire(
+                        ui,
                         &mut wire_shapes,
                         wire_frame_size,
                         style.upscale_wire_frame,
@@ -803,6 +804,7 @@ impl<T> Snarl<T> {
                             let color = input_colors[&pin];
 
                             draw_wire(
+                                ui,
                                 &mut wire_shapes,
                                 wire_frame_size,
                                 style.upscale_wire_frame,
@@ -821,6 +823,7 @@ impl<T> Snarl<T> {
                             let color = output_colors[&pin];
 
                             draw_wire(
+                                ui,
                                 &mut wire_shapes,
                                 wire_frame_size,
                                 style.upscale_wire_frame,
