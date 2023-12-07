@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use eframe::{App, CreationContext};
-use egui::{Color32, InnerResponse, Ui};
+use egui::{Color32, Ui};
 use egui_snarl::{
     ui::{InPin, OutPin, PinInfo, SnarlStyle, SnarlViewer},
     InPinId, Snarl,
@@ -90,18 +90,24 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         ui: &mut Ui,
         _scale: f32,
         snarl: &mut Snarl<DemoNode>,
-    ) -> egui::Response {
+    ) {
         match snarl.get_node_mut(node) {
-            DemoNode::Sink => ui.label("Sink"),
-            DemoNode::Integer(value) => ui.add(egui::DragValue::new(value)),
+            DemoNode::Sink => {
+                ui.label("Sink");
+            }
+            DemoNode::Integer(value) => {
+                ui.add(egui::DragValue::new(value));
+            }
             DemoNode::String(value) => {
                 let edit = egui::TextEdit::singleline(value)
                     .clip_text(false)
                     .desired_width(0.0)
                     .margin(ui.spacing().item_spacing);
-                ui.add(edit)
+                ui.add(edit);
             }
-            DemoNode::ShowImage(_) => ui.label("Show image"),
+            DemoNode::ShowImage(_) => {
+                ui.label("Show image");
+            }
             DemoNode::ExprNode(expr_node) => {
                 let edit = egui::TextEdit::singleline(&mut expr_node.text)
                     .clip_text(false)
@@ -158,8 +164,6 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         Err(_) => {}
                     }
                 }
-
-                r
             }
         }
     }
@@ -192,32 +196,32 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         ui: &mut Ui,
         scale: f32,
         snarl: &mut Snarl<DemoNode>,
-    ) -> egui::InnerResponse<PinInfo> {
+    ) -> PinInfo {
         match *snarl.get_node(pin.id.node) {
             DemoNode::Sink => {
                 assert_eq!(pin.id.input, 0, "Sink node has only one input");
 
                 match &*pin.remotes {
                     [] => {
-                        let r = ui.label("None");
-                        InnerResponse::new(PinInfo::circle().with_fill(Color32::GRAY), r)
+                        ui.label("None");
+                        PinInfo::circle().with_fill(Color32::GRAY)
                     }
                     [remote] => match *snarl.get_node(remote.node) {
                         DemoNode::Sink => unreachable!("Sink node has no outputs"),
                         DemoNode::Integer(value) => {
                             assert_eq!(remote.output, 0, "Integer node has only one output");
-                            let r = ui.label(format_float(value));
-                            InnerResponse::new(PinInfo::square().with_fill(Color32::RED), r)
+                            ui.label(format_float(value));
+                            PinInfo::square().with_fill(Color32::RED)
                         }
                         DemoNode::String(ref value) => {
                             assert_eq!(remote.output, 0, "String node has only one output");
-                            let r = ui.label(format!("{:?}", value));
-                            InnerResponse::new(PinInfo::triangle().with_fill(Color32::GREEN), r)
+                            ui.label(format!("{:?}", value));
+                            PinInfo::triangle().with_fill(Color32::GREEN)
                         }
                         DemoNode::ExprNode(ref expr) => {
                             assert_eq!(remote.output, 0, "Expr node has only one output");
-                            let r = ui.label(format_float(expr.eval()));
-                            InnerResponse::new(PinInfo::square().with_fill(Color32::RED), r)
+                            ui.label(format_float(expr.eval()));
+                            PinInfo::square().with_fill(Color32::RED)
                         }
                         DemoNode::ShowImage(ref uri) => {
                             assert_eq!(remote.output, 0, "ShowImage node has only one output");
@@ -225,9 +229,9 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                             let image = egui::Image::new(uri)
                                 .fit_to_original_size(scale)
                                 .show_loading_spinner(true);
-                            let r = ui.add(image);
+                            ui.add(image);
 
-                            InnerResponse::new(PinInfo::circle().with_fill(Color32::GOLD), r)
+                            PinInfo::circle().with_fill(Color32::GOLD)
                         }
                     },
                     _ => unreachable!("Sink input has only one wire"),
@@ -246,8 +250,8 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                             .clip_text(false)
                             .desired_width(0.0)
                             .margin(ui.spacing().item_spacing);
-                        let r = ui.add(edit);
-                        InnerResponse::new(PinInfo::triangle().with_fill(Color32::GREEN), r)
+                        ui.add(edit);
+                        PinInfo::triangle().with_fill(Color32::GREEN)
                     }
                     _ => unreachable!(),
                 },
@@ -264,8 +268,8 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         match snarl.get_node_mut(pin.id.node) {
                             DemoNode::ShowImage(uri) => {
                                 *uri = value;
-                                let r = ui.label(&*uri);
-                                InnerResponse::new(PinInfo::triangle().with_fill(Color32::GREEN), r)
+                                ui.label(&*uri);
+                                PinInfo::triangle().with_fill(Color32::GREEN)
                             }
                             _ => unreachable!(),
                         }
@@ -277,15 +281,15 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 if pin.id.input < expr_node.bindings.len() {
                     match &*pin.remotes {
                         [] => match snarl.get_node_mut(pin.id.node) {
-                            DemoNode::ExprNode(expr_node) => ui.horizontal(|ui| {
+                            DemoNode::ExprNode(expr_node) => {
                                 ui.label(&expr_node.bindings[pin.id.input]);
                                 ui.add(egui::DragValue::new(&mut expr_node.values[pin.id.input]));
                                 PinInfo::square().with_fill(Color32::RED)
-                            }),
+                            }
                             _ => unreachable!(),
                         },
                         [remote] => {
-                            let r = ui.label(&expr_node.bindings[pin.id.input]);
+                            ui.label(&expr_node.bindings[pin.id.input]);
                             let pin_info = match *snarl.get_node(remote.node) {
                                 DemoNode::Sink => unreachable!("Sink node has no outputs"),
                                 DemoNode::Integer(value) => {
@@ -321,13 +325,13 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                                 }
                             };
 
-                            InnerResponse::new(pin_info, r)
+                            pin_info
                         }
                         _ => unreachable!("Expr pins has only one wire"),
                     }
                 } else {
-                    let r = ui.label("Removed");
-                    InnerResponse::new(PinInfo::circle().with_fill(Color32::BLACK), r)
+                    ui.label("Removed");
+                    PinInfo::circle().with_fill(Color32::BLACK)
                 }
             }
         }
@@ -339,32 +343,32 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         ui: &mut Ui,
         _scale: f32,
         snarl: &mut Snarl<DemoNode>,
-    ) -> egui::InnerResponse<PinInfo> {
+    ) -> PinInfo {
         match *snarl.get_node(pin.id.node) {
             DemoNode::Sink => {
                 unreachable!("Sink node has no outputs")
             }
             DemoNode::Integer(value) => {
                 assert_eq!(pin.id.output, 0, "Integer node has only one output");
-                // let r = ui.add(egui::DragValue::new(value));
-                let r = ui.label(format_float(value));
-                InnerResponse::new(PinInfo::square().with_fill(Color32::RED), r)
+                // ui.add(egui::DragValue::new(value));
+                ui.label(format_float(value));
+                PinInfo::square().with_fill(Color32::RED)
             }
             DemoNode::String(ref value) => {
                 assert_eq!(pin.id.output, 0, "String node has only one output");
-                // let r = ui.text_edit_singleline(value);
-                let r = ui.label(value);
-                InnerResponse::new(PinInfo::triangle().with_fill(Color32::GREEN), r)
+                // ui.text_edit_singleline(value);
+                ui.label(value);
+                PinInfo::triangle().with_fill(Color32::GREEN)
             }
             DemoNode::ExprNode(ref expr_node) => {
                 let value = expr_node.eval();
                 assert_eq!(pin.id.output, 0, "Expr node has only one output");
-                let r = ui.label(format_float(value));
-                InnerResponse::new(PinInfo::square().with_fill(Color32::RED), r)
+                ui.label(format_float(value));
+                PinInfo::square().with_fill(Color32::RED)
             }
             DemoNode::ShowImage(_) => {
-                let (_, r) = ui.allocate_at_least(egui::Vec2::ZERO, egui::Sense::hover());
-                InnerResponse::new(PinInfo::circle().with_fill(Color32::GOLD), r)
+                ui.allocate_at_least(egui::Vec2::ZERO, egui::Sense::hover());
+                PinInfo::circle().with_fill(Color32::GOLD)
             }
         }
     }

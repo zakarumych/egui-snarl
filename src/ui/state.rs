@@ -1,4 +1,4 @@
-use egui::{style::Spacing, vec2, Context, Id, Pos2, Rect, Vec2};
+use egui::{style::Spacing, Context, Id, Pos2, Rect, Vec2};
 
 use crate::{InPinId, OutPinId, Snarl};
 
@@ -139,7 +139,13 @@ impl SnarlState {
     }
 
     fn initial<T>(id: Id, viewport: Rect, snarl: &Snarl<T>, style: &SnarlStyle) -> Self {
-        if snarl.nodes.is_empty() {
+        let mut bb = Rect::NOTHING;
+
+        for (_, node) in snarl.nodes.iter() {
+            bb.extend_with(node.pos);
+        }
+
+        if !bb.is_positive() {
             let scale = 1.0f32.clamp(style.min_scale, style.max_scale);
 
             return SnarlState {
@@ -152,17 +158,13 @@ impl SnarlState {
             };
         }
 
-        let mut bb = Rect::NOTHING;
-
-        for (_, node) in snarl.nodes.iter() {
-            bb.extend_with(node.pos);
-            bb.extend_with(node.pos + vec2(100.0, 100.0));
-        }
+        bb = bb.expand(100.0);
 
         let bb_size = bb.size();
         let viewport_size = viewport.size();
 
         let scale = (viewport_size.x / bb_size.x)
+            .min(1.0)
             .min(viewport_size.y / bb_size.y)
             .min(style.max_scale)
             .max(style.min_scale);

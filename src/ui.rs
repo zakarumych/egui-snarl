@@ -375,7 +375,7 @@ impl<T> Snarl<T> {
 
                                 ui.allocate_exact_size(header_drag_space, Sense::hover());
 
-                                let r = viewer.show_header(
+                                viewer.show_header(
                                     node_idx,
                                     &inputs,
                                     &outputs,
@@ -384,11 +384,11 @@ impl<T> Snarl<T> {
                                     self,
                                 );
 
-                                header_rect.max = r.rect.max;
-
-                                header_frame_rect =
-                                    header_frame.total_margin().expand_rect(header_rect);
+                                header_rect.max = ui.min_rect().max;
                             });
+
+                            header_frame_rect =
+                                header_frame.total_margin().expand_rect(header_rect);
 
                             ui.advance_cursor_after_rect(Rect::from_min_max(
                                 header_rect.min,
@@ -461,20 +461,22 @@ impl<T> Snarl<T> {
                                                 let (pin_id, _) =
                                                     ui.allocate_space(vec2(pin_size, pin_size));
 
+                                                let y0 = ui.cursor().min.y;
+
                                                 // Show input content
-                                                let r = viewer.show_input(
+                                                let pin_info = viewer.show_input(
                                                     &in_pin,
                                                     ui,
                                                     snarl_state.scale(),
                                                     self,
                                                 );
-                                                let pin_info = r.inner;
-                                                let r = r.response;
+
+                                                let y1 = ui.min_rect().max.y;
+
                                                 ui.end_row();
 
                                                 // Centered vertically.
-                                                let y = min_pin_y
-                                                    .max((r.rect.min.y + r.rect.max.y) * 0.5);
+                                                let y = min_pin_y.max((y0 + y1) * 0.5);
 
                                                 let pin_pos = pos2(input_x, y);
 
@@ -582,19 +584,22 @@ impl<T> Snarl<T> {
                                                     )
                                                     .inner;
 
+                                                let y0 = ui.cursor().min.y;
+
                                                 // Show output content
-                                                let r = viewer.show_output(
+                                                let pin_info = viewer.show_output(
                                                     &out_pin,
                                                     ui,
                                                     snarl_state.scale(),
                                                     self,
                                                 );
-                                                let pin_info = r.inner;
-                                                let r = r.response;
+
+                                                let y1 = ui.min_rect().max.y;
+
+                                                ui.end_row();
 
                                                 // Centered vertically.
-                                                let y = min_pin_y
-                                                    .max((r.rect.min.y + r.rect.max.y) * 0.5);
+                                                let y = min_pin_y.max((y0 + y1) * 0.5);
 
                                                 let pin_pos = pos2(output_x, y);
 

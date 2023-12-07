@@ -7,7 +7,7 @@
 
 pub mod ui;
 
-use egui::ahash::HashSet;
+use egui::{ahash::HashSet, Pos2};
 use slab::Slab;
 
 impl<T> Default for Snarl<T> {
@@ -325,6 +325,18 @@ impl<T> Snarl<T> {
         }
     }
 
+    pub fn nodes_pos(&self) -> NodesPosIter<'_, T> {
+        NodesPosIter {
+            nodes: self.nodes.iter(),
+        }
+    }
+
+    pub fn nodes_pos_mut(&mut self) -> NodesPosIterMut<'_, T> {
+        NodesPosIterMut {
+            nodes: self.nodes.iter_mut(),
+        }
+    }
+
     pub fn node_indices(&self) -> NodesIndicesIter<'_, T> {
         NodesIndicesIter {
             nodes: self.nodes.iter(),
@@ -333,6 +345,18 @@ impl<T> Snarl<T> {
 
     pub fn nodes_indices_mut(&mut self) -> NodesIndicesIterMut<'_, T> {
         NodesIndicesIterMut {
+            nodes: self.nodes.iter_mut(),
+        }
+    }
+
+    pub fn nodes_pos_indices(&self) -> NodesPosIndicesIter<'_, T> {
+        NodesPosIndicesIter {
+            nodes: self.nodes.iter(),
+        }
+    }
+
+    pub fn nodes_pos_indices_mut(&mut self) -> NodesPosIndicesIterMut<'_, T> {
+        NodesPosIndicesIterMut {
             nodes: self.nodes.iter_mut(),
         }
     }
@@ -382,6 +406,50 @@ impl<'a, T> Iterator for NodesIterMut<'a, T> {
     }
 }
 
+pub struct NodesPosIter<'a, T> {
+    nodes: slab::Iter<'a, Node<T>>,
+}
+
+impl<'a, T> Iterator for NodesPosIter<'a, T> {
+    type Item = (Pos2, &'a T);
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.nodes.size_hint()
+    }
+
+    fn next(&mut self) -> Option<(Pos2, &'a T)> {
+        let (_, node) = self.nodes.next()?;
+        Some((node.pos, &node.value))
+    }
+
+    fn nth(&mut self, n: usize) -> Option<(Pos2, &'a T)> {
+        let (_, node) = self.nodes.nth(n)?;
+        Some((node.pos, &node.value))
+    }
+}
+
+pub struct NodesPosIterMut<'a, T> {
+    nodes: slab::IterMut<'a, Node<T>>,
+}
+
+impl<'a, T> Iterator for NodesPosIterMut<'a, T> {
+    type Item = (Pos2, &'a mut T);
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.nodes.size_hint()
+    }
+
+    fn next(&mut self) -> Option<(Pos2, &'a mut T)> {
+        let (_, node) = self.nodes.next()?;
+        Some((node.pos, &mut node.value))
+    }
+
+    fn nth(&mut self, n: usize) -> Option<(Pos2, &'a mut T)> {
+        let (_, node) = self.nodes.nth(n)?;
+        Some((node.pos, &mut node.value))
+    }
+}
+
 pub struct NodesIndicesIter<'a, T> {
     nodes: slab::Iter<'a, Node<T>>,
 }
@@ -423,5 +491,49 @@ impl<'a, T> Iterator for NodesIndicesIterMut<'a, T> {
     fn nth(&mut self, n: usize) -> Option<(usize, &'a mut T)> {
         let (idx, node) = self.nodes.nth(n)?;
         Some((idx, &mut node.value))
+    }
+}
+
+pub struct NodesPosIndicesIter<'a, T> {
+    nodes: slab::Iter<'a, Node<T>>,
+}
+
+impl<'a, T> Iterator for NodesPosIndicesIter<'a, T> {
+    type Item = (usize, Pos2, &'a T);
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.nodes.size_hint()
+    }
+
+    fn next(&mut self) -> Option<(usize, Pos2, &'a T)> {
+        let (idx, node) = self.nodes.next()?;
+        Some((idx, node.pos, &node.value))
+    }
+
+    fn nth(&mut self, n: usize) -> Option<(usize, Pos2, &'a T)> {
+        let (idx, node) = self.nodes.nth(n)?;
+        Some((idx, node.pos, &node.value))
+    }
+}
+
+pub struct NodesPosIndicesIterMut<'a, T> {
+    nodes: slab::IterMut<'a, Node<T>>,
+}
+
+impl<'a, T> Iterator for NodesPosIndicesIterMut<'a, T> {
+    type Item = (usize, Pos2, &'a mut T);
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.nodes.size_hint()
+    }
+
+    fn next(&mut self) -> Option<(usize, Pos2, &'a mut T)> {
+        let (idx, node) = self.nodes.next()?;
+        Some((idx, node.pos, &mut node.value))
+    }
+
+    fn nth(&mut self, n: usize) -> Option<(usize, Pos2, &'a mut T)> {
+        let (idx, node) = self.nodes.nth(n)?;
+        Some((idx, node.pos, &mut node.value))
     }
 }

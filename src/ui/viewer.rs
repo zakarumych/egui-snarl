@@ -1,4 +1,4 @@
-use egui::{Color32, Pos2, Response, Style, Ui};
+use egui::{Color32, Pos2, Style, Ui};
 
 use crate::Snarl;
 
@@ -21,9 +21,9 @@ pub trait SnarlViewer<T> {
         ui: &mut Ui,
         scale: f32,
         snarl: &mut Snarl<T>,
-    ) -> Response {
+    ) {
         let _ = (idx, inputs, outputs, scale);
-        ui.label(self.title(snarl.get_node(idx)))
+        ui.label(self.title(snarl.get_node(idx)));
     }
 
     /// Returns number of output pins of the node.
@@ -33,13 +33,8 @@ pub trait SnarlViewer<T> {
     fn inputs(&mut self, node: &T) -> usize;
 
     /// Renders the node's input pin.
-    fn show_input(
-        &mut self,
-        pin: &InPin,
-        ui: &mut Ui,
-        scale: f32,
-        snarl: &mut Snarl<T>,
-    ) -> egui::InnerResponse<PinInfo>;
+    fn show_input(&mut self, pin: &InPin, ui: &mut Ui, scale: f32, snarl: &mut Snarl<T>)
+        -> PinInfo;
 
     /// Renders the node's output pin.
     fn show_output(
@@ -48,7 +43,7 @@ pub trait SnarlViewer<T> {
         ui: &mut Ui,
         scale: f32,
         snarl: &mut Snarl<T>,
-    ) -> egui::InnerResponse<PinInfo>;
+    ) -> PinInfo;
 
     /// Returns color of the node's input pin.
     /// Called when pin in not visible.
