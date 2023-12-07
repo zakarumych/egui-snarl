@@ -253,6 +253,16 @@ impl SnarlState {
         self.dirty = true;
     }
 
+    pub fn start_new_wires_in(&mut self, pins: &[InPinId]) {
+        self.new_wires = Some(NewWires::In(pins.to_vec()));
+        self.dirty = true;
+    }
+
+    pub fn start_new_wires_out(&mut self, pins: &[OutPinId]) {
+        self.new_wires = Some(NewWires::Out(pins.to_vec()));
+        self.dirty = true;
+    }
+
     pub fn add_new_wire_in(&mut self, pin: InPinId) {
         match self.new_wires {
             Some(NewWires::In(ref mut pins)) => {

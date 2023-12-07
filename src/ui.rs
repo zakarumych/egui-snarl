@@ -499,9 +499,17 @@ impl<T> Snarl<T> {
                                                     }
                                                 }
                                                 if r.drag_started_by(PointerButton::Primary) {
-                                                    snarl_state.start_new_wire_in(in_pin.id);
+                                                    if input.modifiers.command {
+                                                        snarl_state
+                                                            .start_new_wires_out(&in_pin.remotes);
+                                                        if !input.modifiers.shift {
+                                                            self.drop_inputs(in_pin.id);
+                                                        }
+                                                    } else {
+                                                        snarl_state.start_new_wire_in(in_pin.id);
+                                                    }
                                                 }
-                                                if r.drag_released_by(PointerButton::Primary) {
+                                                if r.drag_released() {
                                                     drag_released = true;
                                                 }
 
@@ -610,9 +618,18 @@ impl<T> Snarl<T> {
                                                     }
                                                 }
                                                 if r.drag_started_by(PointerButton::Primary) {
-                                                    snarl_state.start_new_wire_out(out_pin.id);
+                                                    if input.modifiers.command {
+                                                        snarl_state
+                                                            .start_new_wires_in(&out_pin.remotes);
+
+                                                        if !input.modifiers.shift {
+                                                            self.drop_outputs(out_pin.id);
+                                                        }
+                                                    } else {
+                                                        snarl_state.start_new_wire_out(out_pin.id);
+                                                    }
                                                 }
-                                                if r.drag_released_by(PointerButton::Primary) {
+                                                if r.drag_released() {
                                                     drag_released = true;
                                                 }
 
