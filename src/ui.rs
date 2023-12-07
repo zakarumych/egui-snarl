@@ -324,8 +324,8 @@ impl<T> Snarl<T> {
                             self,
                         );
                     });
-
                     if !self.nodes.contains(node_idx) {
+                        node_state.clear(ui.ctx());
                         // If removed
                         return;
                     }
@@ -355,8 +355,7 @@ impl<T> Snarl<T> {
                         );
 
                         header_frame.show(header_ui, |ui: &mut Ui| {
-                            // ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-                            ui.horizontal(|ui| {
+                            ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
                                 if collapsible {
                                     let (_, r) = ui.allocate_exact_size(
                                         vec2(
@@ -398,7 +397,6 @@ impl<T> Snarl<T> {
                                 ),
                             ));
                         });
-
                         if !self.nodes.contains(node_idx) {
                             node_state.clear(ui.ctx());
                             // If removed
@@ -446,100 +444,93 @@ impl<T> Snarl<T> {
 
                             inputs_ui.set_clip_rect(pins_clip_rect.intersect(viewport));
 
-                            let mut inputs_rect = pins_rect;
+                            // Input pins on the left.
+                            let r = inputs_ui.with_layout(Layout::top_down(Align::Min), |ui| {
+                                // let r = Grid::new((node_id, "inputs")).min_col_width(0.0).show(ui, |ui| {
+                                for in_pin in inputs {
+                                    // Show input pin.
+                                    ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
+                                        // Allocate space for pin shape.
+                                        let (pin_id, _) =
+                                            ui.allocate_space(vec2(pin_size, pin_size));
 
-                            inputs_ui.horizontal(|ui| {
-                                // Input pins on the left.
-                                let r = ui.with_layout(Layout::top_down(Align::Min), |ui| {
-                                    // let r = Grid::new((node_id, "inputs")).min_col_width(0.0).show(ui, |ui| {
-                                    for in_pin in inputs {
-                                        // Show input pin.
-                                        ui.with_layout(
-                                            Layout::left_to_right(Align::Center),
-                                            |ui| {
-                                                // Allocate space for pin shape.
-                                                let (pin_id, _) =
-                                                    ui.allocate_space(vec2(pin_size, pin_size));
+                                        let y0 = ui.cursor().min.y;
 
-                                                let y0 = ui.cursor().min.y;
-
-                                                // Show input content
-                                                let pin_info = viewer.show_input(
-                                                    &in_pin,
-                                                    ui,
-                                                    snarl_state.scale(),
-                                                    self,
-                                                );
-
-                                                let y1 = ui.min_rect().max.y;
-
-                                                ui.end_row();
-
-                                                // Centered vertically.
-                                                let y = min_pin_y.max((y0 + y1) * 0.5);
-
-                                                let pin_pos = pos2(input_x, y);
-
-                                                input_positions.insert(in_pin.id, pin_pos);
-                                                input_colors.insert(in_pin.id, pin_info.fill);
-
-                                                // Interact with pin shape.
-                                                let r = ui.interact(
-                                                    Rect::from_center_size(
-                                                        pin_pos,
-                                                        vec2(pin_size, pin_size),
-                                                    ),
-                                                    pin_id,
-                                                    Sense::click_and_drag(),
-                                                );
-
-                                                if r.clicked_by(PointerButton::Secondary) {
-                                                    if snarl_state.has_new_wires() {
-                                                        snarl_state.remove_new_wire_in(in_pin.id);
-                                                    } else {
-                                                        let _ = viewer.drop_inputs(&in_pin, self);
-                                                    }
-                                                }
-                                                if r.drag_started_by(PointerButton::Primary) {
-                                                    if input.modifiers.command {
-                                                        snarl_state
-                                                            .start_new_wires_out(&in_pin.remotes);
-                                                        if !input.modifiers.shift {
-                                                            self.drop_inputs(in_pin.id);
-                                                        }
-                                                    } else {
-                                                        snarl_state.start_new_wire_in(in_pin.id);
-                                                    }
-                                                }
-                                                if r.drag_released() {
-                                                    drag_released = true;
-                                                }
-
-                                                let mut pin_size = pin_size;
-
-                                                match input.hover_pos {
-                                                    Some(hover_pos)
-                                                        if r.rect.contains(hover_pos) =>
-                                                    {
-                                                        if input.modifiers.shift {
-                                                            snarl_state.add_new_wire_in(in_pin.id);
-                                                        } else if input.secondary_pressed {
-                                                            snarl_state
-                                                                .remove_new_wire_in(in_pin.id);
-                                                        }
-                                                        pin_hovered = Some(AnyPin::In(in_pin.id));
-                                                        pin_size *= 1.2;
-                                                    }
-                                                    _ => {}
-                                                }
-
-                                                draw_pin(ui.painter(), pin_info, pin_pos, pin_size);
-                                            },
+                                        // Show input content
+                                        let pin_info = viewer.show_input(
+                                            &in_pin,
+                                            ui,
+                                            snarl_state.scale(),
+                                            self,
                                         );
-                                    }
-                                });
-                                inputs_rect = r.response.rect;
+                                        if !self.nodes.contains(node_idx) {
+                                            // If removed
+                                            return;
+                                        }
+
+                                        let y1 = ui.min_rect().max.y;
+
+                                        // ui.end_row();
+
+                                        // Centered vertically.
+                                        let y = min_pin_y.max((y0 + y1) * 0.5);
+
+                                        let pin_pos = pos2(input_x, y);
+
+                                        input_positions.insert(in_pin.id, pin_pos);
+                                        input_colors.insert(in_pin.id, pin_info.fill);
+
+                                        // Interact with pin shape.
+                                        let r = ui.interact(
+                                            Rect::from_center_size(
+                                                pin_pos,
+                                                vec2(pin_size, pin_size),
+                                            ),
+                                            pin_id,
+                                            Sense::click_and_drag(),
+                                        );
+
+                                        if r.clicked_by(PointerButton::Secondary) {
+                                            if snarl_state.has_new_wires() {
+                                                snarl_state.remove_new_wire_in(in_pin.id);
+                                            } else {
+                                                let _ = viewer.drop_inputs(&in_pin, self);
+                                            }
+                                        }
+                                        if r.drag_started_by(PointerButton::Primary) {
+                                            if input.modifiers.command {
+                                                snarl_state.start_new_wires_out(&in_pin.remotes);
+                                                if !input.modifiers.shift {
+                                                    self.drop_inputs(in_pin.id);
+                                                }
+                                            } else {
+                                                snarl_state.start_new_wire_in(in_pin.id);
+                                            }
+                                        }
+                                        if r.drag_released() {
+                                            drag_released = true;
+                                        }
+
+                                        let mut pin_size = pin_size;
+
+                                        match input.hover_pos {
+                                            Some(hover_pos) if r.rect.contains(hover_pos) => {
+                                                if input.modifiers.shift {
+                                                    snarl_state.add_new_wire_in(in_pin.id);
+                                                } else if input.secondary_pressed {
+                                                    snarl_state.remove_new_wire_in(in_pin.id);
+                                                }
+                                                pin_hovered = Some(AnyPin::In(in_pin.id));
+                                                pin_size *= 1.2;
+                                            }
+                                            _ => {}
+                                        }
+
+                                        draw_pin(ui.painter(), pin_info, pin_pos, pin_size);
+                                    });
+                                }
                             });
+                            let inputs_rect = r.response.rect;
 
                             if !self.nodes.contains(node_idx) {
                                 node_state.clear(ui.ctx());
@@ -559,112 +550,99 @@ impl<T> Snarl<T> {
 
                             outputs_ui.set_clip_rect(pins_clip_rect.intersect(viewport));
 
-                            let mut outputs_rect = pins_rect;
+                            // Output pins on the right.
+                            let r = outputs_ui.with_layout(Layout::top_down(Align::Max), |ui| {
+                                // let r = Grid::new((node_id, "outputs")).min_col_width(0.0).show(ui, |ui| {
 
-                            outputs_ui.horizontal(|ui| {
-                                // Output pins on the right.
-                                let r = ui.with_layout(Layout::top_down(Align::Max), |ui| {
-                                    // let r = Grid::new((node_id, "outputs")).min_col_width(0.0).show(ui, |ui| {
+                                for out_pin in outputs {
+                                    // Show output pin.
+                                    ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+                                        // Allocate space for pin shape.
 
-                                    for out_pin in outputs {
-                                        // Show output pin.
-                                        ui.with_layout(
-                                            Layout::right_to_left(Align::Center),
-                                            |ui| {
-                                                // Allocate space for pin shape.
+                                        let (pin_id, _) =
+                                            ui.allocate_space(vec2(pin_size, pin_size));
 
-                                                let (pin_id, _) = ui
-                                                    .with_layout(
-                                                        Layout::right_to_left(Align::Center),
-                                                        |ui| {
-                                                            ui.allocate_space(vec2(
-                                                                pin_size, pin_size,
-                                                            ))
-                                                        },
-                                                    )
-                                                    .inner;
+                                        let y0 = ui.cursor().min.y;
 
-                                                let y0 = ui.cursor().min.y;
-
-                                                // Show output content
-                                                let pin_info = viewer.show_output(
-                                                    &out_pin,
-                                                    ui,
-                                                    snarl_state.scale(),
-                                                    self,
-                                                );
-
-                                                let y1 = ui.min_rect().max.y;
-
-                                                ui.end_row();
-
-                                                // Centered vertically.
-                                                let y = min_pin_y.max((y0 + y1) * 0.5);
-
-                                                let pin_pos = pos2(output_x, y);
-
-                                                output_positions.insert(out_pin.id, pin_pos);
-                                                output_colors.insert(out_pin.id, pin_info.fill);
-
-                                                let r = ui.interact(
-                                                    Rect::from_center_size(
-                                                        pin_pos,
-                                                        vec2(pin_size, pin_size),
-                                                    ),
-                                                    pin_id,
-                                                    Sense::click_and_drag(),
-                                                );
-
-                                                if r.clicked_by(PointerButton::Secondary) {
-                                                    if snarl_state.has_new_wires() {
-                                                        snarl_state.remove_new_wire_out(out_pin.id);
-                                                    } else {
-                                                        let _ = viewer.drop_outputs(&out_pin, self);
-                                                    }
-                                                }
-                                                if r.drag_started_by(PointerButton::Primary) {
-                                                    if input.modifiers.command {
-                                                        snarl_state
-                                                            .start_new_wires_in(&out_pin.remotes);
-
-                                                        if !input.modifiers.shift {
-                                                            self.drop_outputs(out_pin.id);
-                                                        }
-                                                    } else {
-                                                        snarl_state.start_new_wire_out(out_pin.id);
-                                                    }
-                                                }
-                                                if r.drag_released() {
-                                                    drag_released = true;
-                                                }
-
-                                                let mut pin_size = pin_size;
-                                                match input.hover_pos {
-                                                    Some(hover_pos)
-                                                        if r.rect.contains(hover_pos) =>
-                                                    {
-                                                        if input.modifiers.shift {
-                                                            snarl_state
-                                                                .add_new_wire_out(out_pin.id);
-                                                        } else if input.secondary_pressed {
-                                                            snarl_state
-                                                                .remove_new_wire_out(out_pin.id);
-                                                        }
-                                                        pin_hovered = Some(AnyPin::Out(out_pin.id));
-                                                        pin_size *= 1.2;
-                                                    }
-                                                    _ => {}
-                                                }
-                                                draw_pin(ui.painter(), pin_info, pin_pos, pin_size);
-                                            },
+                                        // Show output content
+                                        let pin_info = viewer.show_output(
+                                            &out_pin,
+                                            ui,
+                                            snarl_state.scale(),
+                                            self,
                                         );
-                                    }
-                                });
+                                        if !self.nodes.contains(node_idx) {
+                                            // If removed
+                                            return;
+                                        }
 
-                                outputs_rect = r.response.rect;
+                                        let y1 = ui.min_rect().max.y;
+
+                                        // ui.end_row();
+
+                                        // Centered vertically.
+                                        let y = min_pin_y.max((y0 + y1) * 0.5);
+
+                                        let pin_pos = pos2(output_x, y);
+
+                                        output_positions.insert(out_pin.id, pin_pos);
+                                        output_colors.insert(out_pin.id, pin_info.fill);
+
+                                        let r = ui.interact(
+                                            Rect::from_center_size(
+                                                pin_pos,
+                                                vec2(pin_size, pin_size),
+                                            ),
+                                            pin_id,
+                                            Sense::click_and_drag(),
+                                        );
+
+                                        if r.clicked_by(PointerButton::Secondary) {
+                                            if snarl_state.has_new_wires() {
+                                                snarl_state.remove_new_wire_out(out_pin.id);
+                                            } else {
+                                                let _ = viewer.drop_outputs(&out_pin, self);
+                                            }
+                                        }
+                                        if r.drag_started_by(PointerButton::Primary) {
+                                            if input.modifiers.command {
+                                                snarl_state.start_new_wires_in(&out_pin.remotes);
+
+                                                if !input.modifiers.shift {
+                                                    self.drop_outputs(out_pin.id);
+                                                }
+                                            } else {
+                                                snarl_state.start_new_wire_out(out_pin.id);
+                                            }
+                                        }
+                                        if r.drag_released() {
+                                            drag_released = true;
+                                        }
+
+                                        let mut pin_size = pin_size;
+                                        match input.hover_pos {
+                                            Some(hover_pos) if r.rect.contains(hover_pos) => {
+                                                if input.modifiers.shift {
+                                                    snarl_state.add_new_wire_out(out_pin.id);
+                                                } else if input.secondary_pressed {
+                                                    snarl_state.remove_new_wire_out(out_pin.id);
+                                                }
+                                                pin_hovered = Some(AnyPin::Out(out_pin.id));
+                                                pin_size *= 1.2;
+                                            }
+                                            _ => {}
+                                        }
+                                        draw_pin(ui.painter(), pin_info, pin_pos, pin_size);
+                                    });
+                                }
                             });
+                            let outputs_rect = r.response.rect;
 
-                            // ui.allocate_space(ui.available_size());
+                            if !self.nodes.contains(node_idx) {
+                                node_state.clear(ui.ctx());
+                                // If removed
+                                return;
+                            }
 
                             ui.expand_to_include_rect(header_rect);
                             ui.expand_to_include_rect(inputs_rect.intersect(pins_clip_rect));
@@ -699,6 +677,12 @@ impl<T> Snarl<T> {
                                     in_pin.id,
                                     viewer.input_color(&in_pin, &node_style, self),
                                 );
+
+                                if !self.nodes.contains(node_idx) {
+                                    node_state.clear(ui.ctx());
+                                    // If removed
+                                    return;
+                                }
                             }
                             for out_pin in outputs {
                                 let pin_pos = pos2(output_x, min_pin_y);
@@ -707,6 +691,12 @@ impl<T> Snarl<T> {
                                     out_pin.id,
                                     viewer.output_color(&out_pin, &node_style, self),
                                 );
+
+                                if !self.nodes.contains(node_idx) {
+                                    node_state.clear(ui.ctx());
+                                    // If removed
+                                    return;
+                                }
                             }
                         }
                     });
