@@ -1,8 +1,8 @@
 use egui::{Color32, Pos2, Style, Ui};
 
-use crate::Snarl;
+use crate::{InPin, OutPin, Snarl};
 
-use super::pin::{InPin, OutPin, PinInfo};
+use super::pin::PinInfo;
 
 /// SnarlViewer is a trait for viewing a Snarl.
 ///

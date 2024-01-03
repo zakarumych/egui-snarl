@@ -360,6 +360,14 @@ impl<T> Snarl<T> {
             nodes: self.nodes.iter_mut(),
         }
     }
+
+    pub fn in_pin(&self, pin: InPinId) -> InPin {
+        InPin::new(self, pin)
+    }
+
+    pub fn out_pin(&self, pin: OutPinId) -> OutPin {
+        OutPin::new(self, pin)
+    }
 }
 
 pub struct NodesIter<'a, T> {
@@ -535,5 +543,37 @@ impl<'a, T> Iterator for NodesPosIndicesIterMut<'a, T> {
     fn nth(&mut self, n: usize) -> Option<(usize, Pos2, &'a mut T)> {
         let (idx, node) = self.nodes.nth(n)?;
         Some((idx, node.pos, &mut node.value))
+    }
+}
+
+/// Node and its output pin.
+#[derive(Clone, Debug)]
+pub struct OutPin {
+    pub id: OutPinId,
+    pub remotes: Vec<InPinId>,
+}
+
+/// Node and its output pin.
+#[derive(Clone, Debug)]
+pub struct InPin {
+    pub id: InPinId,
+    pub remotes: Vec<OutPinId>,
+}
+
+impl OutPin {
+    fn new<T>(snarl: &Snarl<T>, pin: OutPinId) -> Self {
+        OutPin {
+            id: pin,
+            remotes: snarl.wires.wired_inputs(pin).collect(),
+        }
+    }
+}
+
+impl InPin {
+    fn new<T>(snarl: &Snarl<T>, pin: InPinId) -> Self {
+        InPin {
+            id: pin,
+            remotes: snarl.wires.wired_outputs(pin).collect(),
+        }
     }
 }

@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use eframe::{App, CreationContext};
 use egui::{Color32, Ui};
 use egui_snarl::{
-    ui::{InPin, OutPin, PinInfo, SnarlStyle, SnarlViewer},
-    InPinId, Snarl,
+    ui::{PinInfo, SnarlStyle, SnarlViewer},
+    InPin, InPinId, OutPin, Snarl,
 };
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]

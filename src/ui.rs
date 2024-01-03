@@ -9,7 +9,7 @@ use egui::{
     Stroke, Style, Ui, Vec2,
 };
 
-use crate::{InPinId, Node, OutPinId, Snarl};
+use crate::{InPin, InPinId, Node, OutPin, OutPinId, Snarl};
 
 mod pin;
 mod state;
@@ -24,7 +24,7 @@ use self::{
 };
 
 pub use self::{
-    pin::{AnyPin, InPin, OutPin, PinInfo, PinShape},
+    pin::{AnyPin, PinInfo, PinShape},
     viewer::SnarlViewer,
     wire::WireLayer,
     zoom::Zoom,
@@ -292,7 +292,7 @@ impl<T> Snarl<T> {
 
                     let inputs = (0..inputs_count)
                         .map(|idx| {
-                            InPin::input(
+                            InPin::new(
                                 &self,
                                 InPinId {
                                     node: node_idx,
@@ -304,7 +304,7 @@ impl<T> Snarl<T> {
 
                     let outputs = (0..outputs_count)
                         .map(|idx| {
-                            OutPin::output(
+                            OutPin::new(
                                 &self,
                                 OutPinId {
                                     node: node_idx,
@@ -741,8 +741,8 @@ impl<T> Snarl<T> {
 
                 if let Some(wire) = hovered_wire {
                     if bg_r.clicked_by(PointerButton::Secondary) {
-                        let out_pin = OutPin::output(&self, wire.out_pin);
-                        let in_pin = InPin::input(&self, wire.in_pin);
+                        let out_pin = OutPin::new(&self, wire.out_pin);
+                        let in_pin = InPin::new(&self, wire.in_pin);
 
                         let _ = viewer.disconnect(&out_pin, &in_pin, self);
                     }
@@ -854,8 +854,8 @@ impl<T> Snarl<T> {
                         (Some(NewWires::In(in_pins)), Some(AnyPin::Out(out_pin))) => {
                             for in_pin in in_pins {
                                 let _ = viewer.connect(
-                                    &OutPin::output(self, out_pin),
-                                    &InPin::input(self, in_pin),
+                                    &OutPin::new(self, out_pin),
+                                    &InPin::new(self, in_pin),
                                     self,
                                 );
                             }
@@ -863,8 +863,8 @@ impl<T> Snarl<T> {
                         (Some(NewWires::Out(out_pins)), Some(AnyPin::In(in_pin))) => {
                             for out_pin in out_pins {
                                 let _ = viewer.connect(
-                                    &OutPin::output(self, out_pin),
-                                    &InPin::input(self, in_pin),
+                                    &OutPin::new(self, out_pin),
+                                    &InPin::new(self, in_pin),
                                     self,
                                 );
                             }
