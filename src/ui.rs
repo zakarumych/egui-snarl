@@ -67,6 +67,8 @@ pub struct SnarlStyle {
     pub min_scale: f32,
     pub max_scale: f32,
     pub scale_velocity: f32,
+
+    pub centering: bool
 }
 
 impl SnarlStyle {
@@ -92,6 +94,7 @@ impl SnarlStyle {
             min_scale: 0.1,
             max_scale: 2.0,
             scale_velocity: 0.005,
+            centering: true
         }
     }
 }
@@ -253,6 +256,17 @@ impl<T> Snarl<T> {
                 let draw_order = self.draw_order.clone();
                 let mut drag_released = false;
 
+                let mut center = vec2(0.0, 0.0);
+                let mut need_centering = false;
+                // Centering nodes
+                if style.centering{
+                    ui.input(|i|{
+                        if i.pointer.button_double_clicked(PointerButton::Primary){
+                            need_centering = true;
+                        }
+                    });
+                }
+
                 let mut show_node = |node_idx: usize| {
                     let Node {
                         pos,
@@ -339,6 +353,11 @@ impl<T> Snarl<T> {
                         node_id,
                     );
                     node_ui.set_style(node_style.clone());
+
+                    //Centering
+                    if need_centering{
+                        center += pos.to_vec2();
+                    }
 
                     node_frame.show(node_ui, |ui| {
                         // Render header frame.
@@ -705,6 +724,8 @@ impl<T> Snarl<T> {
                     ui.ctx().request_repaint();
                 };
 
+                let center_divider = vec2(draw_order.len() as f32, draw_order.len() as f32);
+
                 for node_idx in draw_order {
                     show_node(node_idx);
                 }
@@ -767,6 +788,11 @@ impl<T> Snarl<T> {
                         self,
                     );
                 });
+
+                if need_centering{
+                    center = center / center_divider;
+                    snarl_state.set_offset(center);   
+                }
 
                 let mut wire_shapes = Vec::new();
 

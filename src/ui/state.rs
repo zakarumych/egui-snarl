@@ -325,4 +325,9 @@ impl SnarlState {
         self.dirty |= self.new_wires.is_some();
         self.new_wires.take()
     }
+
+    pub fn set_offset(&mut self, offset: Vec2) {
+        self.offset = offset;
+        self.dirty = true;
+    }
 }
