@@ -790,7 +790,7 @@ impl<T> Snarl<T> {
                 });
 
                 if need_centering{
-                    center = center / center_divider;
+                    center = center / center_divider * vec2(snarl_state.scale(), snarl_state.scale());
                     snarl_state.set_offset(center);   
                 }
 
