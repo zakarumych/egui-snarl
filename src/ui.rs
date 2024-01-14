@@ -724,7 +724,8 @@ impl<T> Snarl<T> {
                     ui.ctx().request_repaint();
                 };
 
-                let center_divider = vec2(draw_order.len() as f32, draw_order.len() as f32);
+                //Save len of draw_order
+                let draw_order_len = draw_order.len();
 
                 for node_idx in draw_order {
                     show_node(node_idx);
