@@ -11,6 +11,7 @@ use egui::{
 
 use crate::{InPin, InPinId, Node, OutPin, OutPinId, Snarl};
 
+mod background_pattern;
 mod pin;
 mod state;
 mod viewer;
@@ -18,6 +19,7 @@ mod wire;
 mod zoom;
 
 use self::{
+    background_pattern::BackgroundPattern,
     pin::draw_pin,
     state::{NewWires, NodeState, SnarlState},
     wire::{draw_wire, hit_wire, mix_colors},
@@ -29,13 +31,6 @@ pub use self::{
     wire::WireLayer,
     zoom::Zoom,
 };
-
-/// Background pattern show beneath nodes and wires.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BackgroundPattern {
-    /// Linear grid.
-    Grid { spacing: Vec2, angle: f32 },
-}
 
 /// Style for rendering Snarl.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -83,10 +78,10 @@ impl SnarlStyle {
             collapsible: true,
 
             bg_fill: None,
-            bg_pattern: Some(BackgroundPattern::Grid {
-                spacing: vec2(5.0, 5.0),
-                angle: 1.0,
-            }),
+            bg_pattern: Some(BackgroundPattern::Grid(background_pattern::Grid::new(
+                vec2(5.0, 5.0),
+                1.0,
+            ))),
             background_pattern_stroke: None,
 
             min_scale: 0.1,
@@ -112,6 +107,18 @@ struct Input {
 }
 
 impl<T> Snarl<T> {
+    fn draw_background(
+        &mut self,
+        style: &SnarlStyle,
+        snarl_state: &SnarlState,
+        viewport: &Rect,
+        ui: &mut Ui,
+    ) {
+        if let Some(pattern) = &style.bg_pattern {
+            pattern.draw(style, snarl_state, viewport, ui);
+        }
+    }
+
     /// Render [`Snarl`] using given viewer and style into the [`Ui`].
     pub fn show<V>(&mut self, viewer: &mut V, style: &SnarlStyle, id_source: impl Hash, ui: &mut Ui)
     where
@@ -154,57 +161,8 @@ impl<T> Snarl<T> {
                 let mut node_style: Style = (**ui.style()).clone();
                 node_style.zoom(snarl_state.scale());
 
-                match style.bg_pattern {
-                    None => {}
-                    Some(BackgroundPattern::Grid { spacing, angle }) => {
-                        let stroke = Stroke::new(
-                            bg_stroke.width * snarl_state.scale().max(1.0),
-                            bg_stroke.color.gamma_multiply(snarl_state.scale().min(1.0)),
-                        );
-
-                        let spacing = ui.spacing().icon_width * spacing;
-
-                        let rot = Rot2::from_angle(angle);
-                        let rot_inv = rot.inverse();
-
-                        let graph_viewport = Rect::from_min_max(
-                            snarl_state.screen_pos_to_graph(viewport.min, viewport),
-                            snarl_state.screen_pos_to_graph(viewport.max, viewport),
-                        );
-
-                        let pattern_bounds = graph_viewport.rotate_bb(rot_inv);
-
-                        let min_x = (pattern_bounds.min.x / spacing.x).ceil();
-                        let max_x = (pattern_bounds.max.x / spacing.x).floor();
-
-                        for x in 0..=(max_x - min_x) as i64 {
-                            let x = (x as f32 + min_x) * spacing.x;
-
-                            let top = (rot * vec2(x, pattern_bounds.min.y)).to_pos2();
-                            let bottom = (rot * vec2(x, pattern_bounds.max.y)).to_pos2();
-
-                            let top = snarl_state.graph_pos_to_screen(top, viewport);
-                            let bottom = snarl_state.graph_pos_to_screen(bottom, viewport);
-
-                            ui.painter().line_segment([top, bottom], stroke);
-                        }
-
-                        let min_y = (pattern_bounds.min.y / spacing.y).ceil();
-                        let max_y = (pattern_bounds.max.y / spacing.y).floor();
-
-                        for y in 0..=(max_y - min_y) as i64 {
-                            let y = (y as f32 + min_y) * spacing.y;
-
-                            let top = (rot * vec2(pattern_bounds.min.x, y)).to_pos2();
-                            let bottom = (rot * vec2(pattern_bounds.max.x, y)).to_pos2();
-
-                            let top = snarl_state.graph_pos_to_screen(top, viewport);
-                            let bottom = snarl_state.graph_pos_to_screen(bottom, viewport);
-
-                            ui.painter().line_segment([top, bottom], stroke);
-                        }
-                    }
-                }
+                //Draw background
+                self.draw_background(style, &snarl_state, &viewport, ui);
 
                 let pin_size = style
                     .pin_size
