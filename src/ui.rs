@@ -3,7 +3,6 @@ use std::hash::Hash;
 use egui::{
     ahash::{HashMap, HashMapExt},
     collapsing_header::paint_default_icon,
-    emath::Rot2,
     epaint::Shadow,
     pos2, vec2, Align, Color32, Frame, Layout, Modifiers, PointerButton, Pos2, Rect, Sense, Shape,
     Stroke, Style, Ui, Vec2,
