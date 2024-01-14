@@ -266,50 +266,38 @@ impl SnarlState {
     }
 
     pub fn add_new_wire_in(&mut self, pin: InPinId) {
-        match self.new_wires {
-            Some(NewWires::In(ref mut pins)) => {
-                if !pins.contains(&pin) {
-                    pins.push(pin);
-                    self.dirty = true;
-                }
+        if let Some(NewWires::In(pins)) = &mut self.new_wires {
+            if !pins.contains(&pin) {
+                pins.push(pin);
+                self.dirty = true;
             }
-            _ => {}
         }
     }
 
     pub fn add_new_wire_out(&mut self, pin: OutPinId) {
-        match self.new_wires {
-            Some(NewWires::Out(ref mut pins)) => {
-                if !pins.contains(&pin) {
-                    pins.push(pin);
-                    self.dirty = true;
-                }
+        if let Some(NewWires::Out(pins)) = &mut self.new_wires {
+            if !pins.contains(&pin) {
+                pins.push(pin);
+                self.dirty = true;
             }
-            _ => {}
         }
     }
 
     pub fn remove_new_wire_in(&mut self, pin: InPinId) {
-        match self.new_wires {
-            Some(NewWires::In(ref mut pins)) => {
-                if let Some(idx) = pins.iter().position(|p| *p == pin) {
-                    pins.swap_remove(idx);
-                    self.dirty = true;
-                }
+        if let Some(NewWires::In(pins)) = &mut self.new_wires {
+            if let Some(idx) = pins.iter().position(|p| *p == pin) {
+                pins.swap_remove(idx);
+                self.dirty = true;
             }
-            _ => {}
         }
     }
 
     pub fn remove_new_wire_out(&mut self, pin: OutPinId) {
-        match self.new_wires {
-            Some(NewWires::Out(ref mut pins)) => {
-                if let Some(idx) = pins.iter().position(|p| *p == pin) {
-                    pins.swap_remove(idx);
-                    self.dirty = true;
-                }
+        if let Some(NewWires::Out(pins)) = &mut self.new_wires {
+            if let Some(idx) = pins.iter().position(|p| *p == pin) {
+                pins.swap_remove(idx);
+                self.dirty = true;
             }
-            _ => {}
         }
     }
 
