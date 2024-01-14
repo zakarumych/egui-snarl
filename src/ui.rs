@@ -781,6 +781,15 @@ impl<T> Snarl<T> {
                         snarl_state.pan(-bg_r.drag_delta());
                     }
                 }
+
+                //Centering
+                if need_centering && bg_r.double_clicked(){
+                    let center_divider = vec2(draw_order_len as f32, draw_order_len as f32);
+                    center = center / center_divider * vec2(snarl_state.scale(), snarl_state.scale());
+                    snarl_state.set_offset(center);   
+                }
+
+                //Node search menu
                 bg_r.context_menu(|ui| {
                     viewer.graph_menu(
                         snarl_state.screen_pos_to_graph(ui.cursor().min, viewport),
@@ -790,12 +799,6 @@ impl<T> Snarl<T> {
                     );
                 });
 
-                //Centering
-                if need_centering && bg_r.double_clicked(){
-                    let center_divider = vec2(draw_order_len as f32, draw_order_len as f32);
-                    center = center / center_divider * vec2(snarl_state.scale(), snarl_state.scale());
-                    snarl_state.set_offset(center);   
-                }
 
                 let mut wire_shapes = Vec::new();
 
