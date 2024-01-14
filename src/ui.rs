@@ -208,10 +208,10 @@ impl<T> Snarl<T> {
 
                 let pin_size = style
                     .pin_size
-                    .unwrap_or_else(|| node_style.spacing.interact_size.y * 0.5);
+                    .unwrap_or(node_style.spacing.interact_size.y * 0.5);
 
                 let wire_frame_size = style.wire_frame_size.unwrap_or(pin_size * 5.0);
-                let wire_width = style.wire_width.unwrap_or_else(|| pin_size * 0.2);
+                let wire_width = style.wire_width.unwrap_or(pin_size * 0.2);
                 let header_drag_space = style.header_drag_space.unwrap_or_else(|| {
                     vec2(node_style.spacing.icon_width, node_style.spacing.icon_width)
                 });
@@ -293,7 +293,7 @@ impl<T> Snarl<T> {
                     let inputs = (0..inputs_count)
                         .map(|idx| {
                             InPin::new(
-                                &self,
+                                self,
                                 InPinId {
                                     node: node_idx,
                                     input: idx,
@@ -305,7 +305,7 @@ impl<T> Snarl<T> {
                     let outputs = (0..outputs_count)
                         .map(|idx| {
                             OutPin::new(
-                                &self,
+                                self,
                                 OutPinId {
                                     node: node_idx,
                                     output: idx,
@@ -333,7 +333,7 @@ impl<T> Snarl<T> {
                     // Rect for node + frame margin.
                     let node_frame_rect = node_frame.total_margin().expand_rect(node_rect);
 
-                    let ref mut node_ui = ui.child_ui_with_id_source(
+                    let node_ui = &mut ui.child_ui_with_id_source(
                         node_frame_rect,
                         Layout::top_down(Align::Center),
                         node_id,
@@ -348,7 +348,7 @@ impl<T> Snarl<T> {
                             header_frame.total_margin().expand_rect(header_rect);
 
                         // Show node's header
-                        let ref mut header_ui = ui.child_ui_with_id_source(
+                        let header_ui = &mut ui.child_ui_with_id_source(
                             header_frame_rect,
                             Layout::top_down(Align::Center),
                             node_id,
@@ -436,7 +436,7 @@ impl<T> Snarl<T> {
                                 pos2(f32::max(node_rect.max.x, header_rect.max.x), f32::INFINITY),
                             );
 
-                            let ref mut inputs_ui = ui.child_ui_with_id_source(
+                            let inputs_ui = &mut ui.child_ui_with_id_source(
                                 pins_rect,
                                 Layout::top_down(Align::Center),
                                 (node_id, "inputs"),
@@ -494,7 +494,7 @@ impl<T> Snarl<T> {
                                             if snarl_state.has_new_wires() {
                                                 snarl_state.remove_new_wire_in(in_pin.id);
                                             } else {
-                                                let _ = viewer.drop_inputs(&in_pin, self);
+                                                viewer.drop_inputs(&in_pin, self);
                                             }
                                         }
                                         if r.drag_started_by(PointerButton::Primary) {
@@ -542,7 +542,7 @@ impl<T> Snarl<T> {
 
                             // Outputs are placed under the header and must not go outside of the header frame.
 
-                            let ref mut outputs_ui = ui.child_ui_with_id_source(
+                            let outputs_ui = &mut ui.child_ui_with_id_source(
                                 pins_rect,
                                 Layout::top_down(Align::Center),
                                 (node_id, "outputs"),
@@ -601,7 +601,7 @@ impl<T> Snarl<T> {
                                             if snarl_state.has_new_wires() {
                                                 snarl_state.remove_new_wire_out(out_pin.id);
                                             } else {
-                                                let _ = viewer.drop_outputs(&out_pin, self);
+                                                viewer.drop_outputs(&out_pin, self);
                                             }
                                         }
                                         if r.drag_started_by(PointerButton::Primary) {
@@ -741,10 +741,10 @@ impl<T> Snarl<T> {
 
                 if let Some(wire) = hovered_wire {
                     if bg_r.clicked_by(PointerButton::Secondary) {
-                        let out_pin = OutPin::new(&self, wire.out_pin);
-                        let in_pin = InPin::new(&self, wire.in_pin);
+                        let out_pin = OutPin::new(self, wire.out_pin);
+                        let in_pin = InPin::new(self, wire.in_pin);
 
-                        let _ = viewer.disconnect(&out_pin, &in_pin, self);
+                        viewer.disconnect(&out_pin, &in_pin, self);
                     }
 
                     // Background is not hovered then.
@@ -754,10 +754,8 @@ impl<T> Snarl<T> {
                     bg_r.triple_clicked = [false; egui::NUM_POINTER_BUTTONS];
                 }
 
-                if bg_r.hovered() {
-                    if bg_r.dragged_by(PointerButton::Primary) {
-                        snarl_state.pan(-bg_r.drag_delta());
-                    }
+                if bg_r.hovered() && bg_r.dragged_by(PointerButton::Primary) {
+                    snarl_state.pan(-bg_r.drag_delta());
                 }
                 bg_r.context_menu(|ui| {
                     viewer.graph_menu(
@@ -853,7 +851,7 @@ impl<T> Snarl<T> {
                     match (new_wires, pin_hovered) {
                         (Some(NewWires::In(in_pins)), Some(AnyPin::Out(out_pin))) => {
                             for in_pin in in_pins {
-                                let _ = viewer.connect(
+                                viewer.connect(
                                     &OutPin::new(self, out_pin),
                                     &InPin::new(self, in_pin),
                                     self,
@@ -862,7 +860,7 @@ impl<T> Snarl<T> {
                         }
                         (Some(NewWires::Out(out_pins)), Some(AnyPin::In(in_pin))) => {
                             for out_pin in out_pins {
-                                let _ = viewer.connect(
+                                viewer.connect(
                                     &OutPin::new(self, out_pin),
                                     &InPin::new(self, in_pin),
                                     self,

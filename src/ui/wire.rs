@@ -169,7 +169,7 @@ fn bezier_samples_number(points: &[Pos2; 6], threshold: f32) -> usize {
 }
 
 fn draw_bezier(shapes: &mut Vec<Shape>, points: &[Pos2; 6], mut stroke: Stroke) {
-    assert!(points.len() > 0);
+    assert!(!points.is_empty());
 
     if stroke.width < 1.0 {
         stroke.color = stroke.color.gamma_multiply(stroke.width);
@@ -195,6 +195,7 @@ fn draw_bezier(shapes: &mut Vec<Shape>, points: &[Pos2; 6], mut stroke: Stroke) 
     shapes.push(shape);
 }
 
+#[allow(clippy::let_and_return)]
 fn sample_bezier(points: &[Pos2; 6], t: f32) -> Pos2 {
     let [p0, p1, p2, p3, p4, p5] = *points;
 

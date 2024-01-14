@@ -150,7 +150,7 @@ impl SnarlState {
 
             return SnarlState {
                 offset: Vec2::ZERO,
-                scale: scale,
+                scale,
                 target_scale: scale,
                 new_wires: None,
                 id,
