@@ -416,6 +416,8 @@ impl<T> Snarl<T> {
         }
     }
 
+    //First step for split big function to parts
+    /// Draw one node. Return Pins info
     #[inline(always)]
     fn draw_node<V>(
         &mut self,
