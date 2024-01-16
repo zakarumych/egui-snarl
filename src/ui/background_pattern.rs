@@ -85,6 +85,9 @@ pub enum BackgroundPattern {
     NoPattern,
     /// Linear grid.
     Grid(Grid),
+
+    /// Custom grid
+    Custom(fn(&SnarlStyle, &SnarlState, &Rect, &mut Ui)),
 }
 
 impl Default for BackgroundPattern {
@@ -101,6 +104,7 @@ impl BackgroundPattern {
     pub fn draw(&self, style: &SnarlStyle, snarl_state: &SnarlState, viewport: &Rect, ui: &mut Ui) {
         match self {
             BackgroundPattern::Grid(g) => g.draw(style, snarl_state, viewport, ui),
+            BackgroundPattern::Custom(c) => c(style, snarl_state, viewport, ui),
             BackgroundPattern::NoPattern => {}
         }
     }
