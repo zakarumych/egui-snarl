@@ -237,6 +237,8 @@ impl<T> Snarl<T> {
                 }
 
                 let mut hovered_wire = None;
+                let mut hovered_wire_disconnect = false;
+                let mut wire_shapes = Vec::new();
 
                 for wire in self.wires.iter() {
                     let from = output_positions[&wire.out_pin];
@@ -260,44 +262,19 @@ impl<T> Snarl<T> {
 
                             if hit {
                                 hovered_wire = Some(wire);
-                                break;
+
+                                //Remove hovered wire by second click
+                                hovered_wire_disconnect |=
+                                    bg_r.clicked_by(PointerButton::Secondary);
+
+                                // Background is not hovered then.
+                                bg_r.hovered = false;
+                                bg_r.clicked = [false; egui::NUM_POINTER_BUTTONS];
+                                bg_r.double_clicked = [false; egui::NUM_POINTER_BUTTONS];
+                                bg_r.triple_clicked = [false; egui::NUM_POINTER_BUTTONS];
                             }
                         }
                     }
-                }
-
-                if let Some(wire) = hovered_wire {
-                    if bg_r.clicked_by(PointerButton::Secondary) {
-                        let out_pin = OutPin::new(self, wire.out_pin);
-                        let in_pin = InPin::new(self, wire.in_pin);
-
-                        viewer.disconnect(&out_pin, &in_pin, self);
-                    }
-
-                    // Background is not hovered then.
-                    bg_r.hovered = false;
-                    bg_r.clicked = [false; egui::NUM_POINTER_BUTTONS];
-                    bg_r.double_clicked = [false; egui::NUM_POINTER_BUTTONS];
-                    bg_r.triple_clicked = [false; egui::NUM_POINTER_BUTTONS];
-                }
-
-                if bg_r.hovered() && bg_r.dragged_by(PointerButton::Primary) {
-                    snarl_state.pan(-bg_r.drag_delta());
-                }
-                bg_r.context_menu(|ui| {
-                    viewer.graph_menu(
-                        snarl_state.screen_pos_to_graph(ui.cursor().min, viewport),
-                        ui,
-                        snarl_state.scale(),
-                        self,
-                    );
-                });
-
-                let mut wire_shapes = Vec::new();
-
-                for wire in self.wires.iter() {
-                    let from = output_positions[&wire.out_pin];
-                    let to = input_positions[&wire.in_pin];
 
                     let color =
                         mix_colors(output_colors[&wire.out_pin], input_colors[&wire.in_pin]);
@@ -318,6 +295,27 @@ impl<T> Snarl<T> {
                         Stroke::new(draw_width, color),
                     );
                 }
+
+                //Remove hovered wire by second click
+                if hovered_wire_disconnect {
+                    if let Some(wire) = hovered_wire {
+                        let out_pin = OutPin::new(self, wire.out_pin);
+                        let in_pin = InPin::new(self, wire.in_pin);
+                        viewer.disconnect(&out_pin, &in_pin, self);
+                    }
+                }
+
+                if bg_r.hovered() && bg_r.dragged_by(PointerButton::Primary) {
+                    snarl_state.pan(-bg_r.drag_delta());
+                }
+                bg_r.context_menu(|ui| {
+                    viewer.graph_menu(
+                        snarl_state.screen_pos_to_graph(ui.cursor().min, viewport),
+                        ui,
+                        snarl_state.scale(),
+                        self,
+                    );
+                });
 
                 match snarl_state.new_wires() {
                     None => {}
