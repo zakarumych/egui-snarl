@@ -1,10 +1,8 @@
 use std::{collections::HashMap, hash::Hash};
 
 use egui::{
-    collapsing_header::paint_default_icon,
-    epaint::Shadow,
-    pos2, vec2, Align, Color32, Frame, Id, Layout, Modifiers, PointerButton, Pos2, Rect, Sense,
-    Shape, Stroke, Style, Ui, Vec2,
+    collapsing_header::paint_default_icon, epaint::Shadow, pos2, vec2, Align, Color32, Frame, Id,
+    Layout, Modifiers, PointerButton, Pos2, Rect, Sense, Shape, Stroke, Style, Ui, Vec2,
 };
 
 use crate::{InPin, InPinId, Node, OutPin, OutPinId, Snarl};
@@ -54,7 +52,7 @@ pub struct SnarlStyle {
     pub collapsible: bool,
 
     pub bg_fill: Option<Color32>,
-    pub bg_pattern: Option<BackgroundPattern>,
+    pub bg_pattern: BackgroundPattern,
     pub background_pattern_stroke: Option<Stroke>,
 
     pub min_scale: f32,
@@ -76,10 +74,7 @@ impl SnarlStyle {
             collapsible: true,
 
             bg_fill: None,
-            bg_pattern: Some(BackgroundPattern::Grid(background_pattern::Grid::new(
-                vec2(5.0, 5.0),
-                1.0,
-            ))),
+            bg_pattern: BackgroundPattern::new(),
             background_pattern_stroke: None,
 
             min_scale: 0.1,
@@ -119,9 +114,7 @@ impl<T> Snarl<T> {
         viewport: &Rect,
         ui: &mut Ui,
     ) {
-        if let Some(pattern) = &style.bg_pattern {
-            pattern.draw(style, snarl_state, viewport, ui);
-        }
+        style.bg_pattern.draw(style, snarl_state, viewport, ui);
     }
 
     /// Render [`Snarl`] using given viewer and style into the [`Ui`].
@@ -231,17 +224,17 @@ impl<T> Snarl<T> {
                         &mut output_positions,
                         &mut output_colors,
                     );
-                    if let Some(v) = response.node_idx_to_top{
+                    if let Some(v) = response.node_idx_to_top {
                         node_idx_to_top = Some(v);
                     }
-                    if let Some(v) = response.node_moved{
+                    if let Some(v) = response.node_moved {
                         node_moved = Some(v);
                     }
-                    if let Some(v) = response.pin_hovered{
+                    if let Some(v) = response.pin_hovered {
                         pin_hovered = Some(v);
                     }
                     drag_released |= response.drag_released;
-                }   
+                }
 
                 let mut hovered_wire = None;
 

@@ -1,4 +1,4 @@
-use egui::{Rect, Stroke, Ui, Vec2, emath::Rot2, vec2};
+use egui::{emath::Rot2, vec2, Rect, Stroke, Ui, Vec2};
 
 use super::{state::SnarlState, SnarlStyle};
 
@@ -6,6 +6,18 @@ use super::{state::SnarlState, SnarlStyle};
 pub struct Grid {
     spacing: Vec2,
     angle: f32,
+}
+
+const DEFAULT_GRID_SPACING: Vec2 = vec2(5.0, 5.0);
+const DEFAULT_GRID_ANGLE: f32 = 1.0;
+
+impl Default for Grid {
+    fn default() -> Self {
+        Self {
+            spacing: DEFAULT_GRID_SPACING,
+            angle: DEFAULT_GRID_ANGLE,
+        }
+    }
 }
 
 impl Grid {
@@ -70,14 +82,26 @@ impl Grid {
 /// Background pattern show beneath nodes and wires.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BackgroundPattern {
+    NoPattern,
     /// Linear grid.
     Grid(Grid),
 }
 
+impl Default for BackgroundPattern {
+    fn default() -> Self {
+        Self::Grid(Default::default())
+    }
+}
+
 impl BackgroundPattern {
+    pub const fn new() -> Self {
+        Self::Grid(Grid::new(DEFAULT_GRID_SPACING, DEFAULT_GRID_ANGLE))
+    }
+
     pub fn draw(&self, style: &SnarlStyle, snarl_state: &SnarlState, viewport: &Rect, ui: &mut Ui) {
         match self {
             BackgroundPattern::Grid(g) => g.draw(style, snarl_state, viewport, ui),
+            BackgroundPattern::NoPattern => {}
         }
     }
 }
