@@ -209,7 +209,6 @@ impl<T> Snarl<T> {
                         viewer,
                         &mut snarl_state,
                         style,
-                        &viewport,
                         snarl_id,
                         &node_style,
                         &node_frame,
@@ -416,7 +415,6 @@ impl<T> Snarl<T> {
         viewer: &mut V,
         snarl_state: &mut SnarlState,
         style: &SnarlStyle,
-        viewport: &Rect,
         snarl_id: Id,
         node_style: &Style,
         node_frame: &Frame,
@@ -441,11 +439,13 @@ impl<T> Snarl<T> {
             pin_hovered: None,
         };
 
+        let viewport = ui.max_rect();
+
         // Collect pins
         let inputs_count = viewer.inputs(value);
         let outputs_count = viewer.outputs(value);
 
-        let node_pos = snarl_state.graph_pos_to_screen(pos, *viewport);
+        let node_pos = snarl_state.graph_pos_to_screen(pos, viewport);
 
         // Generate persistent id for the node.
         let node_id = snarl_id.with(("snarl-node", node_idx));
@@ -611,7 +611,7 @@ impl<T> Snarl<T> {
                     (node_id, "inputs"),
                 );
 
-                inputs_ui.set_clip_rect(pins_clip_rect.intersect(*viewport));
+                inputs_ui.set_clip_rect(pins_clip_rect.intersect(viewport));
 
                 // Input pins on the left.
                 let r = inputs_ui.with_layout(Layout::top_down(Align::Min), |ui| {
@@ -708,7 +708,7 @@ impl<T> Snarl<T> {
                     (node_id, "outputs"),
                 );
 
-                outputs_ui.set_clip_rect(pins_clip_rect.intersect(*viewport));
+                outputs_ui.set_clip_rect(pins_clip_rect.intersect(viewport));
 
                 // Output pins on the right.
                 let r = outputs_ui.with_layout(Layout::top_down(Align::Max), |ui| {
