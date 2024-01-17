@@ -193,12 +193,8 @@ impl<T> Snarl<T> {
                     _ => {}
                 }
 
-                //TODO: May be replace to `HashMap<InPinId, (Pos2, Color32)>?`
-                let mut input_positions = HashMap::new();
-                let mut output_positions = HashMap::new();
-
-                let mut input_colors = HashMap::new();
-                let mut output_colors = HashMap::new();
+                let mut input_info = HashMap::new();
+                let mut output_info = HashMap::new();
 
                 let mut pin_hovered = None;
 
@@ -218,11 +214,9 @@ impl<T> Snarl<T> {
                         &node_style,
                         &node_frame,
                         &header_frame,
-                        &mut input_positions,
-                        &mut input_colors,
+                        &mut input_info,
                         &input,
-                        &mut output_positions,
-                        &mut output_colors,
+                        &mut output_info,
                     );
                     if let Some(v) = response.node_idx_to_top {
                         node_idx_to_top = Some(v);
@@ -241,8 +235,8 @@ impl<T> Snarl<T> {
                 let mut wire_shapes = Vec::new();
 
                 for wire in self.wires.iter() {
-                    let from = output_positions[&wire.out_pin];
-                    let to = input_positions[&wire.in_pin];
+                    let (from, color_from) = output_info[&wire.out_pin];
+                    let (to, color_to) = input_info[&wire.in_pin];
 
                     if !snarl_state.has_new_wires() && bg_r.hovered() {
                         // Try to find hovered wire
@@ -277,7 +271,7 @@ impl<T> Snarl<T> {
                     }
 
                     let color =
-                        mix_colors(output_colors[&wire.out_pin], input_colors[&wire.in_pin]);
+                        mix_colors(color_from, color_to);
 
                     let mut draw_width = wire_width;
                     if hovered_wire == Some(wire) {
@@ -322,9 +316,7 @@ impl<T> Snarl<T> {
                     Some(NewWires::In(pins)) => {
                         for pin in pins {
                             let from = input.hover_pos.unwrap_or(Pos2::ZERO);
-                            let to = input_positions[&pin];
-
-                            let color = input_colors[&pin];
+                            let (to, color) = input_info[&pin];
 
                             draw_wire(
                                 ui,
@@ -340,10 +332,8 @@ impl<T> Snarl<T> {
                     }
                     Some(NewWires::Out(pins)) => {
                         for pin in pins {
-                            let from: Pos2 = output_positions[&pin];
+                            let (from, color) = output_info[&pin];
                             let to = input.hover_pos.unwrap_or(Pos2::ZERO);
-
-                            let color = output_colors[&pin];
 
                             draw_wire(
                                 ui,
@@ -431,11 +421,9 @@ impl<T> Snarl<T> {
         node_style: &Style,
         node_frame: &Frame,
         header_frame: &Frame,
-        input_positions: &mut HashMap<InPinId, Pos2>,
-        input_colors: &mut HashMap<InPinId, Color32>,
+        input_positions: &mut HashMap<InPinId, (Pos2, Color32)>,
         input: &Input,
-        output_positions: &mut HashMap<OutPinId, Pos2>,
-        output_colors: &mut HashMap<OutPinId, Color32>,
+        output_positions: &mut HashMap<OutPinId, (Pos2, Color32)>,
     ) -> DrawNodeResponse
     where
         V: SnarlViewer<T>,
@@ -653,8 +641,7 @@ impl<T> Snarl<T> {
 
                             let pin_pos = pos2(input_x, y);
 
-                            input_positions.insert(in_pin.id, pin_pos);
-                            input_colors.insert(in_pin.id, pin_info.fill);
+                            input_positions.insert(in_pin.id, (pin_pos, pin_info.fill));
 
                             // Interact with pin shape.
                             let r = ui.interact(
@@ -753,8 +740,7 @@ impl<T> Snarl<T> {
 
                             let pin_pos = pos2(output_x, y);
 
-                            output_positions.insert(out_pin.id, pin_pos);
-                            output_colors.insert(out_pin.id, pin_info.fill);
+                            output_positions.insert(out_pin.id, (pin_pos, pin_info.fill));
 
                             let r = ui.interact(
                                 Rect::from_center_size(pin_pos, vec2(pin_size, pin_size)),
@@ -835,8 +821,7 @@ impl<T> Snarl<T> {
             } else {
                 for in_pin in inputs {
                     let pin_pos = pos2(input_x, min_pin_y);
-                    input_positions.insert(in_pin.id, pin_pos);
-                    input_colors.insert(in_pin.id, viewer.input_color(&in_pin, node_style, self));
+                    input_positions.insert(in_pin.id, (pin_pos, viewer.input_color(&in_pin, node_style, self)));
 
                     if !self.nodes.contains(node_idx) {
                         node_state.clear(ui.ctx());
@@ -846,9 +831,7 @@ impl<T> Snarl<T> {
                 }
                 for out_pin in outputs {
                     let pin_pos = pos2(output_x, min_pin_y);
-                    output_positions.insert(out_pin.id, pin_pos);
-                    output_colors
-                        .insert(out_pin.id, viewer.output_color(&out_pin, node_style, self));
+                    output_positions.insert(out_pin.id, (pin_pos, viewer.output_color(&out_pin, node_style, self)));
 
                     if !self.nodes.contains(node_idx) {
                         node_state.clear(ui.ctx());
