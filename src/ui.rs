@@ -15,7 +15,6 @@ mod wire;
 mod zoom;
 
 use self::{
-    background_pattern::BackgroundPattern,
     pin::draw_pin,
     state::{NewWires, NodeState, SnarlState},
     wire::{draw_wire, hit_wire, mix_colors},
@@ -52,7 +51,7 @@ pub struct SnarlStyle {
     pub collapsible: bool,
 
     pub bg_fill: Option<Color32>,
-    pub bg_pattern: BackgroundPattern,
+    pub bg_pattern: background_pattern::BackgroundPattern,
     pub background_pattern_stroke: Option<Stroke>,
 
     pub min_scale: f32,
@@ -74,7 +73,7 @@ impl SnarlStyle {
             collapsible: true,
 
             bg_fill: None,
-            bg_pattern: BackgroundPattern::new(),
+            bg_pattern: background_pattern::BackgroundPattern::new(),
             background_pattern_stroke: None,
 
             min_scale: 0.1,
@@ -581,7 +580,8 @@ impl<T> Snarl<T> {
                 - header_frame.total_margin().right
                 - pin_size * 0.5;
 
-            if true {
+            // Input/output pin block
+            {
                 if (openness < 1.0 && open) || (openness > 0.0 && !open) {
                     ui.ctx().request_repaint();
                 }
@@ -818,27 +818,6 @@ impl<T> Snarl<T> {
                 //     .debug_rect(header_frame_rect, Color32::GREEN, "header");
                 // ui.painter()
                 //     .debug_rect(pins_clip_rect, Color32::RED, "pins_clip");
-            } else {
-                for in_pin in inputs {
-                    let pin_pos = pos2(input_x, min_pin_y);
-                    input_positions.insert(in_pin.id, (pin_pos, viewer.input_color(&in_pin, node_style, self)));
-
-                    if !self.nodes.contains(node_idx) {
-                        node_state.clear(ui.ctx());
-                        // If removed
-                        return;
-                    }
-                }
-                for out_pin in outputs {
-                    let pin_pos = pos2(output_x, min_pin_y);
-                    output_positions.insert(out_pin.id, (pin_pos, viewer.output_color(&out_pin, node_style, self)));
-
-                    if !self.nodes.contains(node_idx) {
-                        node_state.clear(ui.ctx());
-                        // If removed
-                        return;
-                    }
-                }
             }
         });
 

@@ -169,8 +169,6 @@ fn bezier_samples_number(points: &[Pos2; 6], threshold: f32) -> usize {
 }
 
 fn draw_bezier(shapes: &mut Vec<Shape>, points: &[Pos2; 6], mut stroke: Stroke) {
-    assert!(!points.is_empty());
-
     if stroke.width < 1.0 {
         stroke.color = stroke.color.gamma_multiply(stroke.width);
         stroke.width = 1.0;
