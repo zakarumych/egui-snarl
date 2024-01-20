@@ -1,13 +1,15 @@
+use std::fmt;
+
 use egui::{emath::Rot2, vec2, Rect, Stroke, Ui, Vec2};
 
 use super::{state::SnarlState, SnarlStyle};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-///Grid background pattern. 
+///Grid background pattern.
 ///Use `SnarlStyle::background_pattern_stroke` for change stroke options
 pub struct Grid {
-    spacing: Vec2,
-    angle: f32,
+    pub spacing: Vec2,
+    pub angle: f32,
 }
 
 const DEFAULT_GRID_SPACING: Vec2 = vec2(5.0, 5.0);
@@ -81,15 +83,40 @@ impl Grid {
     }
 }
 
+tiny_fn::tiny_fn! {
+    pub struct CustomBackground = Fn(style: &SnarlStyle, state: &SnarlState, rect: &Rect, ui: &mut Ui);
+}
+
 /// Background pattern show beneath nodes and wires.
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BackgroundPattern {
     NoPattern,
     /// Linear grid.
     Grid(Grid),
 
     /// Custom pattern
-    Custom(fn(&SnarlStyle, &SnarlState, viewport: &Rect, ui: &mut Ui)),
+    Custom(CustomBackground<'static>),
+}
+
+impl PartialEq for BackgroundPattern {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (BackgroundPattern::Grid(l), BackgroundPattern::Grid(r)) => *l == *r,
+            _ => false,
+        }
+    }
+}
+
+impl fmt::Debug for BackgroundPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BackgroundPattern::Grid(grid) => f
+                .debug_tuple("BackgroundPattern::Grid")
+                .field(grid)
+                .finish(),
+            BackgroundPattern::Custom(_) => f.write_str("BackgroundPattern::Custom"),
+            BackgroundPattern::NoPattern => f.write_str("BackgroundPattern::NoPattern"),
+        }
+    }
 }
 
 impl Default for BackgroundPattern {
@@ -106,7 +133,7 @@ impl BackgroundPattern {
     pub fn draw(&self, style: &SnarlStyle, snarl_state: &SnarlState, viewport: &Rect, ui: &mut Ui) {
         match self {
             BackgroundPattern::Grid(g) => g.draw(style, snarl_state, viewport, ui),
-            BackgroundPattern::Custom(c) => c(style, snarl_state, viewport, ui),
+            BackgroundPattern::Custom(c) => c.call(style, snarl_state, viewport, ui),
             BackgroundPattern::NoPattern => {}
         }
     }

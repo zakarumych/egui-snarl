@@ -12,6 +12,18 @@ pub trait SnarlViewer<T> {
     /// Returns title of the node.
     fn title(&mut self, node: &T) -> String;
 
+    /// Checks if node has something to show in body - between input and output pins.
+    fn has_body(&mut self, node: &T) -> bool {
+        let _ = node;
+        false
+    }
+
+    /// Checks if node has something to show in footer - below pins and body.
+    fn has_footer(&mut self, node: &T) -> bool {
+        let _ = node;
+        false
+    }
+
     /// Renders the node's header.
     fn show_header(
         &mut self,
@@ -44,6 +56,32 @@ pub trait SnarlViewer<T> {
         scale: f32,
         snarl: &mut Snarl<T>,
     ) -> PinInfo;
+
+    /// Renders the node's body.
+    fn show_body(
+        &mut self,
+        idx: usize,
+        inputs: &[InPin],
+        outputs: &[OutPin],
+        ui: &mut Ui,
+        scale: f32,
+        snarl: &mut Snarl<T>,
+    ) {
+        let _ = (idx, inputs, outputs, ui, scale, snarl);
+    }
+
+    /// Renders the node's footer.
+    fn show_footer(
+        &mut self,
+        idx: usize,
+        inputs: &[InPin],
+        outputs: &[OutPin],
+        ui: &mut Ui,
+        scale: f32,
+        snarl: &mut Snarl<T>,
+    ) {
+        let _ = (idx, inputs, outputs, ui, scale, snarl);
+    }
 
     /// Returns color of the node's input pin.
     /// Called when pin in not visible.

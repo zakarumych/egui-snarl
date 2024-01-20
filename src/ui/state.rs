@@ -1,4 +1,4 @@
-use egui::{style::Spacing, Context, Id, Pos2, Rect, Vec2};
+use egui::{style::Spacing, Align, Context, Id, Pos2, Rect, Vec2};
 
 use crate::{InPinId, OutPinId, Snarl};
 
@@ -10,25 +10,36 @@ pub struct NodeState {
     /// Node size for this frame.
     /// It is updated to fit content.
     size: Vec2,
-    id: Id,
+    header_height: f32,
+    body_width: f32,
+    footer_width: f32,
 
+    id: Id,
+    scale: f32,
     dirty: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 struct NodeData {
-    size: Vec2,
+    unscaled_size: Vec2,
+    unscaled_header_height: f32,
+    unscaled_body_width: f32,
+    unsacled_footer_width: f32,
 }
 
 impl NodeState {
-    pub fn load(cx: &Context, id: Id, spacing: &Spacing) -> Self {
-        match cx.data_mut(|d| d.get_temp(id)) {
-            Some(NodeData { size }) => NodeState {
-                size,
+    pub fn load(cx: &Context, id: Id, spacing: &Spacing, scale: f32) -> Self {
+        match cx.data_mut(|d| d.get_temp::<NodeData>(id)) {
+            Some(data) => NodeState {
+                size: data.unscaled_size * scale,
+                header_height: data.unscaled_header_height * scale,
+                body_width: data.unscaled_body_width * scale,
+                footer_width: data.unsacled_footer_width * scale,
                 id,
+                scale,
                 dirty: false,
             },
-            None => Self::initial(id, spacing),
+            None => Self::initial(id, spacing, scale),
         }
     }
 
@@ -39,30 +50,82 @@ impl NodeState {
 
     pub fn store(&self, cx: &Context) {
         if self.dirty {
-            cx.data_mut(|d| d.insert_temp(self.id, NodeData { size: self.size }));
+            cx.data_mut(|d| {
+                d.insert_temp(
+                    self.id,
+                    NodeData {
+                        unscaled_size: self.size / self.scale,
+                        unscaled_header_height: self.header_height / self.scale,
+                        unscaled_body_width: self.body_width / self.scale,
+                        unsacled_footer_width: self.footer_width / self.scale,
+                    },
+                )
+            });
         }
     }
 
     /// Finds node rect at specific position (excluding node frame margin).
-    pub fn node_rect(&self, pos: Pos2) -> Rect {
-        Rect::from_min_size(pos, self.size)
+    pub fn node_rect(&self, pos: Pos2, openness: f32) -> Rect {
+        Rect::from_min_size(
+            pos,
+            egui::vec2(
+                self.size.x,
+                f32::max(self.header_height, self.size.y * openness),
+            ),
+        )
+    }
+
+    pub fn payload_offset(&self, openness: f32) -> f32 {
+        (self.size.y) * (1.0 - openness)
+    }
+
+    pub fn align_body(&mut self, rect: Rect) -> Rect {
+        let x_range = Align::Center.align_size_within_range(self.body_width, rect.x_range());
+        Rect::from_x_y_ranges(x_range, rect.y_range())
+    }
+
+    pub fn align_footer(&mut self, rect: Rect) -> Rect {
+        let x_range = Align::Center.align_size_within_range(self.footer_width, rect.x_range());
+        Rect::from_x_y_ranges(x_range, rect.y_range())
     }
 
     pub fn set_size(&mut self, size: Vec2) {
-        self.size = size;
-        self.dirty = true;
+        if self.size != size {
+            self.size = size;
+            self.dirty = true;
+        }
     }
 
-    fn initial(id: Id, spacing: &Spacing) -> Self {
+    pub fn set_header_height(&mut self, height: f32) {
+        if self.header_height != height {
+            self.header_height = height;
+            self.dirty = true;
+        }
+    }
+
+    pub fn set_body_width(&mut self, width: f32) {
+        if self.body_width != width {
+            self.body_width = width;
+            self.dirty = true;
+        }
+    }
+
+    pub fn set_footer_width(&mut self, width: f32) {
+        if self.footer_width != width {
+            self.footer_width = width;
+            self.dirty = true;
+        }
+    }
+
+    fn initial(id: Id, spacing: &Spacing, scale: f32) -> Self {
         NodeState {
-            // title_size: spacing.interact_size,
-            // inputs_size: spacing.interact_size,
-            // outputs_size: spacing.interact_size,
-            size: spacing.interact_size * 3.0,
-
+            size: spacing.interact_size,
+            header_height: spacing.interact_size.y,
+            body_width: 0.0,
+            footer_width: 0.0,
             id,
-
             dirty: true,
+            scale,
         }
     }
 }
