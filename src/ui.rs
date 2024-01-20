@@ -7,7 +7,7 @@ use egui::{
 
 use crate::{InPin, InPinId, Node, OutPin, OutPinId, Snarl};
 
-mod background_pattern;
+pub mod background_pattern;
 mod pin;
 mod state;
 mod viewer;

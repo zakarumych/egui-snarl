@@ -3,6 +3,8 @@ use egui::{emath::Rot2, vec2, Rect, Stroke, Ui, Vec2};
 use super::{state::SnarlState, SnarlStyle};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+///Grid background pattern. 
+///Use `SnarlStyle::background_pattern_stroke` for change stroke options
 pub struct Grid {
     spacing: Vec2,
     angle: f32,
@@ -86,8 +88,8 @@ pub enum BackgroundPattern {
     /// Linear grid.
     Grid(Grid),
 
-    /// Custom grid
-    Custom(fn(&SnarlStyle, &SnarlState, &Rect, &mut Ui)),
+    /// Custom pattern
+    Custom(fn(&SnarlStyle, &SnarlState, viewport: &Rect, ui: &mut Ui)),
 }
 
 impl Default for BackgroundPattern {
