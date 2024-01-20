@@ -1,4 +1,4 @@
-# egui-snarl
+# egui-snarl <img src="./logo.png" width="32"/>
 
 Crate for creating node-graph UIs.
 This is in early development. Many more features are planned.
