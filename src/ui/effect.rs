@@ -9,10 +9,10 @@ pub enum Effect<T> {
     InsertNode { pos: Pos2, node: T },
 
     /// Removes a node from snarl.
-    RemoveNode { node: usize },
+    RemoveNode { node: NodeId },
 
     /// Opens/closes a node.
-    OpenNode { node: usize, open: bool },
+    OpenNode { node: NodeId, open: bool },
 
     /// Adds connection between two nodes.
     Connect { from: OutPinId, to: InPinId },
@@ -69,13 +69,13 @@ impl<T> Effects<T> {
 
     /// Removes a node from the Snarl.
     #[inline(always)]
-    pub fn remove_node(&mut self, node: usize) {
+    pub fn remove_node(&mut self, node: NodeId) {
         self.effects.push(Effect::RemoveNode { node });
     }
 
     /// Opens/closes a node.
     #[inline(always)]
-    pub fn open_node(&mut self, node: usize, open: bool) {
+    pub fn open_node(&mut self, node: NodeId, open: bool) {
         self.effects.push(Effect::OpenNode { node, open });
     }
 

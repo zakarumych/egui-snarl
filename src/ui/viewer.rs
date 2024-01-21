@@ -1,6 +1,6 @@
 use egui::{Color32, Pos2, Style, Ui};
 
-use crate::{InPin, OutPin, Snarl};
+use crate::{InPin, NodeId, OutPin, Snarl};
 
 use super::pin::PinInfo;
 
@@ -27,15 +27,15 @@ pub trait SnarlViewer<T> {
     /// Renders the node's header.
     fn show_header(
         &mut self,
-        idx: usize,
+        node: NodeId,
         inputs: &[InPin],
         outputs: &[OutPin],
         ui: &mut Ui,
         scale: f32,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (idx, inputs, outputs, scale);
-        ui.label(self.title(snarl.get_node(idx)));
+        let _ = (inputs, outputs, scale);
+        ui.label(self.title(&snarl[node]));
     }
 
     /// Returns number of output pins of the node.
@@ -60,27 +60,27 @@ pub trait SnarlViewer<T> {
     /// Renders the node's body.
     fn show_body(
         &mut self,
-        idx: usize,
+        node: NodeId,
         inputs: &[InPin],
         outputs: &[OutPin],
         ui: &mut Ui,
         scale: f32,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (idx, inputs, outputs, ui, scale, snarl);
+        let _ = (node, inputs, outputs, ui, scale, snarl);
     }
 
     /// Renders the node's footer.
     fn show_footer(
         &mut self,
-        idx: usize,
+        node: NodeId,
         inputs: &[InPin],
         outputs: &[OutPin],
         ui: &mut Ui,
         scale: f32,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (idx, inputs, outputs, ui, scale, snarl);
+        let _ = (node, inputs, outputs, ui, scale, snarl);
     }
 
     /// Returns color of the node's input pin.
@@ -103,14 +103,14 @@ pub trait SnarlViewer<T> {
     /// This can be used to implement menu for adding new nodes.
     fn node_menu(
         &mut self,
-        idx: usize,
+        node: NodeId,
         inputs: &[InPin],
         outputs: &[OutPin],
         ui: &mut Ui,
         scale: f32,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (idx, inputs, outputs, ui, scale, snarl);
+        let _ = (node, inputs, outputs, ui, scale, snarl);
     }
 
     /// Asks the viewer to connect two pins.

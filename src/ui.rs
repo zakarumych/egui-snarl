@@ -5,7 +5,7 @@ use egui::{
     Layout, Modifiers, PointerButton, Pos2, Rect, Sense, Shape, Stroke, Style, Ui, Vec2,
 };
 
-use crate::{InPin, InPinId, Node, OutPin, OutPinId, Snarl};
+use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl};
 
 mod background_pattern;
 mod pin;
@@ -100,8 +100,8 @@ struct Input {
 }
 
 struct DrawNodeResponse {
-    node_moved: Option<(usize, Vec2)>,
-    node_idx_to_top: Option<usize>,
+    node_moved: Option<(NodeId, Vec2)>,
+    node_to_top: Option<NodeId>,
     drag_released: bool,
     pin_hovered: Option<AnyPin>,
 }
@@ -123,7 +123,7 @@ impl<T> Snarl<T> {
         V: SnarlViewer<T>,
     {
         let mut node_moved = None;
-        let mut node_idx_to_top = None;
+        let mut node_to_top = None;
 
         let snarl_id = ui.make_persistent_id(id_source);
 
@@ -217,8 +217,8 @@ impl<T> Snarl<T> {
                         &input,
                         &mut output_info,
                     );
-                    if let Some(v) = response.node_idx_to_top {
-                        node_idx_to_top = Some(v);
+                    if let Some(v) = response.node_to_top {
+                        node_to_top = Some(v);
                     }
                     if let Some(v) = response.node_moved {
                         node_moved = Some(v);
@@ -389,13 +389,13 @@ impl<T> Snarl<T> {
                 snarl_state.store(ui.ctx());
             });
 
-        if let Some((node_idx, delta)) = node_moved {
+        if let Some((node, delta)) = node_moved {
             ui.ctx().request_repaint();
-            let node = &mut self.nodes[node_idx];
+            let node = &mut self.nodes[node.0];
             node.pos += delta;
         }
 
-        if let Some(node_idx) = node_idx_to_top {
+        if let Some(node_idx) = node_to_top {
             ui.ctx().request_repaint();
             if let Some(order) = self.draw_order.iter().position(|idx| *idx == node_idx) {
                 self.draw_order.remove(order);
@@ -410,7 +410,7 @@ impl<T> Snarl<T> {
     fn draw_node<V>(
         &mut self,
         ui: &mut Ui,
-        node_idx: usize,
+        node: NodeId,
         viewer: &mut V,
         snarl_state: &mut SnarlState,
         style: &SnarlStyle,
@@ -429,10 +429,10 @@ impl<T> Snarl<T> {
             pos,
             open,
             ref value,
-        } = self.nodes[node_idx];
+        } = self.nodes[node.0];
 
         let mut response = DrawNodeResponse {
-            node_idx_to_top: None,
+            node_to_top: None,
             node_moved: None,
             drag_released: false,
             pin_hovered: None,
@@ -447,7 +447,7 @@ impl<T> Snarl<T> {
         let node_pos = snarl_state.graph_pos_to_screen(pos, viewport);
 
         // Generate persistent id for the node.
-        let node_id = snarl_id.with(("snarl-node", node_idx));
+        let node_id = snarl_id.with(("snarl-node", node));
 
         let openness = ui.ctx().animate_bool(node_id, open);
 
@@ -465,43 +465,27 @@ impl<T> Snarl<T> {
             .unwrap_or_else(|| vec2(node_style.spacing.icon_width, node_style.spacing.icon_width));
 
         let inputs = (0..inputs_count)
-            .map(|idx| {
-                InPin::new(
-                    self,
-                    InPinId {
-                        node: node_idx,
-                        input: idx,
-                    },
-                )
-            })
+            .map(|idx| InPin::new(self, InPinId { node, input: idx }))
             .collect::<Vec<_>>();
 
         let outputs = (0..outputs_count)
-            .map(|idx| {
-                OutPin::new(
-                    self,
-                    OutPinId {
-                        node: node_idx,
-                        output: idx,
-                    },
-                )
-            })
+            .map(|idx| OutPin::new(self, OutPinId { node, output: idx }))
             .collect::<Vec<_>>();
 
         // Interact with node frame.
         let r = ui.interact(node_rect, node_id, Sense::click_and_drag());
 
         if r.dragged_by(PointerButton::Primary) {
-            response.node_moved = Some((node_idx, snarl_state.screen_vec_to_graph(r.drag_delta())));
+            response.node_moved = Some((node, snarl_state.screen_vec_to_graph(r.drag_delta())));
         }
         if r.clicked() || r.dragged() {
-            response.node_idx_to_top = Some(node_idx);
+            response.node_to_top = Some(node);
         }
         r.context_menu(|ui| {
-            viewer.node_menu(node_idx, &inputs, &outputs, ui, snarl_state.scale(), self);
+            viewer.node_menu(node, &inputs, &outputs, ui, snarl_state.scale(), self);
         });
 
-        if !self.nodes.contains(node_idx) {
+        if !self.nodes.contains(node.0) {
             node_state.clear(ui.ctx());
             // If removed
             return response;
@@ -541,13 +525,13 @@ impl<T> Snarl<T> {
 
                         if r.clicked_by(PointerButton::Primary) {
                             // Toggle node's openness.
-                            self.open_node(node_idx, !open);
+                            self.open_node(node, !open);
                         }
                     }
 
                     ui.allocate_exact_size(header_drag_space, Sense::hover());
 
-                    viewer.show_header(node_idx, &inputs, &outputs, ui, snarl_state.scale(), self);
+                    viewer.show_header(node, &inputs, &outputs, ui, snarl_state.scale(), self);
 
                     header_rect = ui.min_rect();
                 });
@@ -567,7 +551,7 @@ impl<T> Snarl<T> {
             let header_size = header_rect.size();
             node_state.set_header_height(header_size.y);
 
-            if !self.nodes.contains(node_idx) {
+            if !self.nodes.contains(node.0) {
                 node_state.clear(ui.ctx());
                 // If removed
                 return;
@@ -623,7 +607,7 @@ impl<T> Snarl<T> {
 
                     // Show input content
                     let pin_info = viewer.show_input(in_pin, ui, snarl_state.scale(), self);
-                    if !self.nodes.contains(node_idx) {
+                    if !self.nodes.contains(node.0) {
                         // If removed
                         return;
                     }
@@ -689,7 +673,7 @@ impl<T> Snarl<T> {
             ui.expand_to_include_rect(inputs_rect.intersect(payload_clip_rect));
             let inputs_size = inputs_rect.size();
 
-            if !self.nodes.contains(node_idx) {
+            if !self.nodes.contains(node.0) {
                 node_state.clear(ui.ctx());
                 // If removed
                 return;
@@ -719,7 +703,7 @@ impl<T> Snarl<T> {
 
                     // Show output content
                     let pin_info = viewer.show_output(out_pin, ui, snarl_state.scale(), self);
-                    if !self.nodes.contains(node_idx) {
+                    if !self.nodes.contains(node.0) {
                         // If removed
                         return;
                     }
@@ -783,7 +767,7 @@ impl<T> Snarl<T> {
             ui.expand_to_include_rect(outputs_rect.intersect(payload_clip_rect));
             let outputs_size = outputs_rect.size();
 
-            if !self.nodes.contains(node_idx) {
+            if !self.nodes.contains(node.0) {
                 node_state.clear(ui.ctx());
                 // If removed
                 return;
@@ -797,7 +781,7 @@ impl<T> Snarl<T> {
             let mut pins_bottom = f32::max(inputs_rect.bottom(), outputs_rect.bottom());
 
             // Show body if there's one.
-            if viewer.has_body(&self.nodes.get(node_idx).unwrap().value) {
+            if viewer.has_body(&self.nodes.get(node.0).unwrap().value) {
                 let body_left = inputs_rect.right() + node_style.spacing.item_spacing.x;
                 let body_right = outputs_rect.left() - node_style.spacing.item_spacing.x;
                 let body_top = payload_rect.top();
@@ -814,7 +798,7 @@ impl<T> Snarl<T> {
                 body_ui.set_clip_rect(payload_clip_rect.intersect(viewport));
 
                 viewer.show_body(
-                    node_idx,
+                    node,
                     &inputs,
                     &outputs,
                     &mut body_ui,
@@ -831,15 +815,15 @@ impl<T> Snarl<T> {
                 new_pins_size.y = f32::max(new_pins_size.y, body_size.y);
 
                 pins_bottom = f32::max(pins_bottom, body_rect.bottom());
+
+                if !self.nodes.contains(node.0) {
+                    node_state.clear(ui.ctx());
+                    // If removed
+                    return;
+                }
             }
 
-            if !self.nodes.contains(node_idx) {
-                node_state.clear(ui.ctx());
-                // If removed
-                return;
-            }
-
-            if viewer.has_footer(&self.nodes.get(node_idx).unwrap().value) {
+            if viewer.has_footer(&self.nodes[node.0].value) {
                 let footer_left = node_rect.left();
                 let footer_right = node_rect.right();
                 let footer_top = pins_bottom + node_style.spacing.item_spacing.y;
@@ -859,7 +843,7 @@ impl<T> Snarl<T> {
                 footer_ui.set_clip_rect(payload_clip_rect.intersect(viewport));
 
                 viewer.show_footer(
-                    node_idx,
+                    node,
                     &inputs,
                     &outputs,
                     &mut footer_ui,
@@ -874,6 +858,12 @@ impl<T> Snarl<T> {
 
                 new_pins_size.x = f32::max(new_pins_size.x, footer_size.x);
                 new_pins_size.y += footer_size.y + node_style.spacing.item_spacing.y;
+
+                if !self.nodes.contains(node.0) {
+                    node_state.clear(ui.ctx());
+                    // If removed
+                    return;
+                }
             }
 
             node_state.set_size(vec2(

@@ -4,7 +4,7 @@ use eframe::{App, CreationContext};
 use egui::{Color32, Ui};
 use egui_snarl::{
     ui::{PinInfo, SnarlStyle, SnarlViewer},
-    InPin, InPinId, OutPin, Snarl,
+    InPin, InPinId, NodeId, OutPin, Snarl,
 };
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -34,7 +34,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     #[inline]
     fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<DemoNode>) {
         // Validate connection
-        match (snarl.get_node(from.id.node), snarl.get_node(to.id.node)) {
+        match (&snarl[from.id.node], &snarl[to.id.node]) {
             (DemoNode::Sink, _) => {
                 unreachable!("Sink node has no outputs")
             }
@@ -84,14 +84,14 @@ impl SnarlViewer<DemoNode> for DemoViewer {
 
     fn show_header(
         &mut self,
-        node: usize,
+        node: NodeId,
         inputs: &[InPin],
         _outputs: &[OutPin],
         ui: &mut Ui,
         _scale: f32,
         snarl: &mut Snarl<DemoNode>,
     ) {
-        match snarl.get_node_mut(node) {
+        match &mut snarl[node] {
             DemoNode::Sink => {
                 ui.label("Sink");
             }
@@ -197,7 +197,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         scale: f32,
         snarl: &mut Snarl<DemoNode>,
     ) -> PinInfo {
-        match *snarl.get_node(pin.id.node) {
+        match snarl[pin.id.node] {
             DemoNode::Sink => {
                 assert_eq!(pin.id.input, 0, "Sink node has only one input");
 
@@ -206,7 +206,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         ui.label("None");
                         PinInfo::circle().with_fill(Color32::GRAY)
                     }
-                    [remote] => match *snarl.get_node(remote.node) {
+                    [remote] => match snarl[remote.node] {
                         DemoNode::Sink => unreachable!("Sink node has no outputs"),
                         DemoNode::Integer(value) => {
                             assert_eq!(remote.output, 0, "Integer node has only one output");
@@ -244,7 +244,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 unreachable!("String node has no inputs")
             }
             DemoNode::ShowImage(_) => match &*pin.remotes {
-                [] => match snarl.get_node_mut(pin.id.node) {
+                [] => match &mut snarl[pin.id.node] {
                     DemoNode::ShowImage(uri) => {
                         let edit = egui::TextEdit::singleline(uri)
                             .clip_text(false)
@@ -255,7 +255,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                     }
                     _ => unreachable!(),
                 },
-                [remote] => match *snarl.get_node(remote.node) {
+                [remote] => match snarl[remote.node] {
                     DemoNode::Sink => unreachable!("Sink node has no outputs"),
                     DemoNode::ShowImage(_) => {
                         unreachable!("ShowImage node has no outputs")
@@ -265,7 +265,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                     }
                     DemoNode::String(ref value) => {
                         let value = value.clone();
-                        match snarl.get_node_mut(pin.id.node) {
+                        match &mut snarl[pin.id.node] {
                             DemoNode::ShowImage(uri) => {
                                 *uri = value;
                                 ui.label(&*uri);
@@ -280,7 +280,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             DemoNode::ExprNode(ref expr_node) => {
                 if pin.id.input < expr_node.bindings.len() {
                     match &*pin.remotes {
-                        [] => match snarl.get_node_mut(pin.id.node) {
+                        [] => match &mut snarl[pin.id.node] {
                             DemoNode::ExprNode(expr_node) => {
                                 ui.label(&expr_node.bindings[pin.id.input]);
                                 ui.add(egui::DragValue::new(&mut expr_node.values[pin.id.input]));
@@ -290,14 +290,14 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         },
                         [remote] => {
                             ui.label(&expr_node.bindings[pin.id.input]);
-                            let pin_info = match *snarl.get_node(remote.node) {
+                            let pin_info = match snarl[remote.node] {
                                 DemoNode::Sink => unreachable!("Sink node has no outputs"),
                                 DemoNode::Integer(value) => {
                                     assert_eq!(
                                         remote.output, 0,
                                         "Integer node has only one output"
                                     );
-                                    match snarl.get_node_mut(pin.id.node) {
+                                    match &mut snarl[pin.id.node] {
                                         DemoNode::ExprNode(expr_node) => {
                                             expr_node.values[pin.id.input] = value as f64;
                                         }
@@ -309,7 +309,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                                     let value = expr_node.eval();
 
                                     assert_eq!(remote.output, 0, "Expr node has only one output");
-                                    match snarl.get_node_mut(pin.id.node) {
+                                    match &mut snarl[pin.id.node] {
                                         DemoNode::ExprNode(expr_node) => {
                                             expr_node.values[pin.id.input] = value;
                                         }
@@ -344,7 +344,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         _scale: f32,
         snarl: &mut Snarl<DemoNode>,
     ) -> PinInfo {
-        match *snarl.get_node(pin.id.node) {
+        match snarl[pin.id.node] {
             DemoNode::Sink => {
                 unreachable!("Sink node has no outputs")
             }
@@ -379,12 +379,12 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         _style: &egui::Style,
         snarl: &mut Snarl<DemoNode>,
     ) -> Color32 {
-        match *snarl.get_node(pin.id.node) {
+        match snarl[pin.id.node] {
             DemoNode::Sink => {
                 assert_eq!(pin.id.input, 0, "Sink node has only one input");
                 match &*pin.remotes {
                     [] => Color32::GRAY,
-                    [remote] => match *snarl.get_node(remote.node) {
+                    [remote] => match snarl[remote.node] {
                         DemoNode::Sink => unreachable!("Sink node has no outputs"),
                         DemoNode::Integer(_) => Color32::RED,
                         DemoNode::String(_) => Color32::GREEN,
@@ -411,7 +411,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         _style: &egui::Style,
         snarl: &mut Snarl<DemoNode>,
     ) -> Color32 {
-        match *snarl.get_node(pin.id.node) {
+        match snarl[pin.id.node] {
             DemoNode::Sink => {
                 unreachable!("Sink node has no outputs")
             }
@@ -454,7 +454,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
 
     fn node_menu(
         &mut self,
-        idx: usize,
+        node: NodeId,
         _inputs: &[InPin],
         _outputs: &[OutPin],
         ui: &mut Ui,
@@ -463,7 +463,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     ) {
         ui.label("Node menu");
         if ui.button("Remove").clicked() {
-            snarl.remove_node(idx);
+            snarl.remove_node(node);
             ui.close_menu();
         }
     }
