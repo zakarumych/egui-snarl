@@ -24,7 +24,7 @@ struct NodeData {
     unscaled_size: Vec2,
     unscaled_header_height: f32,
     unscaled_body_width: f32,
-    unsacled_footer_width: f32,
+    unscaled_footer_width: f32,
 }
 
 impl NodeState {
@@ -34,7 +34,7 @@ impl NodeState {
                 size: data.unscaled_size * scale,
                 header_height: data.unscaled_header_height * scale,
                 body_width: data.unscaled_body_width * scale,
-                footer_width: data.unsacled_footer_width * scale,
+                footer_width: data.unscaled_footer_width * scale,
                 id,
                 scale,
                 dirty: false,
@@ -57,7 +57,7 @@ impl NodeState {
                         unscaled_size: self.size / self.scale,
                         unscaled_header_height: self.header_height / self.scale,
                         unscaled_body_width: self.body_width / self.scale,
-                        unsacled_footer_width: self.footer_width / self.scale,
+                        unscaled_footer_width: self.footer_width / self.scale,
                     },
                 )
             });
@@ -170,32 +170,26 @@ impl SnarlState {
         snarl: &Snarl<T>,
         style: &SnarlStyle,
     ) -> Self {
-        let Some(SnarlStateData {
-            mut offset,
-            mut scale,
-            target_scale,
-            new_wires,
-        }) = cx.data_mut(|d| d.get_temp(id))
-        else {
+        let Some(mut data) = cx.data_mut(|d| d.get_temp::<SnarlStateData>(id)) else {
             return Self::initial(id, viewport, snarl, style);
         };
 
-        let new_scale = cx.animate_value_with_time(id.with("zoom-scale"), target_scale, 0.1);
+        let new_scale = cx.animate_value_with_time(id.with("zoom-scale"), data.target_scale, 0.1);
 
         let mut dirty = false;
-        if new_scale != scale {
-            let a = pivot + offset - viewport.center().to_vec2();
+        if new_scale != data.scale {
+            let a = pivot + data.offset - viewport.center().to_vec2();
 
-            offset += a * new_scale / scale - a;
-            scale = new_scale;
+            data.offset += a * new_scale / data.scale - a;
+            data.scale = new_scale;
             dirty = true;
         }
 
         SnarlState {
-            offset,
-            scale,
-            target_scale,
-            new_wires,
+            offset: data.offset,
+            scale: data.scale,
+            target_scale: data.target_scale,
+            new_wires: data.new_wires,
             id,
             dirty,
         }
