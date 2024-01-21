@@ -24,7 +24,7 @@ struct NodeData {
     unscaled_size: Vec2,
     unscaled_header_height: f32,
     unscaled_body_width: f32,
-    unscaled_footer_width: f32,
+    unsacled_footer_width: f32,
 }
 
 impl NodeState {
@@ -34,7 +34,7 @@ impl NodeState {
                 size: data.unscaled_size * scale,
                 header_height: data.unscaled_header_height * scale,
                 body_width: data.unscaled_body_width * scale,
-                footer_width: data.unscaled_footer_width * scale,
+                footer_width: data.unsacled_footer_width * scale,
                 id,
                 scale,
                 dirty: false,
@@ -57,7 +57,7 @@ impl NodeState {
                         unscaled_size: self.size / self.scale,
                         unscaled_header_height: self.header_height / self.scale,
                         unscaled_body_width: self.body_width / self.scale,
-                        unscaled_footer_width: self.footer_width / self.scale,
+                        unsacled_footer_width: self.footer_width / self.scale,
                     },
                 )
             });
@@ -264,6 +264,11 @@ impl SnarlState {
     #[inline(always)]
     pub fn scale(&self) -> f32 {
         self.scale
+    }
+
+    #[inline(always)]
+    pub fn offset(&self) -> Vec2 {
+        self.offset
     }
 
     #[inline(always)]

@@ -467,6 +467,38 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             ui.close_menu();
         }
     }
+
+    fn has_on_hover_popup(&mut self, _: &DemoNode) -> bool {
+        true
+    }
+
+    fn show_on_hover_popup(
+        &mut self,
+        node: NodeId,
+        inputs: &[InPin],
+        outputs: &[OutPin],
+        ui: &mut Ui,
+        scale: f32,
+        snarl: &mut Snarl<DemoNode>,
+    ) {
+        match snarl[node] {
+            DemoNode::Sink => {
+                ui.label("Displays anything connected to it");
+            }
+            DemoNode::Integer(_) => {
+                ui.label("Outputs integer value");
+            }
+            DemoNode::String(_) => {
+                ui.label("Outputs string value");
+            }
+            DemoNode::ShowImage(_) => {
+                ui.label("Displays image from URL in input");
+            }
+            DemoNode::ExprNode(_) => {
+                ui.label("Evaluates algebraic expression with input for each unique variable name");
+            }
+        }
+    }
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
