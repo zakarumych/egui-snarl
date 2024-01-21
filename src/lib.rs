@@ -7,6 +7,8 @@
 
 pub mod ui;
 
+use std::ops::{Index, IndexMut};
+
 use egui::{ahash::HashSet, Pos2};
 use slab::Slab;
 
@@ -15,6 +17,11 @@ impl<T> Default for Snarl<T> {
         Snarl::new()
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[repr(transparent)]
+pub struct NodeId(pub usize);
 
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -31,22 +38,22 @@ struct Node<T> {
 }
 
 /// Output pin identifier. Cosists of node index and pin index.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OutPinId {
     /// Node index.
-    pub node: usize,
+    pub node: NodeId,
 
     /// Output pin index.
     pub output: usize,
 }
 
 /// Input pin identifier. Cosists of node index and pin index.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct InPinId {
     /// Node index.
-    pub node: usize,
+    pub node: NodeId,
 
     /// Input pin index.
     pub input: usize,
@@ -132,7 +139,7 @@ impl Wires {
         self.wires.remove(wire)
     }
 
-    fn drop_node(&mut self, node: usize) {
+    fn drop_node(&mut self, node: NodeId) {
         self.wires
             .retain(|wire| wire.out_pin.node != node && wire.in_pin.node != node);
     }
@@ -173,7 +180,7 @@ impl Wires {
 pub struct Snarl<T> {
     // #[cfg_attr(feature = "serde", serde(with = "serde_nodes"))]
     nodes: Slab<Node<T>>,
-    draw_order: Vec<usize>,
+    draw_order: Vec<NodeId>,
     wires: Wires,
 }
 
@@ -204,14 +211,15 @@ impl<T> Snarl<T> {
     /// let mut snarl = Snarl::<()>::new();
     /// snarl.insert_node(());
     /// ```
-    pub fn insert_node(&mut self, pos: egui::Pos2, node: T) -> usize {
+    pub fn insert_node(&mut self, pos: egui::Pos2, node: T) -> NodeId {
         let idx = self.nodes.insert(Node {
             value: node,
             pos,
             open: true,
         });
-        self.draw_order.push(idx);
-        idx
+        let id = NodeId(idx);
+        self.draw_order.push(id);
+        id
     }
 
     /// Adds a node to the Snarl in collapsed state.
@@ -224,20 +232,21 @@ impl<T> Snarl<T> {
     /// let mut snarl = Snarl::<()>::new();
     /// snarl.insert_node(());
     /// ```
-    pub fn add_node_collapsed(&mut self, pos: egui::Pos2, node: T) -> usize {
+    pub fn add_node_collapsed(&mut self, pos: egui::Pos2, node: T) -> NodeId {
         let idx = self.nodes.insert(Node {
             value: node,
             pos,
             open: false,
         });
-        self.draw_order.push(idx);
-        idx
+        let id = NodeId(idx);
+        self.draw_order.push(id);
+        id
     }
 
     /// Opens or collapses a node.
     #[track_caller]
-    pub fn open_node(&mut self, node: usize, open: bool) {
-        self.nodes[node].open = open;
+    pub fn open_node(&mut self, node: NodeId, open: bool) {
+        self.nodes[node.0].open = open;
     }
 
     /// Removes a node from the Snarl.
@@ -252,8 +261,8 @@ impl<T> Snarl<T> {
     /// snarl.remove_node(node);
     /// ```
     #[track_caller]
-    pub fn remove_node(&mut self, idx: usize) -> T {
-        let value = self.nodes.remove(idx).value;
+    pub fn remove_node(&mut self, idx: NodeId) -> T {
+        let value = self.nodes.remove(idx.0).value;
         self.wires.drop_node(idx);
         let order = self.draw_order.iter().position(|&i| i == idx).unwrap();
         self.draw_order.remove(order);
@@ -265,8 +274,8 @@ impl<T> Snarl<T> {
     /// Returns false if the connection already exists.
     #[track_caller]
     pub fn connect(&mut self, from: OutPinId, to: InPinId) -> bool {
-        debug_assert!(self.nodes.contains(from.node));
-        debug_assert!(self.nodes.contains(to.node));
+        debug_assert!(self.nodes.contains(from.node.0));
+        debug_assert!(self.nodes.contains(to.node.0));
 
         let wire = Wire {
             out_pin: from,
@@ -277,8 +286,8 @@ impl<T> Snarl<T> {
 
     #[track_caller]
     pub fn disconnect(&mut self, from: OutPinId, to: InPinId) {
-        debug_assert!(self.nodes.contains(from.node));
-        debug_assert!(self.nodes.contains(to.node));
+        debug_assert!(self.nodes.contains(from.node.0));
+        debug_assert!(self.nodes.contains(to.node.0));
 
         let wire = Wire {
             out_pin: from,
@@ -289,28 +298,34 @@ impl<T> Snarl<T> {
 
     #[track_caller]
     pub fn drop_inputs(&mut self, pin: InPinId) {
-        debug_assert!(self.nodes.contains(pin.node));
+        debug_assert!(self.nodes.contains(pin.node.0));
 
         self.wires.drop_inputs(pin);
     }
 
     #[track_caller]
     pub fn drop_outputs(&mut self, pin: OutPinId) {
-        debug_assert!(self.nodes.contains(pin.node));
+        debug_assert!(self.nodes.contains(pin.node.0));
 
         self.wires.drop_outputs(pin);
     }
 
     /// Returns reference to the node.
     #[track_caller]
-    pub fn get_node(&self, idx: usize) -> &T {
-        &self.nodes[idx].value
+    pub fn get_node(&self, idx: NodeId) -> Option<&T> {
+        match self.nodes.get(idx.0) {
+            Some(node) => Some(&node.value),
+            None => None,
+        }
     }
 
     /// Returns mutable reference to the node.
     #[track_caller]
-    pub fn get_node_mut(&mut self, idx: usize) -> &mut T {
-        &mut self.nodes[idx].value
+    pub fn get_node_mut(&mut self, idx: NodeId) -> Option<&mut T> {
+        match self.nodes.get_mut(idx.0) {
+            Some(node) => Some(&mut node.value),
+            None => None,
+        }
     }
 
     pub fn nodes(&self) -> NodesIter<'_, T> {
@@ -337,26 +352,26 @@ impl<T> Snarl<T> {
         }
     }
 
-    pub fn node_indices(&self) -> NodesIndicesIter<'_, T> {
-        NodesIndicesIter {
+    pub fn node_ids(&self) -> NodesIdsIter<'_, T> {
+        NodesIdsIter {
             nodes: self.nodes.iter(),
         }
     }
 
-    pub fn nodes_indices_mut(&mut self) -> NodesIndicesIterMut<'_, T> {
-        NodesIndicesIterMut {
+    pub fn nodes_ids_mut(&mut self) -> NodesIdsIterMut<'_, T> {
+        NodesIdsIterMut {
             nodes: self.nodes.iter_mut(),
         }
     }
 
-    pub fn nodes_pos_indices(&self) -> NodesPosIndicesIter<'_, T> {
-        NodesPosIndicesIter {
+    pub fn nodes_pos_ids(&self) -> NodesPosIdsIter<'_, T> {
+        NodesPosIdsIter {
             nodes: self.nodes.iter(),
         }
     }
 
-    pub fn nodes_pos_indices_mut(&mut self) -> NodesPosIndicesIterMut<'_, T> {
-        NodesPosIndicesIterMut {
+    pub fn nodes_pos_ids_mut(&mut self) -> NodesPosIdsIterMut<'_, T> {
+        NodesPosIdsIterMut {
             nodes: self.nodes.iter_mut(),
         }
     }
@@ -367,6 +382,24 @@ impl<T> Snarl<T> {
 
     pub fn out_pin(&self, pin: OutPinId) -> OutPin {
         OutPin::new(self, pin)
+    }
+}
+
+impl<T> Index<NodeId> for Snarl<T> {
+    type Output = T;
+
+    #[inline]
+    #[track_caller]
+    fn index(&self, idx: NodeId) -> &Self::Output {
+        &self.nodes[idx.0].value
+    }
+}
+
+impl<T> IndexMut<NodeId> for Snarl<T> {
+    #[inline]
+    #[track_caller]
+    fn index_mut(&mut self, idx: NodeId) -> &mut Self::Output {
+        &mut self.nodes[idx.0].value
     }
 }
 
@@ -458,91 +491,91 @@ impl<'a, T> Iterator for NodesPosIterMut<'a, T> {
     }
 }
 
-pub struct NodesIndicesIter<'a, T> {
+pub struct NodesIdsIter<'a, T> {
     nodes: slab::Iter<'a, Node<T>>,
 }
 
-impl<'a, T> Iterator for NodesIndicesIter<'a, T> {
-    type Item = (usize, &'a T);
+impl<'a, T> Iterator for NodesIdsIter<'a, T> {
+    type Item = (NodeId, &'a T);
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.nodes.size_hint()
     }
 
-    fn next(&mut self) -> Option<(usize, &'a T)> {
+    fn next(&mut self) -> Option<(NodeId, &'a T)> {
         let (idx, node) = self.nodes.next()?;
-        Some((idx, &node.value))
+        Some((NodeId(idx), &node.value))
     }
 
-    fn nth(&mut self, n: usize) -> Option<(usize, &'a T)> {
+    fn nth(&mut self, n: usize) -> Option<(NodeId, &'a T)> {
         let (idx, node) = self.nodes.nth(n)?;
-        Some((idx, &node.value))
+        Some((NodeId(idx), &node.value))
     }
 }
 
-pub struct NodesIndicesIterMut<'a, T> {
+pub struct NodesIdsIterMut<'a, T> {
     nodes: slab::IterMut<'a, Node<T>>,
 }
 
-impl<'a, T> Iterator for NodesIndicesIterMut<'a, T> {
-    type Item = (usize, &'a mut T);
+impl<'a, T> Iterator for NodesIdsIterMut<'a, T> {
+    type Item = (NodeId, &'a mut T);
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.nodes.size_hint()
     }
 
-    fn next(&mut self) -> Option<(usize, &'a mut T)> {
+    fn next(&mut self) -> Option<(NodeId, &'a mut T)> {
         let (idx, node) = self.nodes.next()?;
-        Some((idx, &mut node.value))
+        Some((NodeId(idx), &mut node.value))
     }
 
-    fn nth(&mut self, n: usize) -> Option<(usize, &'a mut T)> {
+    fn nth(&mut self, n: usize) -> Option<(NodeId, &'a mut T)> {
         let (idx, node) = self.nodes.nth(n)?;
-        Some((idx, &mut node.value))
+        Some((NodeId(idx), &mut node.value))
     }
 }
 
-pub struct NodesPosIndicesIter<'a, T> {
+pub struct NodesPosIdsIter<'a, T> {
     nodes: slab::Iter<'a, Node<T>>,
 }
 
-impl<'a, T> Iterator for NodesPosIndicesIter<'a, T> {
-    type Item = (usize, Pos2, &'a T);
+impl<'a, T> Iterator for NodesPosIdsIter<'a, T> {
+    type Item = (NodeId, Pos2, &'a T);
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.nodes.size_hint()
     }
 
-    fn next(&mut self) -> Option<(usize, Pos2, &'a T)> {
+    fn next(&mut self) -> Option<(NodeId, Pos2, &'a T)> {
         let (idx, node) = self.nodes.next()?;
-        Some((idx, node.pos, &node.value))
+        Some((NodeId(idx), node.pos, &node.value))
     }
 
-    fn nth(&mut self, n: usize) -> Option<(usize, Pos2, &'a T)> {
+    fn nth(&mut self, n: usize) -> Option<(NodeId, Pos2, &'a T)> {
         let (idx, node) = self.nodes.nth(n)?;
-        Some((idx, node.pos, &node.value))
+        Some((NodeId(idx), node.pos, &node.value))
     }
 }
 
-pub struct NodesPosIndicesIterMut<'a, T> {
+pub struct NodesPosIdsIterMut<'a, T> {
     nodes: slab::IterMut<'a, Node<T>>,
 }
 
-impl<'a, T> Iterator for NodesPosIndicesIterMut<'a, T> {
-    type Item = (usize, Pos2, &'a mut T);
+impl<'a, T> Iterator for NodesPosIdsIterMut<'a, T> {
+    type Item = (NodeId, Pos2, &'a mut T);
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.nodes.size_hint()
     }
 
-    fn next(&mut self) -> Option<(usize, Pos2, &'a mut T)> {
+    fn next(&mut self) -> Option<(NodeId, Pos2, &'a mut T)> {
         let (idx, node) = self.nodes.next()?;
-        Some((idx, node.pos, &mut node.value))
+        Some((NodeId(idx), node.pos, &mut node.value))
     }
 
-    fn nth(&mut self, n: usize) -> Option<(usize, Pos2, &'a mut T)> {
+    fn nth(&mut self, n: usize) -> Option<(NodeId, Pos2, &'a mut T)> {
         let (idx, node) = self.nodes.nth(n)?;
-        Some((idx, node.pos, &mut node.value))
+        Some((NodeId(idx), node.pos, &mut node.value))
     }
 }
 

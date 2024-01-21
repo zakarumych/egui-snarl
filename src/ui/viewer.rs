@@ -1,6 +1,6 @@
 use egui::{Color32, Pos2, Style, Ui};
 
-use crate::{InPin, OutPin, Snarl};
+use crate::{InPin, NodeId, OutPin, Snarl};
 
 use super::pin::PinInfo;
 
@@ -12,18 +12,30 @@ pub trait SnarlViewer<T> {
     /// Returns title of the node.
     fn title(&mut self, node: &T) -> String;
 
+    /// Checks if node has something to show in body - between input and output pins.
+    fn has_body(&mut self, node: &T) -> bool {
+        let _ = node;
+        false
+    }
+
+    /// Checks if node has something to show in footer - below pins and body.
+    fn has_footer(&mut self, node: &T) -> bool {
+        let _ = node;
+        false
+    }
+
     /// Renders the node's header.
     fn show_header(
         &mut self,
-        idx: usize,
+        node: NodeId,
         inputs: &[InPin],
         outputs: &[OutPin],
         ui: &mut Ui,
         scale: f32,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (idx, inputs, outputs, scale);
-        ui.label(self.title(snarl.get_node(idx)));
+        let _ = (inputs, outputs, scale);
+        ui.label(self.title(&snarl[node]));
     }
 
     /// Returns number of output pins of the node.
@@ -45,6 +57,32 @@ pub trait SnarlViewer<T> {
         snarl: &mut Snarl<T>,
     ) -> PinInfo;
 
+    /// Renders the node's body.
+    fn show_body(
+        &mut self,
+        node: NodeId,
+        inputs: &[InPin],
+        outputs: &[OutPin],
+        ui: &mut Ui,
+        scale: f32,
+        snarl: &mut Snarl<T>,
+    ) {
+        let _ = (node, inputs, outputs, ui, scale, snarl);
+    }
+
+    /// Renders the node's footer.
+    fn show_footer(
+        &mut self,
+        node: NodeId,
+        inputs: &[InPin],
+        outputs: &[OutPin],
+        ui: &mut Ui,
+        scale: f32,
+        snarl: &mut Snarl<T>,
+    ) {
+        let _ = (node, inputs, outputs, ui, scale, snarl);
+    }
+
     /// Returns color of the node's input pin.
     /// Called when pin in not visible.
     fn input_color(&mut self, pin: &InPin, style: &Style, snarl: &mut Snarl<T>) -> Color32;
@@ -65,14 +103,14 @@ pub trait SnarlViewer<T> {
     /// This can be used to implement menu for adding new nodes.
     fn node_menu(
         &mut self,
-        idx: usize,
+        node: NodeId,
         inputs: &[InPin],
         outputs: &[OutPin],
         ui: &mut Ui,
         scale: f32,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (idx, inputs, outputs, ui, scale, snarl);
+        let _ = (node, inputs, outputs, ui, scale, snarl);
     }
 
     /// Asks the viewer to connect two pins.
