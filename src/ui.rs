@@ -95,6 +95,7 @@ pub struct SnarlStyle {
     /// Do not access other than with .., here to emulate `#[non_exhaustive(pub)]`
     pub _non_exhaustive: (),
 
+    /// Enable centering by double click on background
     pub centering: bool
 }
 
