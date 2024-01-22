@@ -1,10 +1,12 @@
 [package]
 name = "egui-snarl"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Node-graphs for egui"
 license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/egui-snarl"
+keywords = ["egui", "node", "graph", "ui", "node-graph"]
+categories = ["gui", "visualization"]
 
 [features]
 serde = ["dep:serde", "egui/serde", "slab/serde"]
