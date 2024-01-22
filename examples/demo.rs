@@ -293,7 +293,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
 
                             expr_node.values = new_values;
 
-                            let inputs = (0..expr_node.bindings.len())
+                            let old_inputs = (0..old_bindings.len())
                                 .map(|idx| {
                                     snarl.in_pin(InPinId {
                                         node: pin.id.node,
@@ -308,15 +308,15 @@ impl SnarlViewer<DemoNode> for DemoViewer {
 
                                 match new_idx {
                                     None => {
-                                        snarl.drop_inputs(inputs[idx].id);
+                                        snarl.drop_inputs(old_inputs[idx].id);
                                     }
                                     Some(new_idx) if new_idx != idx => {
                                         let new_in_pin = InPinId {
                                             node: pin.id.node,
                                             input: new_idx,
                                         };
-                                        for &remote in &inputs[idx].remotes {
-                                            snarl.disconnect(remote, inputs[idx].id);
+                                        for &remote in &old_inputs[idx].remotes {
+                                            snarl.disconnect(remote, old_inputs[idx].id);
                                             snarl.connect(remote, new_in_pin);
                                         }
                                     }
