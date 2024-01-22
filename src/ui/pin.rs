@@ -8,17 +8,11 @@ pub enum AnyPin {
     In(InPinId),
 }
 
-mod with_missing_docs {
-    #![allow(missing_docs)]
-    use super::*;
-
-    tiny_fn::tiny_fn! {
-        /// Custom pin shape drawing function with signature
-        /// `Fn(painter: &Painter, rect: Rect, fill: Color32, stroke: Stroke)`
-        pub struct CustomPinShape = Fn(painter: &Painter, rect: Rect, fill: Color32, stroke: Stroke);
-    }
+tiny_fn::tiny_fn! {
+    /// Custom pin shape drawing function with signature
+    /// `Fn(painter: &Painter, rect: Rect, fill: Color32, stroke: Stroke)`
+    pub struct CustomPinShape = Fn(painter: &Painter, rect: Rect, fill: Color32, stroke: Stroke);
 }
-pub use with_missing_docs::CustomPinShape;
 
 /// Shape of a pin.
 pub enum PinShape {
@@ -126,7 +120,7 @@ pub fn draw_pin(painter: &Painter, pin: PinInfo, pos: Pos2, base_size: f32) {
     let size = base_size * pin.size;
     match pin.shape {
         PinShape::Circle => {
-            painter.circle(pos, size * 0.5, pin.fill, pin.stroke);
+            painter.circle(pos, size * 2.0 / std::f32::consts::PI, pin.fill, pin.stroke);
         }
         PinShape::Triangle => {
             const A: Vec2 = vec2(-0.649_519, 0.4875);

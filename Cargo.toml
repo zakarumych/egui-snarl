@@ -1,3 +1,4 @@
+workspace = { members = ["demo"] }
 [package]
 name = "egui-snarl"
 version = "0.2.1"
@@ -15,7 +16,9 @@ serde = ["dep:serde", "egui/serde", "slab/serde"]
 egui = { version = "0.25" }
 slab = { version = "0.4" }
 serde = { version = "1.0", features = ["derive"], optional = true }
-tiny-fn = { version = "0.1" }
+tiny-fn = { version = "0.1.6" }
+
+egui-probe = { version = "0.1", features = ["derive"], optional = true }
 
 [dev-dependencies]
 eframe = { version = "0.25", features = ["serde", "persistence"] }
@@ -23,6 +26,9 @@ egui_extras = { version = "0.25", features = ["all_loaders"] }
 syn = { version = "2.0", features = ["extra-traits"] }
 serde_json = { version = "1.0" }
 
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-futures = "0.4"
+
 [[example]]
 name = "demo"
-required-features = ["serde"]
+required-features = ["serde", "egui-probe"]

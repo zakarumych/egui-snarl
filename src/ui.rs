@@ -32,11 +32,15 @@ pub use self::{
 
 /// Style for rendering Snarl.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
 pub struct SnarlStyle {
     /// Size of pins.
+    #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
     pub pin_size: Option<f32>,
 
     /// Width of wires.
+    #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
     pub wire_width: Option<f32>,
 
     /// Size of wire frame which controls curvature of wires.
@@ -72,16 +76,20 @@ pub struct SnarlStyle {
     pub background_pattern_stroke: Option<Stroke>,
 
     /// Minimum scale that can be set.
+    #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..=1.0))]
     pub min_scale: f32,
 
     /// Maximum scale that can be set.
+    #[cfg_attr(feature = "egui-probe", egui_probe(range = 1.0..))]
     pub max_scale: f32,
 
     /// Scale velocity when scaling with mouse wheel.
+    #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
     pub scale_velocity: f32,
 
     /// Frame used to draw nodes.
     /// Defaults to [`Frame::window`] constructed from current ui's style.
+    #[cfg_attr(feature = "serde", serde(with = "serde_frame_option"))]
     pub node_frame: Option<Frame>,
 
     /// Frame used to draw node headers.
@@ -89,11 +97,61 @@ pub struct SnarlStyle {
     ///
     /// If set, it should not have shadow and fill should be either opaque of fully transparent
     /// unless layering of header fill color with node fill color is desired.
+    #[cfg_attr(feature = "serde", serde(with = "serde_frame_option"))]
     pub header_frame: Option<Frame>,
 
     #[doc(hidden)]
+    #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
     /// Do not access other than with .., here to emulate `#[non_exhaustive(pub)]`
     pub _non_exhaustive: (),
+}
+
+#[cfg(feature = "serde")]
+mod serde_frame_option {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    pub struct Frame {
+        pub inner_margin: egui::Margin,
+        pub outer_margin: egui::Margin,
+        pub rounding: egui::Rounding,
+        pub shadow: egui::epaint::Shadow,
+        pub fill: egui::Color32,
+        pub stroke: egui::Stroke,
+    }
+
+    pub fn serialize<S>(frame: &Option<egui::Frame>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match frame {
+            Some(frame) => Frame {
+                inner_margin: frame.inner_margin,
+                outer_margin: frame.outer_margin,
+                rounding: frame.rounding,
+                shadow: frame.shadow,
+                fill: frame.fill,
+                stroke: frame.stroke,
+            }
+            .serialize(serializer),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<egui::Frame>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let frame_opt = Option::<Frame>::deserialize(deserializer)?;
+        Ok(frame_opt.map(|frame| egui::Frame {
+            inner_margin: frame.inner_margin,
+            outer_margin: frame.outer_margin,
+            rounding: frame.rounding,
+            shadow: frame.shadow,
+            fill: frame.fill,
+            stroke: frame.stroke,
+        }))
+    }
 }
 
 impl SnarlStyle {
@@ -525,6 +583,7 @@ impl<T> Snarl<T> {
 
         let pin_size = style
             .pin_size
+            .zoomed(snarl_state.scale())
             .unwrap_or(node_style.spacing.interact_size.y * 0.5);
 
         let header_drag_space = style
@@ -635,11 +694,9 @@ impl<T> Snarl<T> {
 
             let min_pin_y = header_rect.center().y;
 
-            let input_x = header_rect.left() + header_frame.total_margin().left + pin_size * 0.5;
+            let input_x = node_frame_rect.left() + node_frame.inner_margin.left + pin_size;
 
-            let output_x = f32::max(header_rect.right(), node_rect.right())
-                - header_frame.total_margin().right
-                - pin_size * 0.5;
+            let output_x = node_frame_rect.right() - node_frame.inner_margin.right - pin_size;
 
             // Input/output pin block
 
@@ -677,7 +734,7 @@ impl<T> Snarl<T> {
                 // Show input pin.
                 inputs_ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
                     // Allocate space for pin shape.
-                    let (pin_id, _) = ui.allocate_space(vec2(pin_size, pin_size));
+                    let (pin_id, _) = ui.allocate_space(vec2(pin_size * 1.5, pin_size * 1.5));
 
                     let y0 = ui.cursor().min.y;
 
@@ -780,7 +837,7 @@ impl<T> Snarl<T> {
                 outputs_ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
                     // Allocate space for pin shape.
 
-                    let (pin_id, _) = ui.allocate_space(vec2(pin_size, pin_size));
+                    let (pin_id, _) = ui.allocate_space(vec2(pin_size * 1.5, pin_size * 1.5));
 
                     let y0 = ui.cursor().min.y;
 

@@ -54,14 +54,17 @@ impl Viewport {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
 ///Grid background pattern.
 ///Use `SnarlStyle::background_pattern_stroke` for change stroke options
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
 pub struct Grid {
     /// Spacing between grid lines.
     pub spacing: Vec2,
 
     /// Angle of the grid.
+    #[cfg_attr(feature = "egui-probe", egui_probe(as egui_probe::angle))]
     pub angle: f32,
 }
 
@@ -104,7 +107,8 @@ impl Grid {
             bg_stroke.color.gamma_multiply(viewport.scale.min(1.0)),
         );
 
-        let spacing = ui.spacing().icon_width * self.spacing;
+        let spacing =
+            ui.spacing().icon_width * vec2(self.spacing.x.max(1.0), self.spacing.y.max(1.0));
 
         let rot = Rot2::from_angle(self.angle);
         let rot_inv = rot.inverse();
@@ -150,29 +154,45 @@ impl Grid {
     }
 }
 
-mod with_missing_docs {
-    #![allow(missing_docs)]
-    use super::*;
+tiny_fn::tiny_fn! {
+    /// Custom background pattern function with signature
+    /// `Fn(style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui)`
+    pub struct CustomBackground = Fn(style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui);
+}
 
-    tiny_fn::tiny_fn! {
-        /// Custom background pattern function with signature
-        /// `Fn(style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui)`
-        pub struct CustomBackground = Fn(style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui);
+impl<const INLINE_SIZE: usize> Default for CustomBackground<'_, INLINE_SIZE> {
+    fn default() -> Self {
+        Self::new(|_, _, _| {})
     }
 }
-pub use with_missing_docs::CustomBackground;
+
+#[cfg(feature = "egui-probe")]
+impl<const INLINE_SIZE: usize> egui_probe::EguiProbe for CustomBackground<'_, INLINE_SIZE> {
+    fn probe(
+        &mut self,
+        ui: &mut egui_probe::egui::Ui,
+        _style: &egui_probe::Style,
+    ) -> egui_probe::egui::Response {
+        ui.weak("Custom")
+    }
+}
 
 /// Background pattern show beneath nodes and wires.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
 pub enum BackgroundPattern {
     /// No pattern.
     NoPattern,
 
     /// Linear grid.
+    #[cfg_attr(feature = "egui-probe", egui_probe(transparent))]
     Grid(Grid),
 
     /// Custom pattern.
     /// Contains function with signature
     /// `Fn(style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui)`
+    #[cfg_attr(feature = "serde", serde(skip))]
+    #[cfg_attr(feature = "egui-probe", egui_probe(transparent))]
     Custom(CustomBackground<'static>),
 }
 

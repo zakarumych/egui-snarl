@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use eframe::{App, CreationContext};
-use egui::{epaint::Shadow, Color32, Ui};
+use egui::{Color32, Ui};
 use egui_snarl::{
     ui::{PinInfo, SnarlStyle, SnarlViewer},
     InPin, InPinId, NodeId, OutPin, Snarl,
@@ -821,6 +821,7 @@ impl Expr {
 
 pub struct DemoApp {
     snarl: Snarl<DemoNode>,
+    style: SnarlStyle,
 }
 
 impl DemoApp {
@@ -838,15 +839,26 @@ impl DemoApp {
         };
         // let snarl = Snarl::new();
 
-        DemoApp { snarl }
+        let style = match cx.storage {
+            None => SnarlStyle::new(),
+            Some(storage) => {
+                let style = storage
+                    .get_string("style")
+                    .and_then(|style| serde_json::from_str(&style).ok())
+                    .unwrap_or_else(SnarlStyle::new);
+
+                style
+            }
+        };
+        // let style = SnarlStyle::new();
+
+        DemoApp { snarl, style }
     }
 }
 
 impl App for DemoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui_extras::install_image_loaders(ctx);
-
-        ctx.style_mut(|style| style.animation_time = 5.0);
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
@@ -863,42 +875,29 @@ impl App for DemoApp {
             });
         });
 
+        egui::SidePanel::left("style").show(ctx, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                egui_probe::Probe::new("Snarl style", &mut self.style).show(ui);
+            });
+        });
+
         egui::CentralPanel::default().show(ctx, |ui| {
-            let node_color = if ui.visuals().dark_mode {
-                Color32::from_rgba_premultiplied(0x20, 0x20, 0x20, 0x80)
-            } else {
-                Color32::from_rgba_premultiplied(0x80, 0x80, 0x80, 0x80)
-            };
-            let header_color = if ui.visuals().dark_mode {
-                Color32::from_rgba_premultiplied(25, 21, 0, 0x40)
-            } else {
-                Color32::from_rgba_premultiplied(255, 215, 0, 0x40)
-            };
-
-            let node_frame = egui::Frame::window(ui.style()).fill(node_color);
-            let header_frame = node_frame.shadow(Shadow::NONE).fill(header_color);
-
-            self.snarl.show(
-                &mut DemoViewer,
-                &SnarlStyle {
-                    collapsible: true,
-                    wire_frame_size: Some(100.0),
-                    node_frame: Some(node_frame),
-                    header_frame: Some(header_frame),
-                    ..Default::default()
-                },
-                egui::Id::new("snarl"),
-                ui,
-            );
+            self.snarl
+                .show(&mut DemoViewer, &self.style, egui::Id::new("snarl"), ui);
         });
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         let snarl = serde_json::to_string(&self.snarl).unwrap();
         storage.set_string("snarl", snarl);
+
+        let style = serde_json::to_string(&self.style).unwrap();
+        storage.set_string("style", style);
     }
 }
 
+// When compiling natively:
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -912,6 +911,23 @@ fn main() -> eframe::Result<()> {
         native_options,
         Box::new(|cx| Box::new(DemoApp::new(cx))),
     )
+}
+
+// When compiling to web using trunk:
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    let web_options = eframe::WebOptions::default();
+
+    wasm_bindgen_futures::spawn_local(async {
+        eframe::WebRunner::new()
+            .start(
+                "egui_snarl_demo",
+                web_options,
+                Box::new(|cx| Box::new(DemoApp::new(cx))),
+            )
+            .await
+            .expect("failed to start eframe");
+    });
 }
 
 fn format_float(v: f64) -> String {

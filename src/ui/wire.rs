@@ -2,6 +2,8 @@ use egui::{epaint::PathShape, pos2, Color32, Pos2, Rect, Shape, Stroke, Ui};
 
 /// Layer where wires are rendered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
 pub enum WireLayer {
     /// Wires are rendered behind nodes.
     /// This is default.
