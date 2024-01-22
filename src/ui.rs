@@ -84,6 +84,13 @@ pub struct SnarlStyle {
     /// Defaults to [`Frame::window`] constructed from current ui's style.
     pub node_frame: Option<Frame>,
 
+    /// Frame used to draw node headers.
+    /// Defaults to [`node_frame`] without shadow and transparent fill.
+    ///
+    /// If set, it should not have shadow and fill should be either opaque of fully transparent
+    /// unless layering of header fill color with node fill color is desired.
+    pub header_frame: Option<Frame>,
+
     #[doc(hidden)]
     /// Do not access other than with .., here to emulate `#[non_exhaustive(pub)]`
     pub _non_exhaustive: (),
@@ -111,6 +118,7 @@ impl SnarlStyle {
             max_scale: 2.0,
             scale_velocity: 0.005,
             node_frame: None,
+            header_frame: None,
 
             _non_exhaustive: (),
         }
@@ -201,15 +209,27 @@ impl<T> Snarl<T> {
 
                 let pin_size = style
                     .pin_size
+                    .zoomed(snarl_state.scale())
                     .unwrap_or(node_style.spacing.interact_size.y * 0.5);
 
-                let wire_frame_size = style.wire_frame_size.unwrap_or(pin_size * 5.0);
-                let wire_width = style.wire_width.unwrap_or(pin_size * 0.2);
+                let wire_frame_size = style
+                    .wire_frame_size
+                    .zoomed(snarl_state.scale())
+                    .unwrap_or(pin_size * 5.0);
+                let wire_width = style
+                    .wire_width
+                    .zoomed(snarl_state.scale())
+                    .unwrap_or(pin_size * 0.2);
 
                 let node_frame = style
                     .node_frame
+                    .zoomed(snarl_state.scale())
                     .unwrap_or_else(|| Frame::window(&node_style));
-                let header_frame = node_frame.shadow(Shadow::NONE).fill(Color32::TRANSPARENT);
+
+                let header_frame = style
+                    .header_frame
+                    .zoomed(snarl_state.scale())
+                    .unwrap_or_else(|| node_frame.shadow(Shadow::NONE).fill(Color32::TRANSPARENT));
 
                 let wire_shape_idx = match style.wire_layer {
                     WireLayer::BehindNodes => Some(ui.painter().add(Shape::Noop)),
@@ -509,6 +529,7 @@ impl<T> Snarl<T> {
 
         let header_drag_space = style
             .header_drag_space
+            .zoomed(snarl_state.scale())
             .unwrap_or_else(|| vec2(node_style.spacing.icon_width, node_style.spacing.icon_width));
 
         let inputs = (0..inputs_count)

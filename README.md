@@ -1,7 +1,7 @@
 # egui-snarl <img src="./logo.png" width="32"/>
 
-Crate for creating node-graph UIs.
-This is in early development. Many more features are planned.
+Crate for creating and manipulating node-graph UIs.
+It contains all necessary features and more are planned.
 
 # Why "snarl"?
 
