@@ -64,7 +64,11 @@ Because that's how any complex visual graph looks like.
 
 [![demo](./demo.png)](./demo.png)
 
-# Web Demo
+# Web Demos
+
+Snarl Demo GUI by @zakarumych
+
+https://zakarumych.github.io/egui-snarl/
 
 Noise GUI by @attackgoat
 
