@@ -24,6 +24,12 @@ pub trait SnarlViewer<T> {
         false
     }
 
+    /// Checks if node has something to show in on-hover popup.
+    fn has_on_hover_popup(&mut self, node: &T) -> bool {
+        let _ = node;
+        false
+    }
+
     /// Renders the node's header.
     fn show_header(
         &mut self,
@@ -72,6 +78,19 @@ pub trait SnarlViewer<T> {
 
     /// Renders the node's footer.
     fn show_footer(
+        &mut self,
+        node: NodeId,
+        inputs: &[InPin],
+        outputs: &[OutPin],
+        ui: &mut Ui,
+        scale: f32,
+        snarl: &mut Snarl<T>,
+    ) {
+        let _ = (node, inputs, outputs, ui, scale, snarl);
+    }
+
+    /// Renders the node's on-hover popup.
+    fn show_on_hover_popup(
         &mut self,
         node: NodeId,
         inputs: &[InPin],

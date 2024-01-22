@@ -5,6 +5,11 @@
 //!
 //!
 
+#![deny(missing_docs)]
+#![deny(clippy::correctness, clippy::complexity, clippy::perf, clippy::style)]
+// #![warn(clippy::pedantic)]
+#![allow(clippy::inline_always)]
+
 pub mod ui;
 
 use std::ops::{Index, IndexMut};
@@ -18,6 +23,10 @@ impl<T> Default for Snarl<T> {
     }
 }
 
+/// Node identifier.
+///
+/// This is newtype wrapper around [`usize`] that implements
+/// necessary traits, but omits arithmetic operations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(transparent)]
@@ -139,17 +148,23 @@ impl Wires {
         self.wires.remove(wire)
     }
 
-    fn drop_node(&mut self, node: NodeId) {
+    fn drop_node(&mut self, node: NodeId) -> usize {
+        let count = self.wires.len();
         self.wires
             .retain(|wire| wire.out_pin.node != node && wire.in_pin.node != node);
+        count - self.wires.len()
     }
 
-    fn drop_inputs(&mut self, pin: InPinId) {
+    fn drop_inputs(&mut self, pin: InPinId) -> usize {
+        let count = self.wires.len();
         self.wires.retain(|wire| wire.in_pin != pin);
+        count - self.wires.len()
     }
 
-    fn drop_outputs(&mut self, pin: OutPinId) {
+    fn drop_outputs(&mut self, pin: OutPinId) -> usize {
+        let count = self.wires.len();
         self.wires.retain(|wire| wire.out_pin != pin);
+        count - self.wires.len()
     }
 
     fn wired_inputs(&self, out_pin: OutPinId) -> impl Iterator<Item = InPinId> + '_ {
@@ -193,6 +208,7 @@ impl<T> Snarl<T> {
     /// # use egui_snarl::Snarl;
     /// let snarl = Snarl::<()>::new();
     /// ```
+    #[must_use]
     pub fn new() -> Self {
         Snarl {
             nodes: Slab::new(),
@@ -244,6 +260,10 @@ impl<T> Snarl<T> {
     }
 
     /// Opens or collapses a node.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the node does not exist.
     #[track_caller]
     pub fn open_node(&mut self, node: NodeId, open: bool) {
         self.nodes[node.0].open = open;
@@ -251,6 +271,10 @@ impl<T> Snarl<T> {
 
     /// Removes a node from the Snarl.
     /// Returns the node if it was removed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the node does not exist.
     ///
     /// # Examples
     ///
@@ -272,10 +296,14 @@ impl<T> Snarl<T> {
     /// Connects two nodes.
     /// Returns true if the connection was successful.
     /// Returns false if the connection already exists.
+    ///
+    /// # Panics
+    ///
+    /// Panics if either node does not exist.
     #[track_caller]
     pub fn connect(&mut self, from: OutPinId, to: InPinId) -> bool {
-        debug_assert!(self.nodes.contains(from.node.0));
-        debug_assert!(self.nodes.contains(to.node.0));
+        assert!(self.nodes.contains(from.node.0));
+        assert!(self.nodes.contains(to.node.0));
 
         let wire = Wire {
             out_pin: from,
@@ -284,34 +312,52 @@ impl<T> Snarl<T> {
         self.wires.insert(wire)
     }
 
+    /// Disconnects two nodes.
+    /// Returns true if the connection was removed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if either node does not exist.
     #[track_caller]
-    pub fn disconnect(&mut self, from: OutPinId, to: InPinId) {
-        debug_assert!(self.nodes.contains(from.node.0));
-        debug_assert!(self.nodes.contains(to.node.0));
+    pub fn disconnect(&mut self, from: OutPinId, to: InPinId) -> bool {
+        assert!(self.nodes.contains(from.node.0));
+        assert!(self.nodes.contains(to.node.0));
 
         let wire = Wire {
             out_pin: from,
             in_pin: to,
         };
-        self.wires.remove(&wire);
+
+        self.wires.remove(&wire)
     }
 
+    /// Removes all connections to the node's pin.
+    ///
+    /// Returns number of removed connections.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the node does not exist.
     #[track_caller]
-    pub fn drop_inputs(&mut self, pin: InPinId) {
-        debug_assert!(self.nodes.contains(pin.node.0));
-
-        self.wires.drop_inputs(pin);
+    pub fn drop_inputs(&mut self, pin: InPinId) -> usize {
+        assert!(self.nodes.contains(pin.node.0));
+        self.wires.drop_inputs(pin)
     }
 
+    /// Removes all connections from the node's pin.
+    /// Returns number of removed connections.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the node does not exist.
     #[track_caller]
-    pub fn drop_outputs(&mut self, pin: OutPinId) {
-        debug_assert!(self.nodes.contains(pin.node.0));
-
-        self.wires.drop_outputs(pin);
+    pub fn drop_outputs(&mut self, pin: OutPinId) -> usize {
+        assert!(self.nodes.contains(pin.node.0));
+        self.wires.drop_outputs(pin)
     }
 
     /// Returns reference to the node.
-    #[track_caller]
+    #[must_use]
     pub fn get_node(&self, idx: NodeId) -> Option<&T> {
         match self.nodes.get(idx.0) {
             Some(node) => Some(&node.value),
@@ -320,7 +366,6 @@ impl<T> Snarl<T> {
     }
 
     /// Returns mutable reference to the node.
-    #[track_caller]
     pub fn get_node_mut(&mut self, idx: NodeId) -> Option<&mut T> {
         match self.nodes.get_mut(idx.0) {
             Some(node) => Some(&mut node.value),
@@ -328,58 +373,70 @@ impl<T> Snarl<T> {
         }
     }
 
+    /// Iterates over shared references to each node.
     pub fn nodes(&self) -> NodesIter<'_, T> {
         NodesIter {
             nodes: self.nodes.iter(),
         }
     }
 
+    /// Iterates over mutable references to each node.
     pub fn nodes_mut(&mut self) -> NodesIterMut<'_, T> {
         NodesIterMut {
             nodes: self.nodes.iter_mut(),
         }
     }
 
+    /// Iterates over shared references to each node and its position.
     pub fn nodes_pos(&self) -> NodesPosIter<'_, T> {
         NodesPosIter {
             nodes: self.nodes.iter(),
         }
     }
 
+    /// Iterates over mutable references to each node and its position.
     pub fn nodes_pos_mut(&mut self) -> NodesPosIterMut<'_, T> {
         NodesPosIterMut {
             nodes: self.nodes.iter_mut(),
         }
     }
 
+    /// Iterates over shared references to each node and its identifier.
     pub fn node_ids(&self) -> NodesIdsIter<'_, T> {
         NodesIdsIter {
             nodes: self.nodes.iter(),
         }
     }
 
+    /// Iterates over mutable references to each node and its identifier.
     pub fn nodes_ids_mut(&mut self) -> NodesIdsIterMut<'_, T> {
         NodesIdsIterMut {
             nodes: self.nodes.iter_mut(),
         }
     }
 
+    /// Iterates over shared references to each node, its position and its identifier.
     pub fn nodes_pos_ids(&self) -> NodesPosIdsIter<'_, T> {
         NodesPosIdsIter {
             nodes: self.nodes.iter(),
         }
     }
 
+    /// Iterates over mutable references to each node, its position and its identifier.
     pub fn nodes_pos_ids_mut(&mut self) -> NodesPosIdsIterMut<'_, T> {
         NodesPosIdsIterMut {
             nodes: self.nodes.iter_mut(),
         }
     }
 
+    /// Returns input pin of the node.
+    #[must_use]
     pub fn in_pin(&self, pin: InPinId) -> InPin {
         InPin::new(self, pin)
     }
 
+    /// Returns output pin of the node.
+    #[must_use]
     pub fn out_pin(&self, pin: OutPinId) -> OutPin {
         OutPin::new(self, pin)
     }
@@ -403,6 +460,8 @@ impl<T> IndexMut<NodeId> for Snarl<T> {
     }
 }
 
+/// Iterator over shared references to nodes.
+#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
 pub struct NodesIter<'a, T> {
     nodes: slab::Iter<'a, Node<T>>,
 }
@@ -425,6 +484,8 @@ impl<'a, T> Iterator for NodesIter<'a, T> {
     }
 }
 
+/// Iterator over mutable references to nodes.
+#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
 pub struct NodesIterMut<'a, T> {
     nodes: slab::IterMut<'a, Node<T>>,
 }
@@ -447,6 +508,8 @@ impl<'a, T> Iterator for NodesIterMut<'a, T> {
     }
 }
 
+/// Iterator over shared references to nodes and their positions.
+#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
 pub struct NodesPosIter<'a, T> {
     nodes: slab::Iter<'a, Node<T>>,
 }
@@ -469,6 +532,8 @@ impl<'a, T> Iterator for NodesPosIter<'a, T> {
     }
 }
 
+/// Iterator over mutable references to nodes and their positions.
+#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
 pub struct NodesPosIterMut<'a, T> {
     nodes: slab::IterMut<'a, Node<T>>,
 }
@@ -491,6 +556,8 @@ impl<'a, T> Iterator for NodesPosIterMut<'a, T> {
     }
 }
 
+/// Iterator over shared references to nodes and their identifiers.
+#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
 pub struct NodesIdsIter<'a, T> {
     nodes: slab::Iter<'a, Node<T>>,
 }
@@ -513,6 +580,8 @@ impl<'a, T> Iterator for NodesIdsIter<'a, T> {
     }
 }
 
+/// Iterator over mutable references to nodes and their identifiers.
+#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
 pub struct NodesIdsIterMut<'a, T> {
     nodes: slab::IterMut<'a, Node<T>>,
 }
@@ -535,6 +604,8 @@ impl<'a, T> Iterator for NodesIdsIterMut<'a, T> {
     }
 }
 
+/// Iterator over shared references to nodes, their positions and their identifiers.
+#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
 pub struct NodesPosIdsIter<'a, T> {
     nodes: slab::Iter<'a, Node<T>>,
 }
@@ -557,6 +628,8 @@ impl<'a, T> Iterator for NodesPosIdsIter<'a, T> {
     }
 }
 
+/// Iterator over mutable references to nodes, their positions and their identifiers.
+#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
 pub struct NodesPosIdsIterMut<'a, T> {
     nodes: slab::IterMut<'a, Node<T>>,
 }
@@ -582,14 +655,20 @@ impl<'a, T> Iterator for NodesPosIdsIterMut<'a, T> {
 /// Node and its output pin.
 #[derive(Clone, Debug)]
 pub struct OutPin {
+    /// Output pin identifier.
     pub id: OutPinId,
+
+    /// List of input pins connected to this output pin.
     pub remotes: Vec<InPinId>,
 }
 
 /// Node and its output pin.
 #[derive(Clone, Debug)]
 pub struct InPin {
+    /// Input pin identifier.
     pub id: InPinId,
+
+    /// List of output pins connected to this input pin.
     pub remotes: Vec<OutPinId>,
 }
 

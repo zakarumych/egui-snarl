@@ -1,8 +1,13 @@
 use egui::{epaint::PathShape, pos2, Color32, Pos2, Rect, Shape, Stroke, Ui};
 
+/// Layer where wires are rendered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WireLayer {
+    /// Wires are rendered behind nodes.
+    /// This is default.
     BehindNodes,
+
+    /// Wires are rendered above nodes.
     AboveNodes,
 }
 
@@ -120,6 +125,7 @@ fn wire_bezier(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn draw_wire(
     ui: &mut Ui,
     shapes: &mut Vec<Shape>,
@@ -165,7 +171,10 @@ const MAX_BEZIER_SAMPLES: usize = 100;
 
 fn bezier_samples_number(points: &[Pos2; 6], threshold: f32) -> usize {
     let reference_size = bezier_reference_size(points);
-    ((reference_size / threshold).ceil() as usize).min(MAX_BEZIER_SAMPLES)
+
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_possible_truncation)]
+    ((reference_size / threshold).ceil().max(0.0) as usize).min(MAX_BEZIER_SAMPLES)
 }
 
 fn draw_bezier(shapes: &mut Vec<Shape>, points: &[Pos2; 6], mut stroke: Stroke) {
@@ -179,6 +188,7 @@ fn draw_bezier(shapes: &mut Vec<Shape>, points: &[Pos2; 6], mut stroke: Stroke) 
     let mut path = Vec::new();
 
     for i in 0..samples {
+        #[allow(clippy::cast_precision_loss)]
         let t = i as f32 / (samples - 1) as f32;
         path.push(sample_bezier(points, t));
     }
@@ -287,6 +297,7 @@ fn hit_bezier(pos: Pos2, points: &[Pos2; 6], threshold: f32) -> bool {
     }
 
     for i in 0..samples {
+        #[allow(clippy::cast_precision_loss)]
         let t = i as f32 / (samples - 1) as f32;
         let p = sample_bezier(points, t);
         if (p - pos).length() < threshold {

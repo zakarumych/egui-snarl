@@ -1,23 +1,25 @@
 [package]
 name = "egui-snarl"
-version = "0.1.1"
+version = "0.2.1"
 edition = "2021"
 description = "Node-graphs for egui"
 license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/egui-snarl"
+keywords = ["egui", "node", "graph", "ui", "node-graph"]
+categories = ["gui", "visualization"]
 
 [features]
 serde = ["dep:serde", "egui/serde", "slab/serde"]
 
 [dependencies]
-egui = { version = "0.24" }
+egui = { version = "0.25" }
 slab = { version = "0.4" }
 serde = { version = "1.0", features = ["derive"], optional = true }
 tiny-fn = { version = "0.1" }
 
 [dev-dependencies]
-eframe = { version = "0.24", features = ["serde", "persistence"] }
-egui_extras = { version = "0.24", features = ["all_loaders"] }
+eframe = { version = "0.25", features = ["serde", "persistence"] }
+egui_extras = { version = "0.25", features = ["all_loaders"] }
 syn = { version = "2.0", features = ["extra-traits"] }
 serde_json = { version = "1.0" }
 

@@ -1,10 +1,18 @@
 use egui::{
     epaint::Shadow,
     style::{Interaction, ScrollStyle, Spacing, WidgetVisuals, Widgets},
-    FontId, Margin, Rounding, Stroke, Style, Vec2, Visuals,
+    FontId, Frame, Margin, Rounding, Stroke, Style, Vec2, Visuals,
 };
 
 pub trait Zoom {
+    fn zoomed(mut self, zoom: f32) -> Self
+    where
+        Self: Copy,
+    {
+        self.zoom(zoom);
+        self
+    }
+
     fn zoom(&mut self, zoom: f32);
 }
 
@@ -156,5 +164,28 @@ impl Zoom for Style {
         self.interaction.zoom(zoom);
         self.spacing.zoom(zoom);
         self.visuals.zoom(zoom);
+    }
+}
+
+impl<T> Zoom for Option<T>
+where
+    T: Zoom,
+{
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        if let Some(value) = self {
+            value.zoom(zoom)
+        }
+    }
+}
+
+impl Zoom for Frame {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        self.inner_margin.zoom(zoom);
+        self.outer_margin.zoom(zoom);
+        self.rounding.zoom(zoom);
+        self.shadow.zoom(zoom);
+        self.stroke.zoom(zoom);
     }
 }

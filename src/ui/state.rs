@@ -43,9 +43,8 @@ impl NodeState {
         }
     }
 
-    pub fn clear(&mut self, cx: &Context) {
+    pub fn clear(self, cx: &Context) {
         cx.data_mut(|d| d.remove::<Self>(self.id));
-        self.dirty = false;
     }
 
     pub fn store(&self, cx: &Context) {
@@ -170,32 +169,26 @@ impl SnarlState {
         snarl: &Snarl<T>,
         style: &SnarlStyle,
     ) -> Self {
-        let Some(SnarlStateData {
-            mut offset,
-            mut scale,
-            target_scale,
-            new_wires,
-        }) = cx.data_mut(|d| d.get_temp(id))
-        else {
+        let Some(mut data) = cx.data_mut(|d| d.get_temp::<SnarlStateData>(id)) else {
             return Self::initial(id, viewport, snarl, style);
         };
 
-        let new_scale = cx.animate_value_with_time(id.with("zoom-scale"), target_scale, 0.1);
+        let new_scale = cx.animate_value_with_time(id.with("zoom-scale"), data.target_scale, 0.1);
 
         let mut dirty = false;
-        if new_scale != scale {
-            let a = pivot + offset - viewport.center().to_vec2();
+        if new_scale != data.scale {
+            let a = pivot + data.offset - viewport.center().to_vec2();
 
-            offset += a * new_scale / scale - a;
-            scale = new_scale;
+            data.offset += a * new_scale / data.scale - a;
+            data.scale = new_scale;
             dirty = true;
         }
 
         SnarlState {
-            offset,
-            scale,
-            target_scale,
-            new_wires,
+            offset: data.offset,
+            scale: data.scale,
+            target_scale: data.target_scale,
+            new_wires: data.new_wires,
             id,
             dirty,
         }
@@ -270,6 +263,11 @@ impl SnarlState {
     #[inline(always)]
     pub fn scale(&self) -> f32 {
         self.scale
+    }
+
+    #[inline(always)]
+    pub fn offset(&self) -> Vec2 {
+        self.offset
     }
 
     #[inline(always)]
