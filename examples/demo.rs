@@ -841,7 +841,6 @@ impl App for DemoApp {
                 &SnarlStyle {
                     collapsible: true,
                     wire_frame_size: Some(100.0),
-                    // background_pattern_stroke: Some(egui::Stroke::new(1.0, egui::Color32::WHITE)),
                     ..Default::default()
                 },
                 egui::Id::new("snarl"),

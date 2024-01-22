@@ -79,6 +79,14 @@ pub struct SnarlStyle {
 
     /// Scale velocity when scaling with mouse wheel.
     pub scale_velocity: f32,
+
+    /// Frame used to draw nodes.
+    /// Defaults to [`Frame::window`] constructed from current ui's style.
+    pub node_frame: Option<Frame>,
+
+    #[doc(hidden)]
+    /// Do not access other than with .., here to emulate `#[non_exhaustive(pub)]`
+    pub _non_exhaustive: (),
 }
 
 impl SnarlStyle {
@@ -102,6 +110,9 @@ impl SnarlStyle {
             min_scale: 0.1,
             max_scale: 2.0,
             scale_velocity: 0.005,
+            node_frame: None,
+
+            _non_exhaustive: (),
         }
     }
 }
@@ -195,8 +206,10 @@ impl<T> Snarl<T> {
                 let wire_frame_size = style.wire_frame_size.unwrap_or(pin_size * 5.0);
                 let wire_width = style.wire_width.unwrap_or(pin_size * 0.2);
 
-                let node_frame = Frame::window(&node_style);
-                let header_frame = node_frame.shadow(Shadow::NONE);
+                let node_frame = style
+                    .node_frame
+                    .unwrap_or_else(|| Frame::window(&node_style));
+                let header_frame = node_frame.shadow(Shadow::NONE).fill(Color32::TRANSPARENT);
 
                 let wire_shape_idx = match style.wire_layer {
                     WireLayer::BehindNodes => Some(ui.painter().add(Shape::Noop)),
