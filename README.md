@@ -63,3 +63,9 @@ Because that's how any complex visual graph looks like.
 `demo` example shows some of the features of the crate.
 
 [![demo](./demo.png)](./demo.png)
+
+# Web Demo
+
+Noise GUI by @attackgoat
+
+https://attackgoat.github.io/noise_gui/
