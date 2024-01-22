@@ -475,10 +475,10 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     fn show_on_hover_popup(
         &mut self,
         node: NodeId,
-        inputs: &[InPin],
-        outputs: &[OutPin],
+        _inputs: &[InPin],
+        _outputs: &[OutPin],
         ui: &mut Ui,
-        scale: f32,
+        _scale: f32,
         snarl: &mut Snarl<DemoNode>,
     ) {
         match snarl[node] {
@@ -840,6 +840,7 @@ impl App for DemoApp {
                 &mut DemoViewer,
                 &SnarlStyle {
                     collapsible: true,
+                    wire_frame_size: Some(100.0),
                     // background_pattern_stroke: Some(egui::Stroke::new(1.0, egui::Color32::WHITE)),
                     ..Default::default()
                 },
