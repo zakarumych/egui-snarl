@@ -104,6 +104,9 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 return;
             }
             (DemoNode::String(_), DemoNode::ShowImage(_)) => {}
+            (DemoNode::ExprNode(_), DemoNode::ExprNode(_)) if to.id.input == 0 => {
+                return;
+            }
             (DemoNode::ExprNode(_), DemoNode::ExprNode(_)) => {}
             (DemoNode::Number(_), DemoNode::ExprNode(_)) if to.id.input == 0 => {
                 return;
