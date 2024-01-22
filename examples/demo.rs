@@ -870,12 +870,15 @@ impl App for DemoApp {
             // The top panel is often a good place for a menu bar:
 
             egui::menu::bar(ui, |ui| {
-                ui.menu_button("File", |ui| {
-                    if ui.button("Quit").clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close)
-                    }
-                });
-                ui.add_space(16.0);
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    ui.menu_button("File", |ui| {
+                        if ui.button("Quit").clicked() {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close)
+                        }
+                    });
+                    ui.add_space(16.0);
+                }
 
                 egui::widgets::global_dark_light_mode_switch(ui);
             });
