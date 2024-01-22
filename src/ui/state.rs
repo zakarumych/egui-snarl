@@ -43,9 +43,8 @@ impl NodeState {
         }
     }
 
-    pub fn clear(&mut self, cx: &Context) {
+    pub fn clear(self, cx: &Context) {
         cx.data_mut(|d| d.remove::<Self>(self.id));
-        self.dirty = false;
     }
 
     pub fn store(&self, cx: &Context) {
