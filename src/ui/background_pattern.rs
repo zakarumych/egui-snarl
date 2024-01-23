@@ -191,9 +191,8 @@ pub enum BackgroundPattern {
     /// Custom pattern.
     /// Contains function with signature
     /// `Fn(style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui)`
-    #[cfg_attr(feature = "serde", serde(skip))]
     #[cfg_attr(feature = "egui-probe", egui_probe(transparent))]
-    Custom(CustomBackground<'static>),
+    Custom(#[cfg_attr(feature = "serde", serde(skip))] CustomBackground<'static>),
 }
 
 impl PartialEq for BackgroundPattern {
