@@ -1,4 +1,4 @@
-name: Rust
+name: publish
 
 on:
   workflow_dispatch
