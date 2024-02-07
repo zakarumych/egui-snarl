@@ -13,16 +13,16 @@ categories = ["gui", "visualization"]
 serde = ["dep:serde", "egui/serde", "slab/serde"]
 
 [dependencies]
-egui = { version = "0.25" }
+egui = { version = "0.26" }
 slab = { version = "0.4" }
 serde = { version = "1.0", features = ["derive"], optional = true }
 tiny-fn = { version = "0.1.6" }
 
-egui-probe = { version = "0.1", features = ["derive"], optional = true }
+egui-probe = { version = "0.2", features = ["derive"], optional = true }
 
 [dev-dependencies]
-eframe = { version = "0.25", features = ["serde", "persistence"] }
-egui_extras = { version = "0.25", features = ["all_loaders"] }
+eframe = { version = "0.26", features = ["serde", "persistence"] }
+egui_extras = { version = "0.26", features = ["all_loaders"] }
 syn = { version = "2.0", features = ["extra-traits"] }
 serde_json = { version = "1.0" }
 
