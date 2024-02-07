@@ -608,7 +608,7 @@ impl<T> Snarl<T> {
         if r.clicked() || r.dragged() {
             response.node_to_top = Some(node);
         }
-        let r = r.context_menu(|ui| {
+        r.context_menu(|ui| {
             viewer.node_menu(node, &inputs, &outputs, ui, snarl_state.scale(), self);
         });
 
@@ -619,11 +619,9 @@ impl<T> Snarl<T> {
         }
 
         if viewer.has_on_hover_popup(&self.nodes[node.0].value) {
-            if let Some(r) = r {
-                r.response.on_hover_ui_at_pointer(|ui| {
-                    viewer.show_on_hover_popup(node, &inputs, &outputs, ui, snarl_state.scale(), self);
-                });
-            }
+            r.on_hover_ui_at_pointer(|ui| {
+                viewer.show_on_hover_popup(node, &inputs, &outputs, ui, snarl_state.scale(), self);
+            });
         }
 
         if !self.nodes.contains(node.0) {
