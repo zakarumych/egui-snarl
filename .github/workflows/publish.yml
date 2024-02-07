@@ -8,6 +8,8 @@ env:
 
 jobs:
   build:
+    environment:
+      name: public
     runs-on: ubuntu-latest
     steps:
     - name: Set up cache
@@ -22,17 +24,11 @@ jobs:
           ~/.cargo/git/db/
           target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose --all
     - name: Run tests
       run: cargo test --verbose --all
-  publish:
-    needs: build
-    environment:
-      name: public
-    runs-on: ubuntu-latest
-    steps:
     - name: login
       run: cargo login ${{ secrets.CRATES_IO_TOKEN }}
     - name: publish
