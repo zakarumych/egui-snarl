@@ -239,7 +239,7 @@ impl<T> Snarl<T> {
             .unwrap_or_else(|| ui.visuals().widgets.noninteractive.bg_stroke);
 
         let input = ui.ctx().input(|i| Input {
-            scroll_delta: i.scroll_delta.y,
+            scroll_delta: i.raw_scroll_delta.y,
             hover_pos: i.pointer.hover_pos(),
             modifiers: i.modifiers,
             // primary_pressed: i.pointer.primary_pressed(),
@@ -608,7 +608,7 @@ impl<T> Snarl<T> {
         if r.clicked() || r.dragged() {
             response.node_to_top = Some(node);
         }
-        let r = r.context_menu(|ui| {
+        r.context_menu(|ui| {
             viewer.node_menu(node, &inputs, &outputs, ui, snarl_state.scale(), self);
         });
 
