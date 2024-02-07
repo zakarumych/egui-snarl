@@ -34,8 +34,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: login
-      env:
-          CARGO_IO_TOKEN: ${{ secrets.CARGO_IO_TOKEN }}
-      run: cargo login $CARGO_IO_TOKEN
+      run: cargo login ${{ secrets.CRATES_IO_TOKEN }}
     - name: publish
       run: cargo publish
