@@ -239,7 +239,7 @@ impl<T> Snarl<T> {
             .unwrap_or_else(|| ui.visuals().widgets.noninteractive.bg_stroke);
 
         let input = ui.ctx().input(|i| Input {
-            scroll_delta: i.scroll_delta.y,
+            scroll_delta: i.raw_scroll_delta.y,
             hover_pos: i.pointer.hover_pos(),
             modifiers: i.modifiers,
             // primary_pressed: i.pointer.primary_pressed(),
@@ -619,9 +619,11 @@ impl<T> Snarl<T> {
         }
 
         if viewer.has_on_hover_popup(&self.nodes[node.0].value) {
-            r.on_hover_ui_at_pointer(|ui| {
-                viewer.show_on_hover_popup(node, &inputs, &outputs, ui, snarl_state.scale(), self);
-            });
+            if let Some(r) = r {
+                r.response.on_hover_ui_at_pointer(|ui| {
+                    viewer.show_on_hover_popup(node, &inputs, &outputs, ui, snarl_state.scale(), self);
+                });
+            }
         }
 
         if !self.nodes.contains(node.0) {
