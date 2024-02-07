@@ -3,6 +3,10 @@ name: Build and Deploy to Github Pages
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - "demo/**"
+      - "src/**"
+      - "Cargo.toml"
 
 env:
   CARGO_TERM_COLOR: always
