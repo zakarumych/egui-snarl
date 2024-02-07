@@ -1,0 +1,27 @@
+name: Rust
+
+on:
+  workflow_dispatch
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
+  publish:
+    needs: build
+    environment:
+      name: public
+    runs-on: ubuntu-latest
+    steps:
+    - name: login
+      run: cargo login ${{ secrets.CARGO_IO_TOKEN }}
+    - name: publish
+      run: cargo publish
