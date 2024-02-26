@@ -104,6 +104,9 @@ pub struct SnarlStyle {
     #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
     /// Do not access other than with .., here to emulate `#[non_exhaustive(pub)]`
     pub _non_exhaustive: (),
+
+    /// Enable centering by double click on background
+    pub centering: bool
 }
 
 #[cfg(feature = "serde")]
@@ -179,6 +182,7 @@ impl SnarlStyle {
             header_frame: None,
 
             _non_exhaustive: (),
+            centering: true
         }
     }
 }
@@ -203,6 +207,7 @@ struct DrawNodeResponse {
     node_to_top: Option<NodeId>,
     drag_released: bool,
     pin_hovered: Option<AnyPin>,
+    center: Vec2
 }
 
 impl<T> Snarl<T> {
@@ -314,7 +319,19 @@ impl<T> Snarl<T> {
                 let mut pin_hovered = None;
 
                 let draw_order = self.draw_order.clone();
+                let draw_order_len = draw_order.len();
                 let mut drag_released = false;
+
+                let mut center = vec2(0.0, 0.0);
+                let mut need_centering = false;
+                // Centering nodes
+                if style.centering{
+                    ui.input(|i|{
+                        if i.pointer.button_double_clicked(PointerButton::Primary){
+                            need_centering = true;
+                        }
+                    });
+                }
 
                 for node_idx in draw_order {
                     // show_node(node_idx);
@@ -342,6 +359,7 @@ impl<T> Snarl<T> {
                         pin_hovered = Some(v);
                     }
                     drag_released |= response.drag_released;
+                    center += response.center;
                 }
 
                 let mut hovered_wire = None;
@@ -420,6 +438,13 @@ impl<T> Snarl<T> {
                 if bg_r.dragged_by(PointerButton::Primary) {
                     snarl_state.pan(-bg_r.drag_delta());
                 }
+
+                //Do centering
+                if need_centering && bg_r.double_clicked() {
+                    center /= draw_order_len as f32;
+                    snarl_state.set_offset(center * snarl_state.scale());
+                }
+
                 bg_r.context_menu(|ui| {
                     viewer.graph_menu(
                         snarl_state.screen_pos_to_graph(ui.cursor().min, viewport),
@@ -428,6 +453,8 @@ impl<T> Snarl<T> {
                         self,
                     );
                 });
+
+                
 
                 match snarl_state.new_wires() {
                     None => {}
@@ -558,6 +585,7 @@ impl<T> Snarl<T> {
             node_moved: None,
             drag_released: false,
             pin_hovered: None,
+            center: pos.to_vec2()
         };
 
         let viewport = ui.max_rect();
