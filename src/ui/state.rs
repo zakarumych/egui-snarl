@@ -150,6 +150,9 @@ pub struct SnarlState {
 
     /// Flag indicating that the graph state is dirty must be saved.
     dirty: bool,
+
+    /// Flag indicating that the link menu is open.
+    is_link_menu_open: bool,
 }
 
 #[derive(Clone)]
@@ -158,6 +161,7 @@ struct SnarlStateData {
     scale: f32,
     target_scale: f32,
     new_wires: Option<NewWires>,
+    is_link_menu_open: bool,
 }
 
 impl SnarlState {
@@ -189,6 +193,7 @@ impl SnarlState {
             scale: data.scale,
             target_scale: data.target_scale,
             new_wires: data.new_wires,
+            is_link_menu_open: data.is_link_menu_open,
             id,
             dirty,
         }
@@ -209,6 +214,7 @@ impl SnarlState {
                 scale,
                 target_scale: scale,
                 new_wires: None,
+                is_link_menu_open: false,
                 id,
                 dirty: true,
             };
@@ -232,6 +238,7 @@ impl SnarlState {
             scale,
             target_scale: scale,
             new_wires: None,
+            is_link_menu_open: false,
             id,
             dirty: true,
         }
@@ -248,6 +255,7 @@ impl SnarlState {
                         scale: self.scale,
                         target_scale: self.target_scale,
                         new_wires: self.new_wires,
+                        is_link_menu_open: self.is_link_menu_open,
                     },
                 )
             });
@@ -373,5 +381,24 @@ impl SnarlState {
     pub fn take_wires(&mut self) -> Option<NewWires> {
         self.dirty |= self.new_wires.is_some();
         self.new_wires.take()
+    }
+
+    pub(crate) fn revert_take_wires(&mut self, wires: NewWires) {
+        self.new_wires = Some(wires);
+    }
+
+    pub(crate) fn open_link_menu(&mut self) {
+        self.is_link_menu_open = true;
+        self.dirty = true;
+    }
+
+    pub(crate) fn close_link_menu(&mut self) {
+        self.new_wires = None;
+        self.is_link_menu_open = false;
+        self.dirty = true;
+    }
+
+    pub(crate) fn is_link_menu_open(&self) -> bool {
+        self.is_link_menu_open
     }
 }

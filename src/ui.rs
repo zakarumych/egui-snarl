@@ -25,7 +25,7 @@ use self::{
 
 pub use self::{
     background_pattern::{BackgroundPattern, CustomBackground, Grid, Viewport},
-    pin::{CustomPinShape, PinInfo, PinShape},
+    pin::{AnyPins, CustomPinShape, PinInfo, PinShape},
     viewer::SnarlViewer,
     wire::WireLayer,
 };
@@ -420,61 +420,22 @@ impl<T> Snarl<T> {
                 if bg_r.dragged_by(PointerButton::Primary) {
                     snarl_state.pan(-bg_r.drag_delta());
                 }
-                bg_r.context_menu(|ui| {
-                    viewer.graph_menu(
-                        snarl_state.screen_pos_to_graph(ui.cursor().min, viewport),
-                        ui,
-                        snarl_state.scale(),
-                        self,
-                    );
-                });
 
-                match snarl_state.new_wires() {
-                    None => {}
-                    Some(NewWires::In(pins)) => {
-                        for pin in pins {
-                            let from = input.hover_pos.unwrap_or(Pos2::ZERO);
-                            let (to, color) = input_info[pin];
-
-                            draw_wire(
-                                ui,
-                                &mut wire_shapes,
-                                wire_frame_size,
-                                style.upscale_wire_frame,
-                                style.downscale_wire_frame,
-                                from,
-                                to,
-                                Stroke::new(wire_width, color),
-                            );
-                        }
-                    }
-                    Some(NewWires::Out(pins)) => {
-                        for pin in pins {
-                            let (from, color) = output_info[pin];
-                            let to = input.hover_pos.unwrap_or(Pos2::ZERO);
-
-                            draw_wire(
-                                ui,
-                                &mut wire_shapes,
-                                wire_frame_size,
-                                style.upscale_wire_frame,
-                                style.downscale_wire_frame,
-                                from,
-                                to,
-                                Stroke::new(wire_width, color),
-                            );
-                        }
-                    }
+                // If right button is clicked while new wire is being dragged, cancel it.
+                // This is to provide way to 'not open' the link graph node menu, but just
+                // releasing the new wire to empty space.
+                //
+                // This uses `button_down` directly, instead of `clicked_by` to improve
+                // responsiveness of the cancel action.
+                if snarl_state.has_new_wires()
+                    && ui.input(|x| x.pointer.button_down(PointerButton::Secondary))
+                {
+                    let _ = snarl_state.take_wires();
+                    bg_r.clicked = [false; egui::NUM_POINTER_BUTTONS];
                 }
 
-                match wire_shape_idx {
-                    None => {
-                        ui.painter().add(Shape::Vec(wire_shapes));
-                    }
-                    Some(idx) => {
-                        ui.painter().set(idx, Shape::Vec(wire_shapes));
-                    }
-                }
+                // Wire end position will be overrided when link graph menu is opened.
+                let mut wire_end_pos = input.hover_pos.unwrap_or_default();
 
                 if drag_released {
                     let new_wires = snarl_state.take_wires();
@@ -500,7 +461,101 @@ impl<T> Snarl<T> {
                                 );
                             }
                         }
+                        (Some(new_wires), None) if bg_r.hovered() => {
+                            // A new pin is dropped without connecting it anywhere. This
+                            // will open a pop-up window for creating a new node.
+                            snarl_state.revert_take_wires(new_wires);
+
+                            // Force open context menu.
+                            bg_r.clicked[PointerButton::Secondary as usize] = true;
+                        }
                         _ => {}
+                    }
+                }
+
+                // Open graph menu when right-clicking on empty space.
+                let mut is_menu_visible = false;
+                bg_r.context_menu(|ui| {
+                    let graph_pos = snarl_state.screen_pos_to_graph(ui.cursor().min, viewport);
+
+                    is_menu_visible = true;
+
+                    if snarl_state.has_new_wires() {
+                        if !snarl_state.is_link_menu_open() {
+                            // Mark link menu is now visible.
+                            snarl_state.open_link_menu();
+                        }
+
+                        // Let the wires be drawn on ui position
+                        wire_end_pos = ui.cursor().min;
+
+                        let pins = match snarl_state.new_wires().unwrap() {
+                            NewWires::In(x) => AnyPins::In(x),
+                            NewWires::Out(x) => AnyPins::Out(x),
+                        };
+
+                        // The context menu is opened as *link* graph menu.
+                        viewer.graph_menu_for_dropped_wire(
+                            graph_pos,
+                            ui,
+                            snarl_state.scale(),
+                            pins,
+                            self,
+                        );
+                    } else {
+                        viewer.graph_menu(graph_pos, ui, snarl_state.scale(), self);
+                    }
+                });
+
+                if !is_menu_visible && snarl_state.is_link_menu_open() {
+                    // It seems that the context menu was closed. Remove new wires.
+                    snarl_state.close_link_menu();
+                }
+
+                match snarl_state.new_wires() {
+                    None => {}
+                    Some(NewWires::In(pins)) => {
+                        for pin in pins {
+                            let from = wire_end_pos;
+                            let (to, color) = input_info[pin];
+
+                            draw_wire(
+                                ui,
+                                &mut wire_shapes,
+                                wire_frame_size,
+                                style.upscale_wire_frame,
+                                style.downscale_wire_frame,
+                                from,
+                                to,
+                                Stroke::new(wire_width, color),
+                            );
+                        }
+                    }
+                    Some(NewWires::Out(pins)) => {
+                        for pin in pins {
+                            let (from, color) = output_info[pin];
+                            let to = wire_end_pos;
+
+                            draw_wire(
+                                ui,
+                                &mut wire_shapes,
+                                wire_frame_size,
+                                style.upscale_wire_frame,
+                                style.downscale_wire_frame,
+                                from,
+                                to,
+                                Stroke::new(wire_width, color),
+                            );
+                        }
+                    }
+                }
+
+                match wire_shape_idx {
+                    None => {
+                        ui.painter().add(Shape::Vec(wire_shapes));
+                    }
+                    Some(idx) => {
+                        ui.painter().set(idx, Shape::Vec(wire_shapes));
                     }
                 }
 

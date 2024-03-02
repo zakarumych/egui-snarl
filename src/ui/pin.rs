@@ -8,6 +8,16 @@ pub enum AnyPin {
     In(InPinId),
 }
 
+/// In the current context, these are the I/O pins of the 'source' node that the newly
+/// created node's I/O pins will connect to.
+#[derive(Debug)]
+pub enum AnyPins<'a> {
+    /// Output pins.
+    Out(&'a [OutPinId]),
+    /// Input pins
+    In(&'a [InPinId]),
+}
+
 tiny_fn::tiny_fn! {
     /// Custom pin shape drawing function with signature
     /// `Fn(painter: &Painter, rect: Rect, fill: Color32, stroke: Stroke)`
