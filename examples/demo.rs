@@ -1006,6 +1006,11 @@ impl App for DemoApp {
             self.snarl
                 .show(&mut DemoViewer, &self.style, egui::Id::new("snarl"), ui);
         });
+
+        // for x in self.snarl.get_nodes_draw_info() {
+        //     println!("{:?}", x.0);
+        //     println!("{:?}", x.1);
+        // };
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {

@@ -6,6 +6,7 @@ use egui::{
     collapsing_header::paint_default_icon, epaint::Shadow, pos2, vec2, Align, Color32, Frame, Id,
     Layout, Margin, Modifiers, PointerButton, Pos2, Rect, Rounding, Sense, Shape, Stroke, Ui, Vec2,
 };
+use egui::PointerButton::Primary;
 
 use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl};
 
@@ -510,6 +511,19 @@ struct PinResponse {
     wire_style: Option<WireStyle>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Copy, Clone)]
+/// NodeDrawInfo contains the last egui dimensional info of the node frame
+/// this will be populated anew after each UI run
+pub struct NodeDrawInfo {
+    pub id: NodeId,
+    pub frame_max : Pos2,
+    pub frame_min : Pos2,
+    pub area: f32,
+    pub width: f32,
+    pub height: f32 // These are all screen coords
+}
+
 impl<T> Snarl<T> {
     fn draw_background(style: &SnarlStyle, snarl_state: &SnarlState, viewport: &Rect, ui: &mut Ui) {
         let viewport = Viewport {
@@ -603,7 +617,7 @@ impl<T> Snarl<T> {
 
             for node_idx in draw_order {
                 // show_node(node_idx);
-                let response = self.draw_node(
+                let (response, draw_info) = self.draw_node(
                     ui,
                     node_idx,
                     viewer,
@@ -616,6 +630,14 @@ impl<T> Snarl<T> {
                     &input,
                     &mut output_info,
                 );
+
+
+                // Frames draw specs have been determined, time to save them to self.draw_info
+                if draw_info.is_some() {
+                    let inner = draw_info.unwrap();
+                    self.draw_info.insert(inner.id.clone(), inner);
+                }
+
 
                 if let Some(response) = response {
                     if let Some(v) = response.node_to_top {
@@ -714,6 +736,12 @@ impl<T> Snarl<T> {
                     viewer.disconnect(&out_pin, &in_pin, self);
                 }
             }
+
+            if bg_r.clicked_by(Primary) {
+                self.selected_nodes.clear();
+            }
+
+
 
             if bg_r.drag_started_by(PointerButton::Primary) && input.modifiers.shift {
                 let screen_pos = input.interact_pos.unwrap_or(viewport.center());
@@ -984,7 +1012,7 @@ impl<T> Snarl<T> {
         input_positions: &mut HashMap<InPinId, PinResponse>,
         input: &Input,
         output_positions: &mut HashMap<OutPinId, PinResponse>,
-    ) -> Option<DrawNodeResponse>
+    ) -> (Option<DrawNodeResponse>, Option<NodeDrawInfo>)
     where
         V: SnarlViewer<T>,
     {
@@ -1016,7 +1044,13 @@ impl<T> Snarl<T> {
         let mut drag_released = false;
         let mut pin_hovered = None;
 
+        let mut node_frame = node_frame;
         // Rect for node + frame margin.
+        // !!!: Pre-emptive border styling
+        if self.selected_nodes.contains(&node) {
+            node_frame = highlighted_node_frame;
+        }
+
         let node_frame_rect = node_frame.total_margin().expand_rect(node_rect);
 
         if snarl_state.selected_nodes().contains(&node) {
@@ -1044,6 +1078,7 @@ impl<T> Snarl<T> {
             .map(|idx| OutPin::new(self, OutPinId { node, output: idx }))
             .collect::<Vec<_>>();
 
+        // =========== Click and Drag Logic for the Frame =============
         // Interact with node frame.
         let r = ui.interact(node_frame_rect, node_id, Sense::click_and_drag());
 
@@ -1064,6 +1099,15 @@ impl<T> Snarl<T> {
 
         if r.clicked() || r.dragged() {
             node_to_top = Some(node);
+            self.selected_nodes.insert(node);
+            response.node_to_top = Some(node);
+
+            // Que the event handler
+            if let Some(handler) = self.event_handler {
+                // let handled_val = self.get_node(node).unwrap();
+                // let res = handler(SnarlEvent::NodeClick());
+                // res.expect("Undecided to how to handle event system error");
+            }
         }
 
         if viewer.has_node_menu(&self.nodes[node.0].value) {
@@ -1072,10 +1116,16 @@ impl<T> Snarl<T> {
             });
         }
 
+        // =================================================================
+
+        r.context_menu(|ui| {
+            viewer.node_menu(node, &inputs, &outputs, ui, snarl_state.scale(), self);
+        });
+
         if !self.nodes.contains(node.0) {
             node_state.clear(ui.ctx());
             // If removed
-            return None;
+            return (None, None);
         }
 
         if viewer.has_on_hover_popup(&self.nodes[node.0].value) {
@@ -1087,7 +1137,7 @@ impl<T> Snarl<T> {
         if !self.nodes.contains(node.0) {
             node_state.clear(ui.ctx());
             // If removed
-            return None;
+            return (None, None);
         }
 
         let node_ui = &mut ui.child_ui_with_id_source(
@@ -1101,6 +1151,9 @@ impl<T> Snarl<T> {
             let mut header_rect = node_rect;
 
             let mut header_frame_rect = header_frame.total_margin().expand_rect(header_rect);
+
+            // (IF) node is selected, make the frame glow!
+
 
             // Show node's header
             let header_ui = &mut ui.child_ui_with_id_source(
@@ -1522,7 +1575,7 @@ impl<T> Snarl<T> {
             ui.ctx().request_repaint();
             node_state.clear(ui.ctx());
             // If removed
-            return None;
+            return (None, None);
         }
 
         let final_rect = snarl_state.screen_rect_to_graph(r.response.rect, viewport);
@@ -1537,13 +1590,20 @@ impl<T> Snarl<T> {
 
         node_state.store(ui.ctx());
         ui.ctx().request_repaint();
-        Some(DrawNodeResponse {
+        (Some(DrawNodeResponse {
             node_moved,
             node_to_top,
             drag_released,
             pin_hovered,
             rect: final_rect,
-        })
+        }), Some(NodeDrawInfo{
+            id: node,
+            frame_max: node_rect.max,
+            frame_min: node_rect.min,
+            area: node_rect.area(),
+            width: node_rect.width(),
+            height: node_rect.height(),
+        }))
     }
 }
 
