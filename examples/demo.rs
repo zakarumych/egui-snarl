@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use eframe::{App, CreationContext};
 use egui::{Color32, Ui};
 use egui_snarl::{
-    ui::{PinInfo, SnarlStyle, SnarlViewer},
-    InPin, InPinId, NodeId, OutPin, Snarl,
+    ui::{AnyPins, PinInfo, SnarlStyle, SnarlViewer},
+    InPin, InPinId, NodeId, OutPin, OutPinId, Snarl,
 };
 
 const STRING_COLOR: Color32 = Color32::from_rgb(0x00, 0xb0, 0x00);
@@ -485,6 +485,127 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         }
     }
 
+    fn graph_menu_for_dropped_wire(
+        &mut self,
+        pos: egui::Pos2,
+        ui: &mut Ui,
+        _scale: f32,
+        src_pins: AnyPins,
+        snarl: &mut Snarl<DemoNode>,
+    ) {
+        // In this demo, we create a context-aware node graph menu, and connect a wire
+        // dropped on the fly based on user input to a new node created.
+        //
+        // In your implementation, you may want to define specifications for each node's
+        // pin inputs and outputs and compatibility to make this easier.
+
+        ui.label("Add node");
+
+        type PinCompat = usize;
+        const PIN_NUM: PinCompat = 1;
+        const PIN_STR: PinCompat = 2;
+        const PIN_IMG: PinCompat = 4;
+        const PIN_SINK: PinCompat = PIN_NUM | PIN_STR | PIN_IMG;
+
+        fn pin_out_compat(node: &DemoNode) -> PinCompat {
+            match node {
+                DemoNode::Sink => 0,
+                DemoNode::Number(_) => PIN_NUM,
+                DemoNode::String(_) => PIN_STR,
+                DemoNode::ShowImage(_) => PIN_IMG,
+                DemoNode::ExprNode(_) => PIN_NUM,
+            }
+        }
+
+        fn pin_in_compat(node: &DemoNode) -> PinCompat {
+            match node {
+                DemoNode::Sink => PIN_SINK,
+                DemoNode::Number(_) => 0,
+                DemoNode::String(_) => 0,
+                DemoNode::ShowImage(_) => PIN_STR,
+                DemoNode::ExprNode(_) => PIN_STR,
+            }
+        }
+
+        match src_pins {
+            AnyPins::Out(src_pins) => {
+                assert!(
+                    src_pins.len() == 1,
+                    "There's no concept of multi-input nodes in this demo"
+                );
+
+                let src_pin = src_pins[0];
+                let src_out_ty = pin_out_compat(snarl.get_node(src_pin.node).unwrap());
+                let dst_in_candidates = [
+                    ("Sink", (|| DemoNode::Sink) as fn() -> DemoNode, PIN_SINK),
+                    ("Show Image", || DemoNode::ShowImage("".to_owned()), PIN_STR),
+                    ("Expr", || DemoNode::ExprNode(ExprNode::new()), PIN_STR),
+                ];
+
+                for (name, ctor, in_ty) in dst_in_candidates {
+                    if src_out_ty & in_ty != 0 {
+                        if ui.button(name).clicked() {
+                            // Create new node.
+                            let new_node = snarl.insert_node(pos, ctor());
+                            let dst_pin = InPinId {
+                                node: new_node,
+                                input: 0,
+                            };
+
+                            // Connect the wire.
+                            snarl.connect(src_pin, dst_pin);
+                            ui.close_menu();
+                        }
+                    }
+                }
+            }
+            AnyPins::In(pins) => {
+                let all_src_types = pins.iter().fold(0, |acc, pin| {
+                    acc | pin_in_compat(snarl.get_node(pin.node).unwrap())
+                });
+
+                let dst_out_candidates = [
+                    (
+                        "Number",
+                        (|| DemoNode::Number(0.)) as fn() -> DemoNode,
+                        PIN_NUM,
+                    ),
+                    ("String", || DemoNode::String("".to_owned()), PIN_STR),
+                    ("Expr", || DemoNode::ExprNode(ExprNode::new()), PIN_NUM),
+                    ("Show Image", || DemoNode::ShowImage("".to_owned()), PIN_IMG),
+                ];
+
+                for (name, ctor, out_ty) in dst_out_candidates {
+                    if all_src_types & out_ty != 0 {
+                        if ui.button(name).clicked() {
+                            // Create new node.
+                            let new_node = ctor();
+                            let dst_ty = pin_out_compat(&new_node);
+
+                            let new_node = snarl.insert_node(pos, new_node);
+                            let dst_pin = OutPinId {
+                                node: new_node,
+                                output: 0,
+                            };
+
+                            // Connect the wire.
+                            for src_pin in pins {
+                                let src_ty = pin_in_compat(snarl.get_node(src_pin.node).unwrap());
+                                if src_ty & dst_ty != 0 {
+                                    // In this demo, input pin MUST be unique ...
+                                    // Therefore here we drop inputs of source input pin.
+                                    snarl.drop_inputs(*src_pin);
+                                    snarl.connect(dst_pin, *src_pin);
+                                    ui.close_menu();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
     fn node_menu(
         &mut self,
         node: NodeId,
@@ -881,6 +1002,10 @@ impl App for DemoApp {
                 }
 
                 egui::widgets::global_dark_light_mode_switch(ui);
+
+                if ui.button("Clear All").clicked() {
+                    self.snarl = Default::default();
+                }
             });
         });
 

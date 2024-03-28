@@ -2,7 +2,7 @@ use egui::{Color32, Pos2, Style, Ui};
 
 use crate::{InPin, NodeId, OutPin, Snarl};
 
-use super::pin::PinInfo;
+use super::pin::{AnyPins, PinInfo};
 
 /// SnarlViewer is a trait for viewing a Snarl.
 ///
@@ -115,6 +115,25 @@ pub trait SnarlViewer<T> {
     /// This can be used to implement menu for adding new nodes.
     fn graph_menu(&mut self, pos: Pos2, ui: &mut Ui, scale: f32, snarl: &mut Snarl<T>) {
         let _ = (pos, ui, scale, snarl);
+    }
+
+    /// Show context menu for the snarl. This menu is opened when releasing a pin to empty
+    /// space. It can be used to implement menu for adding new node, and directly
+    /// connecting it to the released wire.
+    ///
+    ///
+    fn graph_menu_for_dropped_wire(
+        &mut self,
+        pos: Pos2,
+        ui: &mut Ui,
+        scale: f32,
+        src_pins: AnyPins,
+        snarl: &mut Snarl<T>,
+    ) {
+        let _ = (pos, scale, src_pins, snarl);
+
+        // Default implementation simply doesn't utilize wire drop.
+        ui.close_menu();
     }
 
     /// Show context menu for the snarl.
