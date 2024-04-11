@@ -502,12 +502,24 @@ struct DrawNodeResponse {
     drag_released: bool,
     pin_hovered: Option<AnyPin>,
     rect: Rect,
+    response: egui::Response,
 }
 
 struct PinResponse {
     pos: Pos2,
     pin_fill: Color32,
     wire_style: Option<WireStyle>,
+}
+
+#[derive(Debug, Clone)]
+/// Inner response
+pub struct SnarlResponse {
+    /// Event only on background
+    pub event_on_background: egui::Response,
+    /// Event on node
+    pub event_on_node: Option<(NodeId, egui::Response)>,
+    /// Event on wire
+    pub event_on_wire: Option<((OutPinId, InPinId), egui::Response)>,
 }
 
 impl<T> Snarl<T> {
@@ -523,7 +535,13 @@ impl<T> Snarl<T> {
 
     /// Render [`Snarl`] using given viewer and style into the [`Ui`].
 
-    pub fn show<V>(&mut self, viewer: &mut V, style: &SnarlStyle, id_source: impl Hash, ui: &mut Ui)
+    pub fn show<V>(
+        &mut self,
+        viewer: &mut V,
+        style: &SnarlStyle,
+        id_source: impl Hash,
+        ui: &mut Ui,
+    ) -> SnarlResponse
     where
         V: SnarlViewer<T>,
     {
@@ -543,7 +561,7 @@ impl<T> Snarl<T> {
             secondary_pressed: i.pointer.secondary_pressed(),
         });
 
-        bg_frame.show(ui, |ui| {
+        let bg_response = bg_frame.show(ui, |ui| {
             let mut node_moved = None;
             let mut node_to_top = None;
 
@@ -601,6 +619,8 @@ impl<T> Snarl<T> {
 
             let mut node_rects = Vec::new();
 
+            let mut node_response = None;
+
             for node_idx in draw_order {
                 // show_node(node_idx);
                 let response = self.draw_node(
@@ -635,6 +655,10 @@ impl<T> Snarl<T> {
                     if snarl_state.is_rect_selection() {
                         node_rects.push((node_idx, response.rect));
                     }
+                    // Only one node is hovered at the same time. Even if they overlap
+                    if response.response.hovered(){
+                        node_response = Some((node_idx, response.response));
+                    }
                 }
             }
 
@@ -642,6 +666,8 @@ impl<T> Snarl<T> {
             let mut hovered_wire_disconnect = false;
             let mut wire_shapes = Vec::new();
             let mut wire_hit = false;
+
+            let mut wire_response = None;
 
             for wire in self.wires.iter() {
                 let from_r = &output_info[&wire.out_pin];
@@ -675,6 +701,7 @@ impl<T> Snarl<T> {
                             //Remove hovered wire by second click
                             hovered_wire_disconnect |= bg_r.clicked_by(PointerButton::Secondary);
 
+                            wire_response = Some(((wire.out_pin, wire.in_pin), bg_r.clone()));
                             // Background is not hovered then.
                             bg_r.hovered = false;
                             bg_r.clicked = false;
@@ -963,7 +990,13 @@ impl<T> Snarl<T> {
             }
 
             snarl_state.store(ui.ctx());
+            SnarlResponse {
+                event_on_background: bg_r,
+                event_on_node: node_response,
+                event_on_wire: wire_response,
+            }
         });
+        bg_response.inner
     }
 
     //First step for split big function to parts
@@ -1077,6 +1110,7 @@ impl<T> Snarl<T> {
             // If removed
             return None;
         }
+        let node_response = r.clone();
 
         if viewer.has_on_hover_popup(&self.nodes[node.0].value) {
             r.on_hover_ui_at_pointer(|ui| {
@@ -1543,6 +1577,7 @@ impl<T> Snarl<T> {
             drag_released,
             pin_hovered,
             rect: final_rect,
+            response: node_response,
         })
     }
 }
