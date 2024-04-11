@@ -491,13 +491,19 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             }
         }
 
-        fn pin_in_compat(node: &DemoNode) -> PinCompat {
+        fn pin_in_compat(node: &DemoNode, pin: usize) -> PinCompat {
             match node {
                 DemoNode::Sink => PIN_SINK,
                 DemoNode::Number(_) => 0,
                 DemoNode::String(_) => 0,
                 DemoNode::ShowImage(_) => PIN_STR,
-                DemoNode::ExprNode(_) => PIN_STR,
+                DemoNode::ExprNode(_) => {
+                    if pin == 0 {
+                        PIN_STR
+                    } else {
+                        PIN_NUM
+                    }
+                }
             }
         }
 
@@ -535,7 +541,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             }
             AnyPins::In(pins) => {
                 let all_src_types = pins.iter().fold(0, |acc, pin| {
-                    acc | pin_in_compat(snarl.get_node(pin.node).unwrap())
+                    acc | pin_in_compat(snarl.get_node(pin.node).unwrap(), pin.input)
                 });
 
                 let dst_out_candidates = [
@@ -564,7 +570,10 @@ impl SnarlViewer<DemoNode> for DemoViewer {
 
                             // Connect the wire.
                             for src_pin in pins {
-                                let src_ty = pin_in_compat(snarl.get_node(src_pin.node).unwrap());
+                                let src_ty = pin_in_compat(
+                                    snarl.get_node(src_pin.node).unwrap(),
+                                    src_pin.input,
+                                );
                                 if src_ty & dst_ty != 0 {
                                     // In this demo, input pin MUST be unique ...
                                     // Therefore here we drop inputs of source input pin.
