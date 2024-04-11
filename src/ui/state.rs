@@ -1,6 +1,6 @@
-use egui::{style::Spacing, Align, Context, Id, Pos2, Rect, Vec2};
+use egui::{ahash::HashSet, style::Spacing, Align, Context, Id, Pos2, Rect, Vec2};
 
-use crate::{InPinId, OutPinId, Snarl};
+use crate::{InPinId, NodeId, OutPinId, Snarl};
 
 use super::SnarlStyle;
 
@@ -153,6 +153,9 @@ pub struct SnarlState {
 
     /// Flag indicating that the link menu is open.
     is_link_menu_open: bool,
+
+    /// Order of nodes to draw.
+    draw_order: Vec<NodeId>,
 }
 
 #[derive(Clone)]
@@ -162,6 +165,7 @@ struct SnarlStateData {
     target_scale: f32,
     new_wires: Option<NewWires>,
     is_link_menu_open: bool,
+    draw_order: Vec<NodeId>,
 }
 
 impl SnarlState {
@@ -196,6 +200,7 @@ impl SnarlState {
             is_link_menu_open: data.is_link_menu_open,
             id,
             dirty,
+            draw_order: data.draw_order,
         }
     }
 
@@ -217,6 +222,7 @@ impl SnarlState {
                 is_link_menu_open: false,
                 id,
                 dirty: true,
+                draw_order: Vec::new(),
             };
         }
 
@@ -241,6 +247,7 @@ impl SnarlState {
             is_link_menu_open: false,
             id,
             dirty: true,
+            draw_order: Vec::new(),
         }
     }
 
@@ -256,6 +263,7 @@ impl SnarlState {
                         target_scale: self.target_scale,
                         new_wires: self.new_wires,
                         is_link_menu_open: self.is_link_menu_open,
+                        draw_order: self.draw_order,
                     },
                 )
             });
@@ -400,5 +408,35 @@ impl SnarlState {
 
     pub(crate) fn is_link_menu_open(&self) -> bool {
         self.is_link_menu_open
+    }
+
+    pub(crate) fn update_draw_order<T>(&mut self, snarl: &Snarl<T>) -> Vec<NodeId> {
+        let mut node_ids = snarl
+            .nodes
+            .iter()
+            .map(|(id, _)| NodeId(id))
+            .collect::<HashSet<_>>();
+
+        self.draw_order.retain(|id| {
+            let has = node_ids.remove(id);
+            self.dirty |= !has;
+            has
+        });
+
+        self.dirty |= !node_ids.is_empty();
+
+        for new_id in node_ids {
+            self.draw_order.push(new_id);
+        }
+
+        self.draw_order.clone()
+    }
+
+    pub(crate) fn node_to_top(&mut self, node: NodeId) {
+        if let Some(order) = self.draw_order.iter().position(|idx| *idx == node) {
+            self.draw_order.remove(order);
+            self.draw_order.push(node);
+        }
+        self.dirty = true;
     }
 }

@@ -200,7 +200,6 @@ impl Wires {
 pub struct Snarl<T> {
     // #[cfg_attr(feature = "serde", serde(with = "serde_nodes"))]
     nodes: Slab<Node<T>>,
-    draw_order: Vec<NodeId>,
     wires: Wires,
 }
 
@@ -217,7 +216,6 @@ impl<T> Snarl<T> {
     pub fn new() -> Self {
         Snarl {
             nodes: Slab::new(),
-            draw_order: Vec::new(),
             wires: Wires::new(),
         }
     }
@@ -239,7 +237,6 @@ impl<T> Snarl<T> {
             open: true,
         });
         let id = NodeId(idx);
-        self.draw_order.push(id);
         id
     }
 
@@ -260,7 +257,6 @@ impl<T> Snarl<T> {
             open: false,
         });
         let id = NodeId(idx);
-        self.draw_order.push(id);
         id
     }
 
@@ -293,8 +289,6 @@ impl<T> Snarl<T> {
     pub fn remove_node(&mut self, idx: NodeId) -> T {
         let value = self.nodes.remove(idx.0).value;
         self.wires.drop_node(idx);
-        let order = self.draw_order.iter().position(|&i| i == idx).unwrap();
-        self.draw_order.remove(order);
         value
     }
 

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use eframe::{App, CreationContext};
 use egui::{Color32, Ui};
 use egui_snarl::{
-    ui::{AnyPins, PinInfo, SnarlStyle, SnarlViewer},
+    ui::{AnyPins, PinInfo, SnarlStyle, SnarlViewer, WireStyle},
     InPin, InPinId, NodeId, OutPin, OutPinId, Snarl,
 };
 
@@ -187,7 +187,12 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         DemoNode::String(ref value) => {
                             assert_eq!(remote.output, 0, "String node has only one output");
                             ui.label(format!("{:?}", value));
-                            PinInfo::triangle().with_fill(STRING_COLOR)
+
+                            PinInfo::triangle().with_fill(STRING_COLOR).with_wire_style(
+                                WireStyle::AxisAligned {
+                                    corner_radius: 10.0,
+                                },
+                            )
                         }
                         DemoNode::ExprNode(ref expr) => {
                             assert_eq!(remote.output, 0, "Expr node has only one output");
@@ -222,7 +227,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         .desired_width(0.0)
                         .margin(ui.spacing().item_spacing)
                         .show(ui);
-                    PinInfo::triangle().with_fill(STRING_COLOR)
+                    PinInfo::triangle().with_fill(STRING_COLOR).with_wire_style(
+                        WireStyle::AxisAligned {
+                            corner_radius: 10.0,
+                        },
+                    )
                 }
                 [remote] => {
                     let new_value = snarl[remote.node].string_out().to_owned();
@@ -236,7 +245,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                     let input = snarl[pin.id.node].string_in();
                     *input = new_value;
 
-                    PinInfo::triangle().with_fill(STRING_COLOR)
+                    PinInfo::triangle().with_fill(STRING_COLOR).with_wire_style(
+                        WireStyle::AxisAligned {
+                            corner_radius: 10.0,
+                        },
+                    )
                 }
                 _ => unreachable!("Sink input has only one wire"),
             },
@@ -333,7 +346,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         Err(_) => {}
                     }
                 }
-                PinInfo::triangle().with_fill(STRING_COLOR)
+                PinInfo::triangle().with_fill(STRING_COLOR).with_wire_style(
+                    WireStyle::AxisAligned {
+                        corner_radius: 10.0,
+                    },
+                )
             }
             DemoNode::ExprNode(ref expr_node) => {
                 if pin.id.input <= expr_node.bindings.len() {
@@ -385,7 +402,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                     .desired_width(0.0)
                     .margin(ui.spacing().item_spacing);
                 ui.add(edit);
-                PinInfo::triangle().with_fill(STRING_COLOR)
+                PinInfo::triangle().with_fill(STRING_COLOR).with_wire_style(
+                    WireStyle::AxisAligned {
+                        corner_radius: 10.0,
+                    },
+                )
             }
             DemoNode::ExprNode(ref expr_node) => {
                 let value = expr_node.eval();
@@ -400,62 +421,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         }
     }
 
-    fn input_color(
-        &mut self,
-        pin: &InPin,
-        _style: &egui::Style,
-        snarl: &mut Snarl<DemoNode>,
-    ) -> Color32 {
-        match snarl[pin.id.node] {
-            DemoNode::Sink => {
-                assert_eq!(pin.id.input, 0, "Sink node has only one input");
-                match &*pin.remotes {
-                    [] => UNTYPED_COLOR,
-                    [remote] => match snarl[remote.node] {
-                        DemoNode::Sink => unreachable!("Sink node has no outputs"),
-                        DemoNode::Number(_) => NUMBER_COLOR,
-                        DemoNode::String(_) => STRING_COLOR,
-                        DemoNode::ExprNode(_) => NUMBER_COLOR,
-                        DemoNode::ShowImage(_) => IMAGE_COLOR,
-                    },
-                    _ => unreachable!("Sink input has only one wire"),
-                }
-            }
-            DemoNode::Number(_) => {
-                unreachable!("Number node has no inputs")
-            }
-            DemoNode::String(_) => {
-                unreachable!("String node has no inputs")
-            }
-            DemoNode::ShowImage(_) => STRING_COLOR,
-            DemoNode::ExprNode(_) => {
-                if pin.id.input == 0 {
-                    STRING_COLOR
-                } else {
-                    NUMBER_COLOR
-                }
-            }
-        }
+    fn has_graph_menu(&mut self, _pos: egui::Pos2, _snarl: &mut Snarl<DemoNode>) -> bool {
+        true
     }
 
-    fn output_color(
-        &mut self,
-        pin: &OutPin,
-        _style: &egui::Style,
-        snarl: &mut Snarl<DemoNode>,
-    ) -> Color32 {
-        match snarl[pin.id.node] {
-            DemoNode::Sink => {
-                unreachable!("Sink node has no outputs")
-            }
-            DemoNode::Number(_) => NUMBER_COLOR,
-            DemoNode::String(_) => STRING_COLOR,
-            DemoNode::ShowImage(_) => IMAGE_COLOR,
-            DemoNode::ExprNode(_) => NUMBER_COLOR,
-        }
-    }
-
-    fn graph_menu(
+    fn show_graph_menu(
         &mut self,
         pos: egui::Pos2,
         ui: &mut Ui,
@@ -485,7 +455,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         }
     }
 
-    fn graph_menu_for_dropped_wire(
+    fn has_dropped_wire_menu(&mut self, _src_pins: AnyPins, _snarl: &mut Snarl<DemoNode>) -> bool {
+        true
+    }
+
+    fn show_dropped_wire_menu(
         &mut self,
         pos: egui::Pos2,
         ui: &mut Ui,
@@ -606,7 +580,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         };
     }
 
-    fn node_menu(
+    fn has_node_menu(&mut self, _node: &DemoNode) -> bool {
+        true
+    }
+
+    fn show_node_menu(
         &mut self,
         node: NodeId,
         _inputs: &[InPin],

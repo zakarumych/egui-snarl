@@ -4,7 +4,12 @@ use egui::{
     FontId, Frame, Margin, Rounding, Stroke, Style, Vec2, Visuals,
 };
 
+use crate::Wire;
+
+use super::WireStyle;
+
 pub trait Zoom {
+    #[inline(always)]
     fn zoomed(mut self, zoom: f32) -> Self
     where
         Self: Copy,
@@ -53,7 +58,9 @@ impl Zoom for Margin {
 impl Zoom for Shadow {
     #[inline(always)]
     fn zoom(&mut self, zoom: f32) {
-        self.extrusion.zoom(zoom);
+        self.offset.zoom(zoom);
+        self.blur.zoom(zoom);
+        self.spread.zoom(zoom);
     }
 }
 
@@ -187,5 +194,16 @@ impl Zoom for Frame {
         self.rounding.zoom(zoom);
         self.shadow.zoom(zoom);
         self.stroke.zoom(zoom);
+    }
+}
+
+impl Zoom for WireStyle {
+    fn zoom(&mut self, zoom: f32) {
+        match self {
+            WireStyle::Bezier3 | WireStyle::Bezier5 => {}
+            WireStyle::AxisAligned { corner_radius } => {
+                corner_radius.zoom(zoom);
+            }
+        }
     }
 }
