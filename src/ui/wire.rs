@@ -216,15 +216,7 @@ pub fn draw_wire(
         }
 
         WireStyle::AxisAligned { corner_radius } => {
-            draw_axis_aligned(
-                ui,
-                shapes,
-                corner_radius,
-                frame_size.max(corner_radius),
-                from,
-                to,
-                stroke,
-            );
+            draw_axis_aligned(ui, shapes, corner_radius, frame_size, from, to, stroke);
         }
     }
 }
@@ -250,14 +242,9 @@ pub fn hit_wire(
             let points = wire_bezier_5(frame_size, from, to);
             hit_bezier_5(pos, &points, threshold)
         }
-        WireStyle::AxisAligned { corner_radius } => hit_axis_aligned(
-            pos,
-            corner_radius,
-            frame_size.max(corner_radius),
-            from,
-            to,
-            threshold,
-        ),
+        WireStyle::AxisAligned { corner_radius } => {
+            hit_axis_aligned(pos, corner_radius, frame_size, from, to, threshold)
+        }
     }
 }
 
