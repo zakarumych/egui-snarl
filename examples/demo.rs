@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use eframe::{App, CreationContext};
 use egui::{Color32, Ui};
 use egui_snarl::{
-    ui::{AnyPins, PinInfo, SnarlStyle, SnarlViewer, WireStyle},
-    InPin, InPinId, NodeId, OutPin, OutPinId, Snarl,
+    ui::{AnyPins, PinInfo, SnarlStyle, SnarlViewer, WireStyle, SnarlResponse},
+    InPin, InPinId, NodeId, OutPin, OutPinId, Snarl
 };
 
 const STRING_COLOR: Color32 = Color32::from_rgb(0x00, 0xb0, 0x00);
@@ -936,6 +936,7 @@ impl Expr {
 pub struct DemoApp {
     snarl: Snarl<DemoNode>,
     style: SnarlStyle,
+    bg_r: Option<SnarlResponse>
 }
 
 impl DemoApp {
@@ -966,7 +967,7 @@ impl DemoApp {
         };
         // let style = SnarlStyle::new();
 
-        DemoApp { snarl, style }
+        DemoApp { snarl, style, bg_r: None }
     }
 }
 
@@ -999,12 +1000,15 @@ impl App for DemoApp {
         egui::SidePanel::left("style").show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 egui_probe::Probe::new("Snarl style", &mut self.style).show(ui);
+                ui.collapsing("Background Response", |ui|{
+                    ui.label(format!("{:#?}", self.bg_r));
+                });
             });
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.snarl
-                .show(&mut DemoViewer, &self.style, egui::Id::new("snarl"), ui);
+            self.bg_r = Some(self.snarl
+                .show(&mut DemoViewer, &self.style, egui::Id::new("snarl"), ui));
         });
     }
 
