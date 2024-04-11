@@ -1,0 +1,35 @@
+name: publish
+
+on:
+  workflow_dispatch
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    environment:
+      name: public
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/.crates.toml
+          ~/.cargo/.crates2.json
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build --verbose --all
+    - name: Run tests
+      run: cargo test --verbose --all
+    - name: login
+      run: cargo login ${{ secrets.CRATES_IO_TOKEN }}
+    - name: publish
+      run: cargo publish

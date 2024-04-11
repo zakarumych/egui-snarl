@@ -30,7 +30,7 @@ Because that's how any complex visual graph looks like.
   5. Footer is placed below other spaces, similar to body it is optional and contains only user-defined content.
 
 - Context menus for nodes and graph background.
-  Right-clicking on node, if configured, opens context menu filled by viewer's method. The method is provided with `Snarl` reference and node index. It may be used to add menu options to remove node, configure it or anything else.
+  Right-clicking on node, if configured, opens context menu filled by viewer's method. The method is provided with `Snarl` reference and node id. It may be used to add menu options to remove node, configure it or anything else.
   Right-clicking on background, if configured, opens context menu filled by viewer's method. The method is provided with `Snarl` reference. It may be used to add/remove nodes configure whole graph or anything else.
 
 - UI scaling.
@@ -64,7 +64,11 @@ Because that's how any complex visual graph looks like.
 
 [![demo](./demo.png)](./demo.png)
 
-# Web Demo
+# Web Demos
+
+Snarl Demo GUI by @zakarumych
+
+https://zakarumych.github.io/egui-snarl/
 
 Noise GUI by @attackgoat
 

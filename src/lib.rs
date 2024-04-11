@@ -28,8 +28,12 @@ impl<T> Default for Snarl<T> {
 /// This is newtype wrapper around [`usize`] that implements
 /// necessary traits, but omits arithmetic operations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(transparent)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(transparent)
+)]
 pub struct NodeId(pub usize);
 
 #[derive(Clone, Debug)]
@@ -46,22 +50,23 @@ struct Node<T> {
     open: bool,
 }
 
-/// Output pin identifier. Cosists of node index and pin index.
+/// Output pin identifier.
+/// Cosists of node id and pin index.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OutPinId {
-    /// Node index.
+    /// Node id.
     pub node: NodeId,
 
     /// Output pin index.
     pub output: usize,
 }
 
-/// Input pin identifier. Cosists of node index and pin index.
+/// Input pin identifier. Cosists of node id and pin index.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct InPinId {
-    /// Node index.
+    /// Node id.
     pub node: NodeId,
 
     /// Input pin index.
@@ -195,7 +200,6 @@ impl Wires {
 pub struct Snarl<T> {
     // #[cfg_attr(feature = "serde", serde(with = "serde_nodes"))]
     nodes: Slab<Node<T>>,
-    draw_order: Vec<NodeId>,
     wires: Wires,
 }
 
@@ -212,7 +216,6 @@ impl<T> Snarl<T> {
     pub fn new() -> Self {
         Snarl {
             nodes: Slab::new(),
-            draw_order: Vec::new(),
             wires: Wires::new(),
         }
     }
@@ -225,7 +228,7 @@ impl<T> Snarl<T> {
     /// ```
     /// # use egui_snarl::Snarl;
     /// let mut snarl = Snarl::<()>::new();
-    /// snarl.insert_node(());
+    /// snarl.insert_node(egui::pos2(0.0, 0.0), ());
     /// ```
     pub fn insert_node(&mut self, pos: egui::Pos2, node: T) -> NodeId {
         let idx = self.nodes.insert(Node {
@@ -234,7 +237,6 @@ impl<T> Snarl<T> {
             open: true,
         });
         let id = NodeId(idx);
-        self.draw_order.push(id);
         id
     }
 
@@ -246,16 +248,15 @@ impl<T> Snarl<T> {
     /// ```
     /// # use egui_snarl::Snarl;
     /// let mut snarl = Snarl::<()>::new();
-    /// snarl.insert_node(());
+    /// snarl.insert_node_collapsed(egui::pos2(0.0, 0.0), ());
     /// ```
-    pub fn add_node_collapsed(&mut self, pos: egui::Pos2, node: T) -> NodeId {
+    pub fn insert_node_collapsed(&mut self, pos: egui::Pos2, node: T) -> NodeId {
         let idx = self.nodes.insert(Node {
             value: node,
             pos,
             open: false,
         });
         let id = NodeId(idx);
-        self.draw_order.push(id);
         id
     }
 
@@ -281,15 +282,13 @@ impl<T> Snarl<T> {
     /// ```
     /// # use egui_snarl::Snarl;
     /// let mut snarl = Snarl::<()>::new();
-    /// let node = snarl.insert_node(());
+    /// let node = snarl.insert_node(egui::pos2(0.0, 0.0), ());
     /// snarl.remove_node(node);
     /// ```
     #[track_caller]
     pub fn remove_node(&mut self, idx: NodeId) -> T {
         let value = self.nodes.remove(idx.0).value;
         self.wires.drop_node(idx);
-        let order = self.draw_order.iter().position(|&i| i == idx).unwrap();
-        self.draw_order.remove(order);
         value
     }
 

@@ -1,8 +1,8 @@
-use egui::{Color32, Pos2, Style, Ui};
+use egui::{Pos2, Rect, Ui};
 
-use crate::{InPin, NodeId, OutPin, Snarl};
+use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
-use super::pin::PinInfo;
+use super::pin::{AnyPins, PinInfo};
 
 /// SnarlViewer is a trait for viewing a Snarl.
 ///
@@ -12,25 +12,8 @@ pub trait SnarlViewer<T> {
     /// Returns title of the node.
     fn title(&mut self, node: &T) -> String;
 
-    /// Checks if node has something to show in body - between input and output pins.
-    fn has_body(&mut self, node: &T) -> bool {
-        let _ = node;
-        false
-    }
-
-    /// Checks if node has something to show in footer - below pins and body.
-    fn has_footer(&mut self, node: &T) -> bool {
-        let _ = node;
-        false
-    }
-
-    /// Checks if node has something to show in on-hover popup.
-    fn has_on_hover_popup(&mut self, node: &T) -> bool {
-        let _ = node;
-        false
-    }
-
     /// Renders the node's header.
+    #[inline]
     fn show_header(
         &mut self,
         node: NodeId,
@@ -63,7 +46,15 @@ pub trait SnarlViewer<T> {
         snarl: &mut Snarl<T>,
     ) -> PinInfo;
 
+    /// Checks if node has something to show in body - between input and output pins.
+    #[inline]
+    fn has_body(&mut self, node: &T) -> bool {
+        let _ = node;
+        false
+    }
+
     /// Renders the node's body.
+    #[inline]
     fn show_body(
         &mut self,
         node: NodeId,
@@ -76,7 +67,15 @@ pub trait SnarlViewer<T> {
         let _ = (node, inputs, outputs, ui, scale, snarl);
     }
 
+    /// Checks if node has something to show in footer - below pins and body.
+    #[inline]
+    fn has_footer(&mut self, node: &T) -> bool {
+        let _ = node;
+        false
+    }
+
     /// Renders the node's footer.
+    #[inline]
     fn show_footer(
         &mut self,
         node: NodeId,
@@ -89,7 +88,24 @@ pub trait SnarlViewer<T> {
         let _ = (node, inputs, outputs, ui, scale, snarl);
     }
 
+    /// Reports the final node's rect after rendering.
+    ///
+    /// It aimed to be used for custom positioning of nodes that requires node dimensions for calculations.
+    /// Node's position can be modfied directly in this method.
+    #[inline]
+    fn final_node_rect(&mut self, node: NodeId, rect: Rect, snarl: &mut Snarl<T>) {
+        let _ = (node, rect, snarl);
+    }
+
+    /// Checks if node has something to show in on-hover popup.
+    #[inline]
+    fn has_on_hover_popup(&mut self, node: &T) -> bool {
+        let _ = node;
+        false
+    }
+
     /// Renders the node's on-hover popup.
+    #[inline]
     fn show_on_hover_popup(
         &mut self,
         node: NodeId,
@@ -102,25 +118,77 @@ pub trait SnarlViewer<T> {
         let _ = (node, inputs, outputs, ui, scale, snarl);
     }
 
-    /// Returns color of the node's input pin.
-    /// Called when pin in not visible.
-    fn input_color(&mut self, pin: &InPin, style: &Style, snarl: &mut Snarl<T>) -> Color32;
+    /// Checks if wire has something to show in widget.
+    /// This may not be called if wire is invisible.
+    #[inline]
+    fn has_wire_widget(&mut self, from: &OutPinId, to: &InPinId, snarl: &Snarl<T>) -> bool {
+        let _ = (from, to, snarl);
+        false
+    }
 
-    /// Returns color of the node's output pin.
-    /// Called when pin in not visible.
-    fn output_color(&mut self, pin: &OutPin, style: &Style, snarl: &mut Snarl<T>) -> Color32;
+    /// Renders the wire's widget.
+    /// This may not be called if wire is invisible.
+    #[inline]
+    fn show_wire_widget(
+        &mut self,
+        from: &OutPin,
+        to: &InPin,
+        ui: &mut Ui,
+        scale: f32,
+        snarl: &mut Snarl<T>,
+    ) {
+        let _ = (from, to, ui, scale, snarl);
+    }
 
-    /// Show context menu for the snarl.
-    ///
-    /// This can be used to implement menu for adding new nodes.
-    fn graph_menu(&mut self, pos: Pos2, ui: &mut Ui, scale: f32, snarl: &mut Snarl<T>) {
-        let _ = (pos, ui, scale, snarl);
+    /// Checks if the snarl has something to show in context menu if right-clicked or long-touched on empty space at `pos`.
+    #[inline]
+    fn has_graph_menu(&mut self, pos: Pos2, snarl: &mut Snarl<T>) -> bool {
+        let _ = (pos, snarl);
+        false
     }
 
     /// Show context menu for the snarl.
     ///
     /// This can be used to implement menu for adding new nodes.
-    fn node_menu(
+    #[inline]
+    fn show_graph_menu(&mut self, pos: Pos2, ui: &mut Ui, scale: f32, snarl: &mut Snarl<T>) {
+        let _ = (pos, ui, scale, snarl);
+    }
+
+    /// Checks if the snarl has something to show in context menu if wire drag is stopped at `pos`.
+    #[inline]
+    fn has_dropped_wire_menu(&mut self, src_pins: AnyPins, snarl: &mut Snarl<T>) -> bool {
+        let _ = (src_pins, snarl);
+        false
+    }
+
+    /// Show context menu for the snarl. This menu is opened when releasing a pin to empty
+    /// space. It can be used to implement menu for adding new node, and directly
+    /// connecting it to the released wire.
+    #[inline]
+    fn show_dropped_wire_menu(
+        &mut self,
+        pos: Pos2,
+        ui: &mut Ui,
+        scale: f32,
+        src_pins: AnyPins,
+        snarl: &mut Snarl<T>,
+    ) {
+        let _ = (pos, ui, scale, src_pins, snarl);
+    }
+
+    /// Checks if the node has something to show in context menu if right-clicked or long-touched on the node.
+    #[inline]
+    fn has_node_menu(&mut self, node: &T) -> bool {
+        let _ = node;
+        false
+    }
+
+    /// Show context menu for the snarl.
+    ///
+    /// This can be used to implement menu for adding new nodes.
+    #[inline]
+    fn show_node_menu(
         &mut self,
         node: NodeId,
         inputs: &[InPin],

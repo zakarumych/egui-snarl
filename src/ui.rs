@@ -17,26 +17,39 @@ mod wire;
 mod zoom;
 
 use self::{
-    pin::{draw_pin, AnyPin},
+    pin::{default_pin_fill, default_pin_stroke, draw_pin, AnyPin},
     state::{NewWires, NodeState, SnarlState},
-    wire::{draw_wire, hit_wire, mix_colors},
+    wire::{draw_wire, hit_wire, pick_wire_style},
     zoom::Zoom,
 };
 
 pub use self::{
     background_pattern::{BackgroundPattern, CustomBackground, Grid, Viewport},
-    pin::{CustomPinShape, PinInfo, PinShape},
+    pin::{AnyPins, CustomPinShape, DefaultPinShape, PinInfo, PinShape},
     viewer::SnarlViewer,
-    wire::WireLayer,
+    wire::{WireLayer, WireStyle},
 };
 
 /// Style for rendering Snarl.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
 pub struct SnarlStyle {
     /// Size of pins.
+    #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
     pub pin_size: Option<f32>,
 
+    /// Default fill color for pins.
+    pub pin_fill: Option<Color32>,
+
+    /// Default stroke for pins.
+    pub pin_stroke: Option<Stroke>,
+
+    /// Shape of pins.
+    pub pin_shape: DefaultPinShape,
+
     /// Width of wires.
+    #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
     pub wire_width: Option<f32>,
 
     /// Size of wire frame which controls curvature of wires.
@@ -45,8 +58,11 @@ pub struct SnarlStyle {
     /// Whether to downscale wire frame when nodes are close.
     pub downscale_wire_frame: bool,
 
-    /// Weather to upscale wire frame when nodes are close.
+    /// Weather to upscale wire frame when nodes are far.
     pub upscale_wire_frame: bool,
+
+    /// Controls default style of wires.
+    pub wire_style: WireStyle,
 
     /// Layer where wires are rendered.
     pub wire_layer: WireLayer,
@@ -72,16 +88,20 @@ pub struct SnarlStyle {
     pub background_pattern_stroke: Option<Stroke>,
 
     /// Minimum scale that can be set.
+    #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..=1.0))]
     pub min_scale: f32,
 
     /// Maximum scale that can be set.
+    #[cfg_attr(feature = "egui-probe", egui_probe(range = 1.0..))]
     pub max_scale: f32,
 
     /// Scale velocity when scaling with mouse wheel.
+    #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
     pub scale_velocity: f32,
 
     /// Frame used to draw nodes.
     /// Defaults to [`Frame::window`] constructed from current ui's style.
+    #[cfg_attr(feature = "serde", serde(with = "serde_frame_option"))]
     pub node_frame: Option<Frame>,
 
     /// Frame used to draw node headers.
@@ -89,14 +109,64 @@ pub struct SnarlStyle {
     ///
     /// If set, it should not have shadow and fill should be either opaque of fully transparent
     /// unless layering of header fill color with node fill color is desired.
+    #[cfg_attr(feature = "serde", serde(with = "serde_frame_option"))]
     pub header_frame: Option<Frame>,
 
     #[doc(hidden)]
+    #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
     /// Do not access other than with .., here to emulate `#[non_exhaustive(pub)]`
     pub _non_exhaustive: (),
 
     /// Enable centering by double click on background
-    pub centering: bool
+    pub centering: bool,
+}
+
+#[cfg(feature = "serde")]
+mod serde_frame_option {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    pub struct Frame {
+        pub inner_margin: egui::Margin,
+        pub outer_margin: egui::Margin,
+        pub rounding: egui::Rounding,
+        pub shadow: egui::epaint::Shadow,
+        pub fill: egui::Color32,
+        pub stroke: egui::Stroke,
+    }
+
+    pub fn serialize<S>(frame: &Option<egui::Frame>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match frame {
+            Some(frame) => Frame {
+                inner_margin: frame.inner_margin,
+                outer_margin: frame.outer_margin,
+                rounding: frame.rounding,
+                shadow: frame.shadow,
+                fill: frame.fill,
+                stroke: frame.stroke,
+            }
+            .serialize(serializer),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<egui::Frame>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let frame_opt = Option::<Frame>::deserialize(deserializer)?;
+        Ok(frame_opt.map(|frame| egui::Frame {
+            inner_margin: frame.inner_margin,
+            outer_margin: frame.outer_margin,
+            rounding: frame.rounding,
+            shadow: frame.shadow,
+            fill: frame.fill,
+            stroke: frame.stroke,
+        }))
+    }
 }
 
 impl SnarlStyle {
@@ -105,10 +175,14 @@ impl SnarlStyle {
     pub const fn new() -> Self {
         SnarlStyle {
             pin_size: None,
+            pin_fill: None,
+            pin_stroke: None,
+            pin_shape: DefaultPinShape::Circle,
             wire_width: None,
             wire_frame_size: None,
             downscale_wire_frame: false,
             upscale_wire_frame: true,
+            wire_style: WireStyle::Bezier5,
             wire_layer: WireLayer::BehindNodes,
             header_drag_space: None,
             collapsible: true,
@@ -124,7 +198,7 @@ impl SnarlStyle {
             header_frame: None,
 
             _non_exhaustive: (),
-            centering: true
+            centering: true,
         }
     }
 }
@@ -149,7 +223,13 @@ struct DrawNodeResponse {
     node_to_top: Option<NodeId>,
     drag_released: bool,
     pin_hovered: Option<AnyPin>,
-    center: Vec2
+    center: Pos2,
+}
+
+struct PinResponse {
+    pos: Pos2,
+    pin_fill: Color32,
+    wire_style: Option<WireStyle>,
 }
 
 impl<T> Snarl<T> {
@@ -171,9 +251,6 @@ impl<T> Snarl<T> {
     {
         #![allow(clippy::too_many_lines)]
 
-        let mut node_moved = None;
-        let mut node_to_top = None;
-
         let snarl_id = ui.make_persistent_id(id_source);
 
         // Draw background pattern.
@@ -186,7 +263,7 @@ impl<T> Snarl<T> {
             .unwrap_or_else(|| ui.visuals().widgets.noninteractive.bg_stroke);
 
         let input = ui.ctx().input(|i| Input {
-            scroll_delta: i.scroll_delta.y,
+            scroll_delta: i.raw_scroll_delta.y,
             hover_pos: i.pointer.hover_pos(),
             modifiers: i.modifiers,
             // primary_pressed: i.pointer.primary_pressed(),
@@ -197,6 +274,9 @@ impl<T> Snarl<T> {
             .fill(bg_fill)
             .stroke(bg_stroke)
             .show(ui, |ui| {
+                let mut node_moved = None;
+                let mut node_to_top = None;
+
                 let mut bg_r = ui.allocate_rect(ui.max_rect(), Sense::click_and_drag());
                 let viewport = bg_r.rect;
                 ui.set_clip_rect(viewport);
@@ -260,20 +340,11 @@ impl<T> Snarl<T> {
 
                 let mut pin_hovered = None;
 
-                let draw_order = self.draw_order.clone();
-                let draw_order_len = draw_order.len();
+                let draw_order = snarl_state.update_draw_order(self);
                 let mut drag_released = false;
 
-                let mut center = vec2(0.0, 0.0);
-                let mut need_centering = false;
-                // Centering nodes
-                if style.centering{
-                    ui.input(|i|{
-                        if i.pointer.button_double_clicked(PointerButton::Primary){
-                            need_centering = true;
-                        }
-                    });
-                }
+                let mut centers_sum = vec2(0.0, 0.0);
+                let centers_weight = draw_order.len();
 
                 for node_idx in draw_order {
                     // show_node(node_idx);
@@ -301,7 +372,7 @@ impl<T> Snarl<T> {
                         pin_hovered = Some(v);
                     }
                     drag_released |= response.drag_released;
-                    center += response.center;
+                    centers_sum += response.center.to_vec2();
                 }
 
                 let mut hovered_wire = None;
@@ -310,8 +381,8 @@ impl<T> Snarl<T> {
                 let mut wire_hit = false;
 
                 for wire in self.wires.iter() {
-                    let (from, color_from) = output_info[&wire.out_pin];
-                    let (to, color_to) = input_info[&wire.in_pin];
+                    let from_r = &output_info[&wire.out_pin];
+                    let to_r = &input_info[&wire.in_pin];
 
                     if !wire_hit
                         && !snarl_state.has_new_wires()
@@ -328,9 +399,15 @@ impl<T> Snarl<T> {
                                 wire_frame_size,
                                 style.upscale_wire_frame,
                                 style.downscale_wire_frame,
-                                from,
-                                to,
+                                from_r.pos,
+                                to_r.pos,
                                 wire_width.max(1.5),
+                                pick_wire_style(
+                                    style.wire_style,
+                                    from_r.wire_style,
+                                    to_r.wire_style,
+                                )
+                                .zoomed(snarl_state.scale()),
                             );
 
                             if wire_hit {
@@ -342,14 +419,12 @@ impl<T> Snarl<T> {
 
                                 // Background is not hovered then.
                                 bg_r.hovered = false;
-                                bg_r.clicked = [false; egui::NUM_POINTER_BUTTONS];
-                                bg_r.double_clicked = [false; egui::NUM_POINTER_BUTTONS];
-                                bg_r.triple_clicked = [false; egui::NUM_POINTER_BUTTONS];
+                                bg_r.clicked = false;
                             }
                         }
                     }
 
-                    let color = mix_colors(color_from, color_to);
+                    let color = mix_colors(from_r.pin_fill, to_r.pin_fill);
 
                     let mut draw_width = wire_width;
                     if hovered_wire == Some(wire) {
@@ -362,9 +437,14 @@ impl<T> Snarl<T> {
                         wire_frame_size,
                         style.upscale_wire_frame,
                         style.downscale_wire_frame,
-                        from,
-                        to,
+                        from_r.pos,
+                        to_r.pos,
                         Stroke::new(draw_width, color),
+                        pick_wire_style(
+                            style.wire_style.zoomed(snarl_state.scale()),
+                            from_r.wire_style,
+                            to_r.wire_style,
+                        ),
                     );
                 }
 
@@ -381,69 +461,27 @@ impl<T> Snarl<T> {
                     snarl_state.pan(-bg_r.drag_delta());
                 }
 
+                // If right button is clicked while new wire is being dragged, cancel it.
+                // This is to provide way to 'not open' the link graph node menu, but just
+                // releasing the new wire to empty space.
+                //
+                // This uses `button_down` directly, instead of `clicked_by` to improve
+                // responsiveness of the cancel action.
+                if snarl_state.has_new_wires()
+                    && ui.input(|x| x.pointer.button_down(PointerButton::Secondary))
+                {
+                    let _ = snarl_state.take_wires();
+                    bg_r.clicked = false;
+                }
+
                 //Do centering
-                if need_centering && bg_r.double_clicked() {
-                    center /= draw_order_len as f32;
-                    snarl_state.set_offset(center * snarl_state.scale());
+                if style.centering && bg_r.double_clicked() {
+                    centers_sum /= centers_weight as f32;
+                    snarl_state.set_offset(centers_sum * snarl_state.scale());
                 }
 
-                bg_r.context_menu(|ui| {
-                    viewer.graph_menu(
-                        snarl_state.screen_pos_to_graph(ui.cursor().min, viewport),
-                        ui,
-                        snarl_state.scale(),
-                        self,
-                    );
-                });
-
-                
-
-                match snarl_state.new_wires() {
-                    None => {}
-                    Some(NewWires::In(pins)) => {
-                        for pin in pins {
-                            let from = input.hover_pos.unwrap_or(Pos2::ZERO);
-                            let (to, color) = input_info[pin];
-
-                            draw_wire(
-                                ui,
-                                &mut wire_shapes,
-                                wire_frame_size,
-                                style.upscale_wire_frame,
-                                style.downscale_wire_frame,
-                                from,
-                                to,
-                                Stroke::new(wire_width, color),
-                            );
-                        }
-                    }
-                    Some(NewWires::Out(pins)) => {
-                        for pin in pins {
-                            let (from, color) = output_info[pin];
-                            let to = input.hover_pos.unwrap_or(Pos2::ZERO);
-
-                            draw_wire(
-                                ui,
-                                &mut wire_shapes,
-                                wire_frame_size,
-                                style.upscale_wire_frame,
-                                style.downscale_wire_frame,
-                                from,
-                                to,
-                                Stroke::new(wire_width, color),
-                            );
-                        }
-                    }
-                }
-
-                match wire_shape_idx {
-                    None => {
-                        ui.painter().add(Shape::Vec(wire_shapes));
-                    }
-                    Some(idx) => {
-                        ui.painter().set(idx, Shape::Vec(wire_shapes));
-                    }
-                }
+                // Wire end position will be overrided when link graph menu is opened.
+                let mut wire_end_pos = input.hover_pos.unwrap_or_default();
 
                 if drag_released {
                     let new_wires = snarl_state.take_wires();
@@ -469,28 +507,148 @@ impl<T> Snarl<T> {
                                 );
                             }
                         }
+                        (Some(new_wires), None) if bg_r.hovered() => {
+                            // A new pin is dropped without connecting it anywhere. This
+                            // will open a pop-up window for creating a new node.
+                            snarl_state.revert_take_wires(new_wires);
+
+                            // Force open context menu.
+                            bg_r.long_touched = true;
+                        }
                         _ => {}
+                    }
+                }
+
+                // Open graph menu when right-clicking on empty space.
+                let mut is_menu_visible = false;
+
+                if let Some(interact_pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
+                    if snarl_state.has_new_wires() {
+                        let pins = match snarl_state.new_wires().unwrap() {
+                            NewWires::In(x) => AnyPins::In(x),
+                            NewWires::Out(x) => AnyPins::Out(x),
+                        };
+
+                        if viewer.has_dropped_wire_menu(pins, self) {
+                            bg_r.context_menu(|ui| {
+                                is_menu_visible = true;
+                                if !snarl_state.is_link_menu_open() {
+                                    // Mark link menu is now visible.
+                                    snarl_state.open_link_menu();
+                                }
+
+                                let pins = match snarl_state.new_wires().unwrap() {
+                                    NewWires::In(x) => AnyPins::In(x),
+                                    NewWires::Out(x) => AnyPins::Out(x),
+                                };
+
+                                wire_end_pos = ui.cursor().min;
+
+                                // The context menu is opened as *link* graph menu.
+                                viewer.show_dropped_wire_menu(
+                                    snarl_state.screen_pos_to_graph(ui.cursor().min, viewport),
+                                    ui,
+                                    snarl_state.scale(),
+                                    pins,
+                                    self,
+                                );
+                            });
+                        }
+                    } else {
+                        if snarl_state.is_link_menu_open()
+                            || viewer.has_graph_menu(interact_pos, self)
+                        {
+                            bg_r.context_menu(|ui| {
+                                is_menu_visible = true;
+                                if !snarl_state.is_link_menu_open() {
+                                    // Mark link menu is now visible.
+                                    snarl_state.open_link_menu();
+                                }
+
+                                viewer.show_graph_menu(
+                                    snarl_state.screen_pos_to_graph(ui.cursor().min, viewport),
+                                    ui,
+                                    snarl_state.scale(),
+                                    self,
+                                );
+                            });
+                        }
+                    }
+                }
+
+                if !is_menu_visible && snarl_state.is_link_menu_open() {
+                    // It seems that the context menu was closed. Remove new wires.
+                    snarl_state.close_link_menu();
+                }
+
+                match snarl_state.new_wires() {
+                    None => {}
+                    Some(NewWires::In(pins)) => {
+                        for pin in pins {
+                            let from_pos = wire_end_pos;
+                            let to_r = &input_info[pin];
+
+                            draw_wire(
+                                ui,
+                                &mut wire_shapes,
+                                wire_frame_size,
+                                style.upscale_wire_frame,
+                                style.downscale_wire_frame,
+                                from_pos,
+                                to_r.pos,
+                                Stroke::new(wire_width, to_r.pin_fill),
+                                to_r.wire_style
+                                    .unwrap_or(style.wire_style)
+                                    .zoomed(snarl_state.scale()),
+                            );
+                        }
+                    }
+                    Some(NewWires::Out(pins)) => {
+                        for pin in pins {
+                            let from_r = &output_info[pin];
+                            let to_pos = wire_end_pos;
+
+                            draw_wire(
+                                ui,
+                                &mut wire_shapes,
+                                wire_frame_size,
+                                style.upscale_wire_frame,
+                                style.downscale_wire_frame,
+                                from_r.pos,
+                                to_pos,
+                                Stroke::new(wire_width, from_r.pin_fill),
+                                from_r
+                                    .wire_style
+                                    .unwrap_or(style.wire_style)
+                                    .zoomed(snarl_state.scale()),
+                            );
+                        }
+                    }
+                }
+
+                match wire_shape_idx {
+                    None => {
+                        ui.painter().add(Shape::Vec(wire_shapes));
+                    }
+                    Some(idx) => {
+                        ui.painter().set(idx, Shape::Vec(wire_shapes));
                     }
                 }
 
                 ui.advance_cursor_after_rect(Rect::from_min_size(viewport.min, Vec2::ZERO));
 
+                if let Some(node) = node_to_top {
+                    ui.ctx().request_repaint();
+                    snarl_state.node_to_top(node);
+                }
                 snarl_state.store(ui.ctx());
+
+                if let Some((node, delta)) = node_moved {
+                    ui.ctx().request_repaint();
+                    let node = &mut self.nodes[node.0];
+                    node.pos += delta;
+                }
             });
-
-        if let Some((node, delta)) = node_moved {
-            ui.ctx().request_repaint();
-            let node = &mut self.nodes[node.0];
-            node.pos += delta;
-        }
-
-        if let Some(node_idx) = node_to_top {
-            ui.ctx().request_repaint();
-            if let Some(order) = self.draw_order.iter().position(|idx| *idx == node_idx) {
-                self.draw_order.remove(order);
-                self.draw_order.push(node_idx);
-            }
-        }
     }
 
     //First step for split big function to parts
@@ -509,9 +667,9 @@ impl<T> Snarl<T> {
         node_style: &Style,
         node_frame: &Frame,
         header_frame: &Frame,
-        input_positions: &mut HashMap<InPinId, (Pos2, Color32)>,
+        input_positions: &mut HashMap<InPinId, PinResponse>,
         input: &Input,
-        output_positions: &mut HashMap<OutPinId, (Pos2, Color32)>,
+        output_positions: &mut HashMap<OutPinId, PinResponse>,
     ) -> DrawNodeResponse
     where
         V: SnarlViewer<T>,
@@ -527,7 +685,7 @@ impl<T> Snarl<T> {
             node_moved: None,
             drag_released: false,
             pin_hovered: None,
-            center: pos.to_vec2()
+            center: pos,
         };
 
         let viewport = ui.max_rect();
@@ -553,6 +711,7 @@ impl<T> Snarl<T> {
 
         let pin_size = style
             .pin_size
+            .zoomed(snarl_state.scale())
             .unwrap_or(node_style.spacing.interact_size.y * 0.5);
 
         let header_drag_space = style
@@ -577,9 +736,12 @@ impl<T> Snarl<T> {
         if r.clicked() || r.dragged() {
             response.node_to_top = Some(node);
         }
-        let r = r.context_menu(|ui| {
-            viewer.node_menu(node, &inputs, &outputs, ui, snarl_state.scale(), self);
-        });
+
+        if viewer.has_node_menu(&self.nodes[node.0].value) {
+            r.context_menu(|ui| {
+                viewer.show_node_menu(node, &inputs, &outputs, ui, snarl_state.scale(), self);
+            });
+        }
 
         if !self.nodes.contains(node.0) {
             node_state.clear(ui.ctx());
@@ -606,7 +768,7 @@ impl<T> Snarl<T> {
         );
         node_ui.set_style(node_style.clone());
 
-        node_frame.show(node_ui, |ui| {
+        let r = node_frame.show(node_ui, |ui| {
             // Render header frame.
             let mut header_rect = node_rect;
 
@@ -663,11 +825,9 @@ impl<T> Snarl<T> {
 
             let min_pin_y = header_rect.center().y;
 
-            let input_x = header_rect.left() + header_frame.total_margin().left + pin_size * 0.5;
+            let input_x = node_frame_rect.left() + node_frame.inner_margin.left + pin_size;
 
-            let output_x = f32::max(header_rect.right(), node_rect.right())
-                - header_frame.total_margin().right
-                - pin_size * 0.5;
+            let output_x = node_frame_rect.right() - node_frame.inner_margin.right - pin_size;
 
             // Input/output pin block
 
@@ -705,7 +865,7 @@ impl<T> Snarl<T> {
                 // Show input pin.
                 inputs_ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
                     // Allocate space for pin shape.
-                    let (pin_id, _) = ui.allocate_space(vec2(pin_size, pin_size));
+                    let (pin_id, _) = ui.allocate_space(vec2(pin_size * 1.5, pin_size * 1.5));
 
                     let y0 = ui.cursor().min.y;
 
@@ -724,8 +884,6 @@ impl<T> Snarl<T> {
                     let y = min_pin_y.max((y0 + y1) * 0.5);
 
                     let pin_pos = pos2(input_x, y);
-
-                    input_positions.insert(in_pin.id, (pin_pos, pin_info.fill));
 
                     // Interact with pin shape.
                     let r = ui.interact(
@@ -759,7 +917,7 @@ impl<T> Snarl<T> {
                             snarl_state.start_new_wire_in(in_pin.id);
                         }
                     }
-                    if r.drag_released() {
+                    if r.drag_stopped() {
                         response.drag_released = true;
                     }
 
@@ -778,7 +936,29 @@ impl<T> Snarl<T> {
                         _ => {}
                     }
 
-                    draw_pin(ui.painter(), pin_info, pin_pos, pin_size);
+                    let pin_fill = pin_info
+                        .fill
+                        .unwrap_or(default_pin_fill(style, &node_style.visuals));
+
+                    draw_pin(
+                        ui.painter(),
+                        pin_info.shape.as_ref().unwrap_or(&style.pin_shape.into()),
+                        pin_fill,
+                        pin_info
+                            .stroke
+                            .unwrap_or(default_pin_stroke(style, &node_style.visuals)),
+                        pin_pos,
+                        pin_size,
+                    );
+
+                    input_positions.insert(
+                        in_pin.id,
+                        PinResponse {
+                            pos: pin_pos,
+                            pin_fill,
+                            wire_style: pin_info.wire_style,
+                        },
+                    );
                 });
             }
             let inputs_rect = inputs_ui.min_rect();
@@ -808,7 +988,7 @@ impl<T> Snarl<T> {
                 outputs_ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
                     // Allocate space for pin shape.
 
-                    let (pin_id, _) = ui.allocate_space(vec2(pin_size, pin_size));
+                    let (pin_id, _) = ui.allocate_space(vec2(pin_size * 1.5, pin_size * 1.5));
 
                     let y0 = ui.cursor().min.y;
 
@@ -827,8 +1007,6 @@ impl<T> Snarl<T> {
                     let y = min_pin_y.max((y0 + y1) * 0.5);
 
                     let pin_pos = pos2(output_x, y);
-
-                    output_positions.insert(out_pin.id, (pin_pos, pin_info.fill));
 
                     let r = ui.interact(
                         Rect::from_center_size(pin_pos, vec2(pin_size, pin_size)),
@@ -862,7 +1040,7 @@ impl<T> Snarl<T> {
                             snarl_state.start_new_wire_out(out_pin.id);
                         }
                     }
-                    if r.drag_released() {
+                    if r.drag_stopped() {
                         response.drag_released = true;
                     }
 
@@ -879,7 +1057,30 @@ impl<T> Snarl<T> {
                         }
                         _ => {}
                     }
-                    draw_pin(ui.painter(), pin_info, pin_pos, pin_size);
+
+                    let pin_fill = pin_info
+                        .fill
+                        .unwrap_or(default_pin_fill(style, &node_style.visuals));
+
+                    draw_pin(
+                        ui.painter(),
+                        pin_info.shape.as_ref().unwrap_or(&style.pin_shape.into()),
+                        pin_fill,
+                        pin_info
+                            .stroke
+                            .unwrap_or(default_pin_stroke(style, &node_style.visuals)),
+                        pin_pos,
+                        pin_size,
+                    );
+
+                    output_positions.insert(
+                        out_pin.id,
+                        PinResponse {
+                            pos: pin_pos,
+                            pin_fill,
+                            wire_style: pin_info.wire_style,
+                        },
+                    );
                 });
             }
             let outputs_rect = outputs_ui.min_rect();
@@ -991,6 +1192,10 @@ impl<T> Snarl<T> {
             ));
         });
 
+        let node_graph_rect = snarl_state.screen_rect_to_graph(r.response.rect, viewport);
+        viewer.final_node_rect(node, node_graph_rect, self);
+        response.center = node_graph_rect.center();
+
         if !self.nodes.contains(node.0) {
             ui.ctx().request_repaint();
             node_state.clear(ui.ctx());
@@ -1003,3 +1208,80 @@ impl<T> Snarl<T> {
         response
     }
 }
+
+fn mix_colors(a: Color32, b: Color32) -> Color32 {
+    Color32::from_rgba_premultiplied(
+        ((a.r() as u32 + b.r() as u32) / 2) as u8,
+        ((a.g() as u32 + b.g() as u32) / 2) as u8,
+        ((a.b() as u32 + b.b() as u32) / 2) as u8,
+        ((a.a() as u32 + b.a() as u32) / 2) as u8,
+    )
+}
+
+// fn mix_colors(mut colors: impl Iterator<Item = Color32>) -> Option<Color32> {
+//     let color = colors.next()?;
+
+//     let mut r = color.r() as u32;
+//     let mut g = color.g() as u32;
+//     let mut b = color.b() as u32;
+//     let mut a = color.a() as u32;
+//     let mut w = 1;
+
+//     for c in colors {
+//         r += c.r() as u32;
+//         g += c.g() as u32;
+//         b += c.b() as u32;
+//         a += c.a() as u32;
+//         w += 1;
+//     }
+
+//     Some(Color32::from_rgba_premultiplied(
+//         (r / w) as u8,
+//         (g / w) as u8,
+//         (b / w) as u8,
+//         (a / w) as u8,
+//     ))
+// }
+
+// fn mix_sizes(mut sizes: impl Iterator<Item = f32>) -> Option<f32> {
+//     let mut size = sizes.next()?;
+//     let mut w = 1;
+
+//     for s in sizes {
+//         size += s;
+//         w += 1;
+//     }
+
+//     Some(size / w as f32)
+// }
+
+// fn mix_strokes(mut strokes: impl Iterator<Item = Stroke>) -> Option<Stroke> {
+//     let stoke = strokes.next()?;
+
+//     let mut width = stoke.width;
+//     let mut r = stoke.color.r() as u32;
+//     let mut g = stoke.color.g() as u32;
+//     let mut b = stoke.color.b() as u32;
+//     let mut a = stoke.color.a() as u32;
+
+//     let mut w = 1;
+
+//     for s in strokes {
+//         width += s.width;
+//         r += s.color.r() as u32;
+//         g += s.color.g() as u32;
+//         b += s.color.b() as u32;
+//         a += s.color.a() as u32;
+//         w += 1;
+//     }
+
+//     Some(Stroke {
+//         width: width / w as f32,
+//         color: Color32::from_rgba_premultiplied(
+//             (r / w) as u8,
+//             (g / w) as u8,
+//             (b / w) as u8,
+//             (a / w) as u8,
+//         ),
+//     })
+// }
