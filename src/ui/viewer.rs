@@ -93,8 +93,16 @@ pub trait SnarlViewer<T> {
     /// It aimed to be used for custom positioning of nodes that requires node dimensions for calculations.
     /// Node's position can be modfied directly in this method.
     #[inline]
-    fn final_node_rect(&mut self, node: NodeId, rect: Rect, snarl: &mut Snarl<T>) {
-        let _ = (node, rect, snarl);
+    fn final_node_rect(
+        &mut self,
+        node: NodeId,
+        ui_rect: Rect,
+        graph_rect: Rect,
+        ui: &mut Ui,
+        scale: f32,
+        snarl: &mut Snarl<T>,
+    ) {
+        let _ = (node, ui_rect, graph_rect, ui, scale, snarl);
     }
 
     /// Checks if node has something to show in on-hover popup.

@@ -135,6 +135,12 @@ pub enum NewWires {
     Out(Vec<OutPinId>),
 }
 
+#[derive(Clone, Copy)]
+struct RectSelect {
+    origin: Pos2,
+    current: Pos2,
+}
+
 pub struct SnarlState {
     /// Where viewport's center in graph's space.
     offset: Vec2,
@@ -156,6 +162,12 @@ pub struct SnarlState {
 
     /// Order of nodes to draw.
     draw_order: Vec<NodeId>,
+
+    /// Active rect selection.
+    rect_selection: Option<RectSelect>,
+
+    /// Set of currently selected nodes.
+    selected_nodes: HashSet<NodeId>,
 }
 
 #[derive(Clone)]
@@ -166,6 +178,8 @@ struct SnarlStateData {
     new_wires: Option<NewWires>,
     is_link_menu_open: bool,
     draw_order: Vec<NodeId>,
+    rect_selection: Option<RectSelect>,
+    selected_nodes: HashSet<NodeId>,
 }
 
 impl SnarlState {
@@ -201,6 +215,8 @@ impl SnarlState {
             id,
             dirty,
             draw_order: data.draw_order,
+            rect_selection: data.rect_selection,
+            selected_nodes: data.selected_nodes,
         }
     }
 
@@ -211,33 +227,23 @@ impl SnarlState {
             bb.extend_with(node.pos);
         }
 
-        if !bb.is_positive() {
-            let scale = 1.0f32.clamp(style.min_scale, style.max_scale);
+        let mut offset = Vec2::ZERO;
+        let mut scale = 1.0f32.clamp(style.min_scale(), style.max_scale());
 
-            return SnarlState {
-                offset: Vec2::ZERO,
-                scale,
-                target_scale: scale,
-                new_wires: None,
-                is_link_menu_open: false,
-                id,
-                dirty: true,
-                draw_order: Vec::new(),
-            };
+        if bb.is_positive() {
+            bb = bb.expand(100.0);
+
+            let bb_size = bb.size();
+            let viewport_size = viewport.size();
+
+            scale = (viewport_size.x / bb_size.x)
+                .min(1.0)
+                .min(viewport_size.y / bb_size.y)
+                .min(style.max_scale())
+                .max(style.min_scale());
+
+            offset = bb.center().to_vec2() * scale;
         }
-
-        bb = bb.expand(100.0);
-
-        let bb_size = bb.size();
-        let viewport_size = viewport.size();
-
-        let scale = (viewport_size.x / bb_size.x)
-            .min(1.0)
-            .min(viewport_size.y / bb_size.y)
-            .min(style.max_scale)
-            .max(style.min_scale);
-
-        let offset = bb.center().to_vec2() * scale;
 
         SnarlState {
             offset,
@@ -248,6 +254,8 @@ impl SnarlState {
             id,
             dirty: true,
             draw_order: Vec::new(),
+            rect_selection: None,
+            selected_nodes: HashSet::default(),
         }
     }
 
@@ -264,6 +272,8 @@ impl SnarlState {
                         new_wires: self.new_wires,
                         is_link_menu_open: self.is_link_menu_open,
                         draw_order: self.draw_order,
+                        rect_selection: self.rect_selection,
+                        selected_nodes: self.selected_nodes,
                     },
                 )
             });
@@ -307,6 +317,14 @@ impl SnarlState {
         Rect::from_min_max(
             self.screen_pos_to_graph(rect.min, viewport),
             self.screen_pos_to_graph(rect.max, viewport),
+        )
+    }
+
+    #[inline(always)]
+    pub fn graph_rect_to_screen(&self, rect: Rect, viewport: Rect) -> Rect {
+        Rect::from_min_max(
+            self.graph_pos_to_screen(rect.min, viewport),
+            self.graph_pos_to_screen(rect.max, viewport),
         )
     }
 
@@ -451,5 +469,70 @@ impl SnarlState {
     pub fn set_offset(&mut self, offset: Vec2) {
         self.offset = offset;
         self.dirty = true;
+    }
+
+    pub fn selected_nodes(&self) -> &HashSet<NodeId> {
+        &self.selected_nodes
+    }
+
+    pub fn select_one_node(&mut self, reset: bool, node: NodeId) {
+        if reset {
+            self.deselect_all_nodes();
+        }
+
+        self.dirty |= self.selected_nodes.insert(node);
+    }
+
+    pub fn select_many_nodes(&mut self, reset: bool, nodes: impl Iterator<Item = NodeId>) {
+        if reset {
+            self.deselect_all_nodes();
+        }
+
+        self.selected_nodes.extend(nodes);
+        self.dirty |= !self.selected_nodes.is_empty();
+    }
+
+    pub fn deselect_one_node(&mut self, node: NodeId) {
+        self.dirty |= self.selected_nodes.remove(&node);
+    }
+
+    pub fn deselect_many_nodes(&mut self, nodes: impl Iterator<Item = NodeId>) {
+        for node in nodes {
+            self.dirty |= self.selected_nodes.remove(&node);
+        }
+    }
+
+    pub fn deselect_all_nodes(&mut self) {
+        self.dirty |= !self.selected_nodes.is_empty();
+        self.selected_nodes.clear();
+    }
+
+    pub fn start_rect_selection(&mut self, pos: Pos2) {
+        self.dirty |= self.rect_selection.is_none();
+        self.rect_selection = Some(RectSelect {
+            origin: pos,
+            current: pos,
+        });
+    }
+
+    pub fn stop_rect_selection(&mut self) {
+        self.dirty |= self.rect_selection.is_some();
+        self.rect_selection = None;
+    }
+
+    pub fn is_rect_selection(&self) -> bool {
+        self.rect_selection.is_some()
+    }
+
+    pub fn update_rect_selection(&mut self, pos: Pos2) {
+        if let Some(rect_selection) = &mut self.rect_selection {
+            rect_selection.current = pos;
+            self.dirty = true;
+        }
+    }
+
+    pub fn rect_selection(&self) -> Option<Rect> {
+        let rect = self.rect_selection?;
+        Some(Rect::from_two_pos(rect.origin, rect.current))
     }
 }

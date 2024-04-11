@@ -15,6 +15,12 @@ pub enum WireLayer {
     AboveNodes,
 }
 
+impl Default for WireLayer {
+    fn default() -> Self {
+        WireLayer::BehindNodes
+    }
+}
+
 /// Controls style in which wire is rendered.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -32,6 +38,12 @@ pub enum WireStyle {
         /// Radius of corners in wire.
         corner_radius: f32,
     },
+}
+
+impl Default for WireStyle {
+    fn default() -> Self {
+        WireStyle::Bezier5
+    }
 }
 
 pub(crate) fn pick_wire_style(

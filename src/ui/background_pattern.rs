@@ -1,6 +1,6 @@
 use std::fmt;
 
-use egui::{emath::Rot2, vec2, Pos2, Rect, Stroke, Ui, Vec2};
+use egui::{emath::Rot2, vec2, Pos2, Rect, Ui, Vec2};
 
 use super::SnarlStyle;
 
@@ -68,10 +68,10 @@ pub struct Grid {
     pub angle: f32,
 }
 
-const DEFAULT_GRID_SPACING: Vec2 = vec2(5.0, 5.0);
+const DEFAULT_GRID_SPACING: Vec2 = vec2(50.0, 50.0);
 macro_rules! default_grid_spacing {
     () => {
-        stringify!(vec2(5.0, 5.0))
+        stringify!(vec2(50.0, 50.0))
     };
 }
 
@@ -98,17 +98,9 @@ impl Grid {
     }
 
     fn draw(&self, style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui) {
-        let bg_stroke = style
-            .background_pattern_stroke
-            .unwrap_or_else(|| ui.visuals().widgets.noninteractive.bg_stroke);
+        let bg_stroke = style.bg_pattern_stroke(viewport.scale, ui);
 
-        let stroke = Stroke::new(
-            bg_stroke.width * viewport.scale.max(1.0),
-            bg_stroke.color.gamma_multiply(viewport.scale.min(1.0)),
-        );
-
-        let spacing =
-            ui.spacing().icon_width * vec2(self.spacing.x.max(1.0), self.spacing.y.max(1.0));
+        let spacing = vec2(self.spacing.x.max(1.0), self.spacing.y.max(1.0));
 
         let rot = Rot2::from_angle(self.angle);
         let rot_inv = rot.inverse();
@@ -133,7 +125,7 @@ impl Grid {
             let top = viewport.graph_pos_to_screen(top);
             let bottom = viewport.graph_pos_to_screen(bottom);
 
-            ui.painter().line_segment([top, bottom], stroke);
+            ui.painter().line_segment([top, bottom], bg_stroke);
         }
 
         let min_y = (pattern_bounds.min.y / spacing.y).ceil();
@@ -149,7 +141,7 @@ impl Grid {
             let top = viewport.graph_pos_to_screen(top);
             let bottom = viewport.graph_pos_to_screen(bottom);
 
-            ui.painter().line_segment([top, bottom], stroke);
+            ui.painter().line_segment([top, bottom], bg_stroke);
         }
     }
 }
@@ -219,7 +211,7 @@ impl fmt::Debug for BackgroundPattern {
 
 impl Default for BackgroundPattern {
     fn default() -> Self {
-        Self::Grid(Default::default())
+        BackgroundPattern::new()
     }
 }
 

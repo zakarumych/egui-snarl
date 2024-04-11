@@ -1,8 +1,8 @@
-use egui::{epaint::PathShape, vec2, Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2, Visuals};
+use egui::{epaint::PathShape, vec2, Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2};
 
 use crate::{InPinId, OutPinId};
 
-use super::{SnarlStyle, WireStyle};
+use super::WireStyle;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum AnyPin {
@@ -37,7 +37,7 @@ pub enum PinShape {
     /// Square shape.
     Square,
 
-    /// Star
+    /// Star shape.
     Star,
 
     /// Custom shape.
@@ -48,7 +48,7 @@ pub enum PinShape {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
-pub enum DefaultPinShape {
+pub enum BasicPinShape {
     /// Circle shape.
     Circle,
 
@@ -57,22 +57,26 @@ pub enum DefaultPinShape {
 
     /// Square shape.
     Square,
+
+    /// Star shape.
+    Star,
 }
 
-impl Default for DefaultPinShape {
+impl Default for BasicPinShape {
     #[inline(always)]
     fn default() -> Self {
-        DefaultPinShape::Circle
+        BasicPinShape::Circle
     }
 }
 
-impl From<DefaultPinShape> for PinShape {
+impl From<BasicPinShape> for PinShape {
     #[inline(always)]
-    fn from(shape: DefaultPinShape) -> Self {
+    fn from(shape: BasicPinShape) -> Self {
         match shape {
-            DefaultPinShape::Circle => PinShape::Circle,
-            DefaultPinShape::Triangle => PinShape::Triangle,
-            DefaultPinShape::Square => PinShape::Square,
+            BasicPinShape::Circle => PinShape::Circle,
+            BasicPinShape::Triangle => PinShape::Triangle,
+            BasicPinShape::Square => PinShape::Square,
+            BasicPinShape::Star => PinShape::Star,
         }
     }
 }
@@ -165,6 +169,14 @@ impl PinInfo {
         }
     }
 
+    /// Creates a star pin.
+    pub fn star() -> Self {
+        PinInfo {
+            shape: Some(PinShape::Star),
+            ..Default::default()
+        }
+    }
+
     /// Creates a square pin.
     pub fn custom<F>(f: F) -> Self
     where
@@ -221,17 +233,16 @@ pub fn draw_pin(
 
         PinShape::Star => {
             let points = vec![
-                pos + (vec2(12.0, 2.0) - vec2(12.0, 12.0)) / 22.0 * size,
-                pos + (vec2(15.09, 8.26) - vec2(12.0, 12.0)) / 22.0 * size,
-                pos + (vec2(22.0, 9.27) - vec2(12.0, 12.0)) / 22.0 * size,
-                pos + (vec2(17.0, 14.14) - vec2(12.0, 12.0)) / 22.0 * size,
-                pos + (vec2(18.18, 21.02) - vec2(12.0, 12.0)) / 22.0 * size,
-                pos + (vec2(12.0, 17.77) - vec2(12.0, 12.0)) / 22.0 * size,
-                pos + (vec2(5.82, 21.02) - vec2(12.0, 12.0)) / 22.0 * size,
-                pos + (vec2(7.0, 14.14) - vec2(12.0, 12.0)) / 22.0 * size,
-                pos + (vec2(2.0, 9.27) - vec2(12.0, 12.0)) / 22.0 * size,
-                pos + (vec2(8.91, 8.26) - vec2(12.0, 12.0)) / 22.0 * size,
-                pos + (vec2(12.0, 2.0) - vec2(12.0, 12.0)) / 22.0 * size,
+                pos + size * 0.700000 * vec2(0.0, -1.0),
+                pos + size * 0.267376 * vec2(-0.587785, -0.809017),
+                pos + size * 0.700000 * vec2(-0.951057, -0.309017),
+                pos + size * 0.267376 * vec2(-0.951057, 0.309017),
+                pos + size * 0.700000 * vec2(-0.587785, 0.809017),
+                pos + size * 0.267376 * vec2(0.0, 1.0),
+                pos + size * 0.700000 * vec2(0.587785, 0.809017),
+                pos + size * 0.267376 * vec2(0.951057, 0.309017),
+                pos + size * 0.700000 * vec2(0.951057, -0.309017),
+                pos + size * 0.267376 * vec2(0.587785, -0.809017),
             ];
 
             painter.add(Shape::Path(PathShape {
@@ -249,15 +260,4 @@ pub fn draw_pin(
             stroke,
         ),
     }
-}
-
-pub fn default_pin_fill(style: &SnarlStyle, visuals: &Visuals) -> Color32 {
-    style.pin_fill.unwrap_or(visuals.widgets.active.bg_fill)
-}
-
-pub fn default_pin_stroke(style: &SnarlStyle, visuals: &Visuals) -> Stroke {
-    style.pin_stroke.unwrap_or(Stroke::new(
-        visuals.widgets.active.bg_stroke.width,
-        visuals.widgets.active.bg_stroke.color,
-    ))
 }

@@ -4,9 +4,7 @@ use egui::{
     FontId, Frame, Margin, Rounding, Stroke, Style, Vec2, Visuals,
 };
 
-use crate::Wire;
-
-use super::WireStyle;
+use super::{SelectionStyle, WireStyle};
 
 pub trait Zoom {
     #[inline(always)]
@@ -198,6 +196,7 @@ impl Zoom for Frame {
 }
 
 impl Zoom for WireStyle {
+    #[inline(always)]
     fn zoom(&mut self, zoom: f32) {
         match self {
             WireStyle::Bezier3 | WireStyle::Bezier5 => {}
@@ -205,5 +204,14 @@ impl Zoom for WireStyle {
                 corner_radius.zoom(zoom);
             }
         }
+    }
+}
+
+impl Zoom for SelectionStyle {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        self.margin.zoom(zoom);
+        self.rounding.zoom(zoom);
+        self.stroke.zoom(zoom);
     }
 }

@@ -175,7 +175,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 match &*pin.remotes {
                     [] => {
                         ui.label("None");
-                        PinInfo::circle().with_fill(UNTYPED_COLOR)
+                        PinInfo::star().with_fill(UNTYPED_COLOR)
                     }
                     [remote] => match snarl[remote.node] {
                         DemoNode::Sink => unreachable!("Sink node has no outputs"),
