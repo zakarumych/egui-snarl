@@ -514,7 +514,7 @@ struct PinResponse {
 /// Inner response
 pub struct SnarlResponse {
     /// Event only on background
-    pub event_on_background: egui::Response,
+    pub event_on_background: Option<egui::Response>,
     /// Event on node
     pub event_on_node: Option<(NodeId, egui::Response)>,
     /// Event on wire
@@ -655,7 +655,7 @@ impl<T> Snarl<T> {
                         node_rects.push((node_idx, response.rect));
                     }
                     // Only one node is hovered at the same time. Even if they overlap
-                    if response.response.hovered(){
+                    if response.response.hovered() {
                         node_response = Some((node_idx, response.response));
                     }
                 }
@@ -990,7 +990,7 @@ impl<T> Snarl<T> {
 
             snarl_state.store(ui.ctx());
             SnarlResponse {
-                event_on_background: bg_r,
+                event_on_background: if bg_r.hovered() { Some(bg_r) } else { None },
                 event_on_node: node_response,
                 event_on_wire: wire_response,
             }
