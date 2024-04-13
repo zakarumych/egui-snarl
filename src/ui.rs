@@ -255,6 +255,7 @@ pub struct SnarlStyle {
 
     #[doc(hidden)]
     #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
+    #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     /// Do not access other than with .., here to emulate `#[non_exhaustive(pub)]`
     pub _non_exhaustive: (),
 }
