@@ -2,7 +2,7 @@ use egui::{ahash::HashSet, style::Spacing, Align, Context, Id, Pos2, Rect, Vec2}
 
 use crate::{InPinId, NodeId, OutPinId, Snarl};
 
-use super::SnarlStyle;
+use super::{events, SnarlStyle};
 
 /// Node UI state.
 
@@ -183,13 +183,13 @@ struct SnarlStateData {
 }
 
 impl SnarlState {
-    pub fn load<T>(
+    pub fn load<T, E: events::GraphEventsExtend>(
         cx: &Context,
         id: Id,
         pivot: Pos2,
         viewport: Rect,
         snarl: &Snarl<T>,
-        style: &SnarlStyle,
+        style: &SnarlStyle<E>,
     ) -> Self {
         let Some(mut data) = cx.data_mut(|d| d.get_temp::<SnarlStateData>(id)) else {
             return Self::initial(id, viewport, snarl, style);
@@ -220,7 +220,7 @@ impl SnarlState {
         }
     }
 
-    fn initial<T>(id: Id, viewport: Rect, snarl: &Snarl<T>, style: &SnarlStyle) -> Self {
+    fn initial<T, E: events::GraphEventsExtend>(id: Id, viewport: Rect, snarl: &Snarl<T>, style: &SnarlStyle<E>) -> Self {
         let mut bb = Rect::NOTHING;
 
         for (_, node) in snarl.nodes.iter() {

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use eframe::{App, CreationContext};
 use egui::{Color32, Ui};
 use egui_snarl::{
-    ui::{AnyPins, PinInfo, SnarlStyle, SnarlViewer, WireStyle, SnarlResponse},
+    ui::{events, AnyPins, PinInfo, SnarlResponse, SnarlStyle, SnarlViewer, WireStyle},
     InPin, InPinId, NodeId, OutPin, OutPinId, Snarl
 };
 
@@ -935,7 +935,7 @@ impl Expr {
 
 pub struct DemoApp {
     snarl: Snarl<DemoNode>,
-    style: SnarlStyle,
+    style: SnarlStyle<events::DefaultGraphEvents>,
     bg_r: Option<SnarlResponse>
 }
 
@@ -955,12 +955,12 @@ impl DemoApp {
         // let snarl = Snarl::new();
 
         let style = match cx.storage {
-            None => SnarlStyle::new(),
+            None => SnarlStyle::default(),
             Some(storage) => {
                 let style = storage
                     .get_string("style")
                     .and_then(|style| serde_json::from_str(&style).ok())
-                    .unwrap_or_else(SnarlStyle::new);
+                    .unwrap_or_else(SnarlStyle::default);
 
                 style
             }
@@ -1008,7 +1008,7 @@ impl App for DemoApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             self.bg_r = Some(self.snarl
-                .show(&mut DemoViewer, &self.style, egui::Id::new("snarl"), ui));
+                .show(&mut DemoViewer, &mut self.style, egui::Id::new("snarl"), ui));
         });
     }
 

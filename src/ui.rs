@@ -4,13 +4,14 @@ use std::{collections::HashMap, hash::Hash};
 
 use egui::{
     collapsing_header::paint_default_icon, epaint::Shadow, pos2, vec2, Align, Color32, Frame, Id,
-    Layout, Margin, Modifiers, PointerButton, Pos2, Rect, Rounding, Sense, Shape, Stroke, Ui, Vec2,
+    InputState, Layout, Margin, Modifiers, PointerButton, Pos2, Rect, Rounding, Sense, Shape,
+    Stroke, Ui, Vec2,
 };
 
 use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl};
 
-pub mod events;
 mod background_pattern;
+pub mod events;
 mod pin;
 mod state;
 mod viewer;
@@ -18,6 +19,7 @@ mod wire;
 mod zoom;
 
 use self::{
+    events::GraphEventsExtend,
     pin::{draw_pin, AnyPin},
     state::{NewWires, NodeState, SnarlState},
     wire::{draw_wire, hit_wire, pick_wire_style},
@@ -25,7 +27,7 @@ use self::{
 };
 
 pub use self::{
-    background_pattern::{BackgroundPattern, CustomBackground, Grid, Viewport},
+    background_pattern::{BackgroundPattern, Grid, Viewport},
     pin::{AnyPins, BasicPinShape, CustomPinShape, PinInfo, PinShape},
     viewer::SnarlViewer,
     wire::{WireLayer, WireStyle},
@@ -53,7 +55,7 @@ pub struct SelectionStyle {
 #[derive(Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
-pub struct SnarlStyle {
+pub struct SnarlStyle<T: GraphEventsExtend> {
     /// Size of pins.
     #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
     #[cfg_attr(
@@ -158,9 +160,9 @@ pub struct SnarlStyle {
     /// Defaults to [`BackgroundPattern::Grid`].
     #[cfg_attr(
         feature = "serde",
-        serde(skip_serializing_if = "Option::is_none", default)
+        serde(skip_serializing_if = "Option::is_none", default, skip_deserializing)
     )]
-    pub _bg_pattern: Option<BackgroundPattern>,
+    pub _bg_pattern: Option<BackgroundPattern<T>>,
 
     /// Stroke for background pattern.
     /// Defaults to `ui.visuals().widgets.noninteractive.bg_stroke`.
@@ -260,12 +262,12 @@ pub struct SnarlStyle {
     /// Do not access other than with .., here to emulate `#[non_exhaustive(pub)]`
     pub _non_exhaustive: (),
 
-    #[cfg_attr(feature="serde", serde(skip))]
-    /// User events. Do not save 
-    pub _graph_events: Box<dyn events::GraphEventsDebug>
+    #[cfg_attr(feature = "serde", serde(skip_deserializing))]
+    /// User events. Do not save
+    pub _graph_events: T,
 }
 
-impl SnarlStyle {
+impl<T: events::GraphEventsExtend> SnarlStyle<T> {
     fn pin_size(&self, scale: f32, ui: &Ui) -> f32 {
         self._pin_size
             .zoomed(scale)
@@ -330,7 +332,7 @@ impl SnarlStyle {
         self._bg_frame.unwrap_or(Frame::canvas(ui.style()))
     }
 
-    fn draw_bg_pattern(&self, style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui) {
+    fn draw_bg_pattern(&self, style: &SnarlStyle<T>, viewport: &Viewport, ui: &mut Ui) {
         match &self._bg_pattern {
             None => BackgroundPattern::new().draw(style, viewport, ui),
             Some(pattern) => pattern.draw(style, viewport, ui),
@@ -447,10 +449,10 @@ mod serde_frame_option {
     }
 }
 
-impl SnarlStyle {
+impl<T: events::GraphEventsExtend> SnarlStyle<T> {
     /// Creates new [`SnarlStyle`] filled with default values.
     #[must_use]
-    pub const fn new() -> Self {
+    pub const fn new(graph_events: T) -> Self {
         SnarlStyle {
             _pin_size: None,
             _pin_fill: None,
@@ -481,14 +483,15 @@ impl SnarlStyle {
             _select_style: None,
 
             _non_exhaustive: (),
+            _graph_events: graph_events,
         }
     }
 }
 
-impl Default for SnarlStyle {
+impl Default for SnarlStyle<events::DefaultGraphEvents> {
     #[inline]
     fn default() -> Self {
-        Self::new()
+        Self::new(events::DefaultGraphEvents::default())
     }
 }
 
@@ -528,7 +531,12 @@ pub struct SnarlResponse {
 }
 
 impl<T> Snarl<T> {
-    fn draw_background(style: &SnarlStyle, snarl_state: &SnarlState, viewport: &Rect, ui: &mut Ui) {
+    fn draw_background<E: events::GraphEventsExtend>(
+        style: &SnarlStyle<E>,
+        snarl_state: &SnarlState,
+        viewport: &Rect,
+        ui: &mut Ui,
+    ) {
         let viewport = Viewport {
             rect: *viewport,
             scale: snarl_state.scale(),
@@ -540,10 +548,10 @@ impl<T> Snarl<T> {
 
     /// Render [`Snarl`] using given viewer and style into the [`Ui`].
 
-    pub fn show<V>(
+    pub fn show<V, E: events::GraphEventsExtend>(
         &mut self,
         viewer: &mut V,
-        style: &SnarlStyle,
+        style: &mut SnarlStyle<E>,
         id_source: impl Hash,
         ui: &mut Ui,
     ) -> SnarlResponse
@@ -565,6 +573,8 @@ impl<T> Snarl<T> {
             // primary_pressed: i.pointer.primary_pressed(),
             secondary_pressed: i.pointer.secondary_pressed(),
         });
+
+        let input_state = ui.ctx().input(|is| is.clone());
 
         let bg_response = bg_frame.show(ui, |ui| {
             let mut node_moved = None;
@@ -617,7 +627,7 @@ impl<T> Snarl<T> {
             let mut pin_hovered = None;
 
             let draw_order = snarl_state.update_draw_order(self);
-            let mut drag_released = false;
+            let mut drag_released = false; //TODO!: Remove drag to user event
 
             let mut centers_sum = vec2(0.0, 0.0);
             let mut centers_weight = 0;
@@ -638,7 +648,7 @@ impl<T> Snarl<T> {
                     &node_frame,
                     &header_frame,
                     &mut input_info,
-                    &input,
+                    &input_state,
                     &mut output_info,
                 );
 
@@ -678,7 +688,7 @@ impl<T> Snarl<T> {
                 let from_r = &output_info[&wire.out_pin];
                 let to_r = &input_info[&wire.in_pin];
 
-                // 
+                //
                 if !wire_hit && !snarl_state.has_new_wires() && bg_r.hovered() && !bg_r.dragged() {
                     // Try to find hovered wire
                     // If not draggin new wire
@@ -705,7 +715,8 @@ impl<T> Snarl<T> {
                             hovered_wire = Some(wire);
 
                             //Remove hovered wire by second click
-                            hovered_wire_disconnect |= bg_r.clicked_by(PointerButton::Secondary);
+                            hovered_wire_disconnect |=
+                                style._graph_events.remove_hovered_wire(&bg_r, &input_state);
 
                             wire_response = Some(((wire.out_pin, wire.in_pin), bg_r.clone()));
                             // Background is not hovered then.
@@ -748,13 +759,15 @@ impl<T> Snarl<T> {
                 }
             }
 
-            if bg_r.drag_started_by(PointerButton::Primary) && input.modifiers.shift {
+            // Start select area
+            if style._graph_events.start_select_area(&bg_r, &input_state) {
                 let screen_pos = input.interact_pos.unwrap_or(viewport.center());
                 let graph_pos = snarl_state.screen_pos_to_graph(screen_pos, viewport);
                 snarl_state.start_rect_selection(graph_pos);
             }
 
-            if bg_r.dragged_by(PointerButton::Primary) {
+            // Move area
+            if style._graph_events.move_area(&bg_r, &input_state) {
                 if snarl_state.is_rect_selection() && input.hover_pos.is_some() {
                     let screen_pos = input.hover_pos.unwrap();
                     let graph_pos = snarl_state.screen_pos_to_graph(screen_pos, viewport);
@@ -764,7 +777,8 @@ impl<T> Snarl<T> {
                 }
             }
 
-            if bg_r.drag_stopped_by(PointerButton::Primary) {
+            // Stop select area
+            if style._graph_events.start_select_area(&bg_r, &input_state) {
                 if let Some(select_rect) = snarl_state.rect_selection() {
                     let select_nodes = node_rects.into_iter().filter_map(|(id, rect)| {
                         let select = match style.select_rect_contained() {
@@ -804,20 +818,22 @@ impl<T> Snarl<T> {
             //
             // This uses `button_down` directly, instead of `clicked_by` to improve
             // responsiveness of the cancel action.
+            // Cancel new wire
             if snarl_state.has_new_wires()
-                && ui.input(|x| x.pointer.button_down(PointerButton::Secondary))
+                && style._graph_events.cancel_new_wire(&bg_r, &input_state)
             {
                 let _ = snarl_state.take_wires();
                 bg_r.clicked = false;
             }
 
             //Do centering
-            if style.centering() && bg_r.double_clicked() {
+            if style.centering() && style._graph_events.do_centering(&bg_r, &input_state) {
                 centers_sum /= centers_weight as f32;
                 snarl_state.set_offset(centers_sum * snarl_state.scale());
             }
 
-            if input.modifiers.command && bg_r.clicked_by(PointerButton::Primary) {
+            //Deselect all nodes
+            if style._graph_events.deselect_all_nodes(&bg_r, &input_state) {
                 snarl_state.deselect_all_nodes();
             }
 
@@ -1010,18 +1026,18 @@ impl<T> Snarl<T> {
     #[inline]
     #[allow(clippy::too_many_lines)]
     #[allow(clippy::too_many_arguments)]
-    fn draw_node<V>(
+    fn draw_node<V, E: events::GraphEventsExtend>(
         &mut self,
         ui: &mut Ui,
         node: NodeId,
         viewer: &mut V,
         snarl_state: &mut SnarlState,
-        style: &SnarlStyle,
+        style: &mut SnarlStyle<E>,
         snarl_id: Id,
         node_frame: &Frame,
         header_frame: &Frame,
         input_positions: &mut HashMap<InPinId, PinResponse>,
-        input: &Input,
+        input: &InputState,
         output_positions: &mut HashMap<OutPinId, PinResponse>,
     ) -> Option<DrawNodeResponse>
     where
@@ -1052,7 +1068,7 @@ impl<T> Snarl<T> {
 
         let mut node_to_top = None;
         let mut node_moved = None;
-        let mut drag_released = false;
+        let mut drag_released = false; //TODO!: Remove to user event
         let mut pin_hovered = None;
 
         // Rect for node + frame margin.
@@ -1086,22 +1102,21 @@ impl<T> Snarl<T> {
         // Interact with node frame.
         let r = ui.interact(node_frame_rect, node_id, Sense::click_and_drag());
 
-        if !input.modifiers.shift
-            && !input.modifiers.command
-            && r.dragged_by(PointerButton::Primary)
-        {
+        // Node move
+        if style._graph_events.node_move(&r, input) {
             node_moved = Some((node, snarl_state.screen_vec_to_graph(r.drag_delta())));
         }
 
-        if r.clicked_by(PointerButton::Primary) || r.dragged_by(PointerButton::Primary) {
-            if input.modifiers.shift {
-                snarl_state.select_one_node(input.modifiers.command, node);
-            } else if input.modifiers.command {
-                snarl_state.deselect_one_node(node);
-            }
+        //Select one node
+        if style._graph_events.select_one_node(&r, input) {
+            snarl_state.select_one_node(input.modifiers.command, node);
+        } else if style._graph_events.deselect_one_node(&r, input) {
+            //Deselect one node
+            snarl_state.deselect_one_node(node);
         }
 
-        if r.clicked() || r.dragged() {
+        // Node to top
+        if style._graph_events.not_to_top(&r, input) {
             node_to_top = Some(node);
         }
 
@@ -1152,6 +1167,7 @@ impl<T> Snarl<T> {
             header_frame.show(header_ui, |ui: &mut Ui| {
                 ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
                     if style.collapsible() {
+                        //This is not need to bee customization - ???
                         let (_, r) = ui.allocate_exact_size(
                             vec2(ui.spacing().icon_width, ui.spacing().icon_width),
                             Sense::click(),
@@ -1232,6 +1248,7 @@ impl<T> Snarl<T> {
             for in_pin in &inputs {
                 // Show input pin.
                 inputs_ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
+                    let input = ui.input(|i| i.clone());
                     // Allocate space for pin shape.
                     let (pin_id, _) = ui.allocate_space(vec2(pin_size * 1.5, pin_size * 1.5));
 
@@ -1260,7 +1277,8 @@ impl<T> Snarl<T> {
                         Sense::click_and_drag(),
                     );
 
-                    if r.clicked_by(PointerButton::Secondary) {
+                    // Remove or drop new wire
+                    if style._graph_events.remove_wire(&r, &input) {
                         if snarl_state.has_new_wires() {
                             snarl_state.remove_new_wire_in(in_pin.id);
                         } else {
@@ -1271,7 +1289,9 @@ impl<T> Snarl<T> {
                             }
                         }
                     }
-                    if r.drag_started_by(PointerButton::Primary) {
+
+                    // Start drag wire
+                    if style._graph_events.start_drag_wire(&r, &input) {
                         if input.modifiers.command {
                             snarl_state.start_new_wires_out(&in_pin.remotes);
                             if !input.modifiers.shift {
@@ -1285,17 +1305,18 @@ impl<T> Snarl<T> {
                             snarl_state.start_new_wire_in(in_pin.id);
                         }
                     }
+                    // Stop drag wire
                     if r.drag_stopped() {
                         drag_released = true;
                     }
 
                     let mut pin_size = pin_size;
 
-                    match input.hover_pos {
+                    match input.pointer.hover_pos() {
                         Some(hover_pos) if r.rect.contains(hover_pos) => {
                             if input.modifiers.shift {
                                 snarl_state.add_new_wire_in(in_pin.id);
-                            } else if input.secondary_pressed {
+                            } else if input.pointer.secondary_clicked() {
                                 snarl_state.remove_new_wire_in(in_pin.id);
                             }
                             pin_hovered = Some(AnyPin::In(in_pin.id));
@@ -1355,6 +1376,8 @@ impl<T> Snarl<T> {
                 outputs_ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
                     // Allocate space for pin shape.
 
+                    let input = ui.input(|i| i.clone());
+
                     let (pin_id, _) = ui.allocate_space(vec2(pin_size * 1.5, pin_size * 1.5));
 
                     let y0 = ui.cursor().min.y;
@@ -1380,8 +1403,8 @@ impl<T> Snarl<T> {
                         pin_id,
                         Sense::click_and_drag(),
                     );
-
-                    if r.clicked_by(PointerButton::Secondary) {
+                    // Remove or drop new wire
+                    if style._graph_events.remove_wire(&r, &input) {
                         if snarl_state.has_new_wires() {
                             snarl_state.remove_new_wire_out(out_pin.id);
                         } else {
@@ -1392,7 +1415,9 @@ impl<T> Snarl<T> {
                             }
                         }
                     }
-                    if r.drag_started_by(PointerButton::Primary) {
+
+                    // Start drag wire
+                    if style._graph_events.start_drag_wire(&r, &input) {
                         if input.modifiers.command {
                             snarl_state.start_new_wires_in(&out_pin.remotes);
 
@@ -1407,16 +1432,18 @@ impl<T> Snarl<T> {
                             snarl_state.start_new_wire_out(out_pin.id);
                         }
                     }
-                    if r.drag_stopped() {
+
+                    // Stop drag wire
+                    if style._graph_events.stop_drag_wire(&r, &input) {
                         drag_released = true;
                     }
 
                     let mut pin_size = pin_size;
-                    match input.hover_pos {
+                    match input.pointer.hover_pos() {
                         Some(hover_pos) if r.rect.contains(hover_pos) => {
                             if input.modifiers.shift {
                                 snarl_state.add_new_wire_out(out_pin.id);
-                            } else if input.secondary_pressed {
+                            } else if input.pointer.secondary_pressed() {
                                 snarl_state.remove_new_wire_out(out_pin.id);
                             }
                             pin_hovered = Some(AnyPin::Out(out_pin.id));

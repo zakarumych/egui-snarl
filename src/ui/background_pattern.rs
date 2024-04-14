@@ -2,7 +2,7 @@ use std::fmt;
 
 use egui::{emath::Rot2, vec2, Pos2, Rect, Ui, Vec2};
 
-use super::SnarlStyle;
+use super::{events, SnarlStyle};
 
 /// Viewport is a rectangle in graph space that is visible on screen.
 pub struct Viewport {
@@ -97,7 +97,12 @@ impl Grid {
         Self { spacing, angle }
     }
 
-    fn draw(&self, style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui) {
+    fn draw<E: events::GraphEventsExtend>(
+        &self,
+        style: &SnarlStyle<E>,
+        viewport: &Viewport,
+        ui: &mut Ui,
+    ) {
         let bg_stroke = style.bg_pattern_stroke(viewport.scale, ui);
 
         let spacing = vec2(self.spacing.x.max(1.0), self.spacing.y.max(1.0));
@@ -146,33 +151,59 @@ impl Grid {
     }
 }
 
-tiny_fn::tiny_fn! {
-    /// Custom background pattern function with signature
-    /// `Fn(style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui)`
-    pub struct CustomBackground = Fn(style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui);
+
+// tiny_fn can`t catch:
+// `pub struct CustomBackground<{E: events::GraphEventsExtend}>` or 
+// `pub struct CustomBackground<E: events::GraphEventsExtend>`
+// tiny_fn::tiny_fn! {
+//     /// Custom background pattern function with signature
+//     /// `Fn(style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui)`
+//     pub struct CustomBackground<{E: events::GraphEventsExtend}> = Fn(style: &SnarlStyle<E>, viewport: &Viewport, ui: &mut Ui);
+// }
+
+// impl<const INLINE_SIZE: usize> Default for CustomBackground<'_, INLINE_SIZE> {
+//     fn default() -> Self {
+//         Self::new(|_, _, _| {})
+//     }
+// }
+
+// #[cfg(feature = "egui-probe")]
+// impl<const INLINE_SIZE: usize> egui_probe::EguiProbe for CustomBackground<'_, INLINE_SIZE> {
+//     fn probe(
+//         &mut self,
+//         ui: &mut egui_probe::egui::Ui,
+//         _style: &egui_probe::Style,
+//     ) -> egui_probe::egui::Response {
+//         ui.weak("Custom")
+//     }
+// }
+
+///
+struct CustomBackground<E: events::GraphEventsExtend> {
+    func: fn(style: &SnarlStyle<E>, viewport: &Viewport, ui: &mut Ui),
+}  
+
+fn dump<E:events::GraphEventsExtend>(style: &SnarlStyle<E>, viewport: &Viewport, ui: &mut Ui){
+
 }
 
-impl<const INLINE_SIZE: usize> Default for CustomBackground<'_, INLINE_SIZE> {
+impl<E: events::GraphEventsExtend> Default for CustomBackground<E>{
     fn default() -> Self {
-        Self::new(|_, _, _| {})
+        Self { func: dump }
     }
 }
 
-#[cfg(feature = "egui-probe")]
-impl<const INLINE_SIZE: usize> egui_probe::EguiProbe for CustomBackground<'_, INLINE_SIZE> {
-    fn probe(
-        &mut self,
-        ui: &mut egui_probe::egui::Ui,
-        _style: &egui_probe::Style,
-    ) -> egui_probe::egui::Response {
-        ui.weak("Custom")
+#[cfg(feature="egui-probe")]
+impl<E: events::GraphEventsExtend> egui_probe::EguiProbe for CustomBackground<E>{
+    fn probe(&mut self, ui: &mut egui::Ui, style: &egui_probe::Style) -> egui::Response {
+        ui.weak("Custom background function")
     }
 }
 
 /// Background pattern show beneath nodes and wires.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
-pub enum BackgroundPattern {
+pub enum BackgroundPattern<E: events::GraphEventsExtend> {
     /// No pattern.
     NoPattern,
 
@@ -184,10 +215,10 @@ pub enum BackgroundPattern {
     /// Contains function with signature
     /// `Fn(style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui)`
     #[cfg_attr(feature = "egui-probe", egui_probe(transparent))]
-    Custom(#[cfg_attr(feature = "serde", serde(skip))] CustomBackground<'static>),
+    Custom(#[cfg_attr(feature = "serde", serde(skip))] CustomBackground<E>),
 }
 
-impl PartialEq for BackgroundPattern {
+impl<E: events::GraphEventsExtend> PartialEq for BackgroundPattern<E> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (BackgroundPattern::Grid(l), BackgroundPattern::Grid(r)) => *l == *r,
@@ -196,7 +227,7 @@ impl PartialEq for BackgroundPattern {
     }
 }
 
-impl fmt::Debug for BackgroundPattern {
+impl<E: events::GraphEventsExtend> fmt::Debug for BackgroundPattern<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BackgroundPattern::Grid(grid) => f
@@ -209,13 +240,13 @@ impl fmt::Debug for BackgroundPattern {
     }
 }
 
-impl Default for BackgroundPattern {
+impl<E: events::GraphEventsExtend> Default for BackgroundPattern<E> {
     fn default() -> Self {
         BackgroundPattern::new()
     }
 }
 
-impl BackgroundPattern {
+impl<E: events::GraphEventsExtend> BackgroundPattern<E> {
     /// Create new background pattern with default values.
     ///
     /// Default patter is `Grid` with spacing - `
@@ -233,18 +264,18 @@ impl BackgroundPattern {
     }
 
     /// Create new custom background pattern.
-    pub fn custom<F>(f: F) -> Self
-    where
-        F: Fn(&SnarlStyle, &Viewport, &mut Ui) + 'static,
+    pub fn custom(f: fn(&SnarlStyle<E>, &Viewport, &mut Ui)) -> Self
     {
-        Self::Custom(CustomBackground::new(f))
+        Self::Custom(CustomBackground{
+            func: f
+        })
     }
 
     /// Draws background pattern.
-    pub(super) fn draw(&self, style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui) {
+    pub(super) fn draw(&self, style: &SnarlStyle<E>, viewport: &Viewport, ui: &mut Ui) {
         match self {
             BackgroundPattern::Grid(g) => g.draw(style, viewport, ui),
-            BackgroundPattern::Custom(c) => c.call(style, viewport, ui),
+            BackgroundPattern::Custom(c) => (c.func)(style, viewport, ui),
             BackgroundPattern::NoPattern => {}
         }
     }
