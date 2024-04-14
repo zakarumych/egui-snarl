@@ -316,7 +316,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                                 .map(|idx| {
                                     snarl.in_pin(InPinId {
                                         node: pin.id.node,
-                                        input: idx,
+                                        input: idx + 1,
                                     })
                                 })
                                 .collect::<Vec<_>>();
