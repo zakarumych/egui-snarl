@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
     paths:
       - "demo/**"
+      - "example/**"
       - "src/**"
       - "Cargo.toml"
 
