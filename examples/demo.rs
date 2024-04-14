@@ -935,8 +935,7 @@ impl Expr {
 
 pub struct DemoApp {
     snarl: Snarl<DemoNode>,
-    style: SnarlStyle<events::ClickGraphEvents>,
-    bg_r: Option<SnarlResponse>
+    style: SnarlStyle,
 }
 
 impl DemoApp {
@@ -1009,8 +1008,8 @@ impl App for DemoApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.bg_r = Some(self.snarl
-                .show(&mut DemoViewer, &mut self.style, egui::Id::new("snarl"), ui));
+            self.snarl
+                .show(&mut DemoViewer, &self.style, egui::Id::new("snarl"), ui);
         });
     }
 

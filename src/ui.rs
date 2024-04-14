@@ -548,13 +548,7 @@ impl<T> Snarl<T> {
 
     /// Render [`Snarl`] using given viewer and style into the [`Ui`].
 
-    pub fn show<V, E: events::GraphEventsExtend>(
-        &mut self,
-        viewer: &mut V,
-        style: &mut SnarlStyle<E>,
-        id_source: impl Hash,
-        ui: &mut Ui,
-    ) -> SnarlResponse
+    pub fn show<V>(&mut self, viewer: &mut V, style: &SnarlStyle, id_source: impl Hash, ui: &mut Ui)
     where
         V: SnarlViewer<T>,
     {
@@ -574,9 +568,7 @@ impl<T> Snarl<T> {
             secondary_pressed: i.pointer.secondary_pressed(),
         });
 
-        let input_state = ui.ctx().input(|is| is.clone());
-
-        let bg_response = bg_frame.show(ui, |ui| {
+        bg_frame.show(ui, |ui| {
             let mut node_moved = None;
             let mut node_to_top = None;
 
