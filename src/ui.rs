@@ -1292,6 +1292,7 @@ impl<T> Snarl<T> {
 
                     // Start drag wire
                     if style._graph_events.start_drag_wire(&r, &input) {
+                        todo!("Rewrite to grap event usage");
                         if input.modifiers.command {
                             snarl_state.start_new_wires_out(&in_pin.remotes);
                             if !input.modifiers.shift {

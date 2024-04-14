@@ -132,3 +132,31 @@ pub trait GraphEventsExtend: GraphEvents  + Serialize + EguiProbe {}
 #[cfg(all(not(feature = "serde"), not(feature = "egui-probe")))]
 /// Trait GraphEvents with feature 
 pub trait GraphEventsExtend : GraphEvents{}
+
+
+
+/// Click and move wire
+#[derive(Debug, PartialEq, Default)]
+#[cfg_attr(feature="serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
+pub struct ClickGraphEvents{
+    drag_wire: bool
+}
+
+impl GraphEvents for ClickGraphEvents{
+    fn start_drag_wire(&mut self, response: &Response, input_state: &InputState) -> bool {
+        if !self.drag_wire && response.clicked_by(PointerButton::Primary){
+            self.drag_wire = true;
+        }
+        self.drag_wire
+    }
+
+    fn stop_drag_wire(&mut self, response: &Response, input_state: &InputState) -> bool {
+        if self.drag_wire && response.clicked_by(PointerButton::Primary){
+            self.drag_wire = false;
+        } 
+        !self.drag_wire
+    }
+}
+
+impl GraphEventsExtend for ClickGraphEvents{}

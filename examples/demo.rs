@@ -935,7 +935,7 @@ impl Expr {
 
 pub struct DemoApp {
     snarl: Snarl<DemoNode>,
-    style: SnarlStyle<events::DefaultGraphEvents>,
+    style: SnarlStyle<events::ClickGraphEvents>,
     bg_r: Option<SnarlResponse>
 }
 
@@ -955,12 +955,14 @@ impl DemoApp {
         // let snarl = Snarl::new();
 
         let style = match cx.storage {
-            None => SnarlStyle::default(),
+            None => SnarlStyle::new(events::ClickGraphEvents::default()),
             Some(storage) => {
                 let style = storage
                     .get_string("style")
                     .and_then(|style| serde_json::from_str(&style).ok())
-                    .unwrap_or_else(SnarlStyle::default);
+                    .unwrap_or_else(||{
+                        SnarlStyle::new(events::ClickGraphEvents::default())
+                    });
 
                 style
             }
