@@ -428,6 +428,11 @@ impl<T> Snarl<T> {
         }
     }
 
+    /// Iterates over wires.
+    pub fn wires(&self) -> impl Iterator<Item = (OutPinId, InPinId)> + '_ {
+        self.wires.iter().map(|wire| (wire.out_pin, wire.in_pin))
+    }
+
     /// Returns input pin of the node.
     #[must_use]
     pub fn in_pin(&self, pin: InPinId) -> InPin {
