@@ -372,6 +372,19 @@ impl<T> Snarl<T> {
         }
     }
 
+    /// Returns reference to the node and its position.
+    pub fn get_node_pos(&self, idx: NodeId) -> Option<(&T, &Pos2)> {
+        self.nodes.get(idx.0).map(|node| (&node.value, &node.pos))
+    }
+
+    /// Returns mutable reference to the node and its position.
+    pub fn get_node_pos_mut(&mut self, idx: NodeId) -> Option<(&mut T, &mut Pos2)> {
+        match self.nodes.get_mut(idx.0) {
+            Some(node) => Some((&mut node.value, &mut node.pos)),
+            None => None,
+        }
+    }
+
     /// Iterates over shared references to each node.
     pub fn nodes(&self) -> NodesIter<'_, T> {
         NodesIter {
