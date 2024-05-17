@@ -1044,12 +1044,7 @@ impl<T> Snarl<T> {
         let mut drag_released = false;
         let mut pin_hovered = None;
 
-        let mut node_frame = node_frame;
-        // Rect for node + frame margin.
-        // !!!: Pre-emptive border styling
-        if self.selected_nodes.contains(&node) {
-            node_frame = highlighted_node_frame;
-        }
+        let node_frame = node_frame;
 
         let node_frame_rect = node_frame.total_margin().expand_rect(node_rect);
 
@@ -1100,10 +1095,9 @@ impl<T> Snarl<T> {
         if r.clicked() || r.dragged() {
             node_to_top = Some(node);
             self.selected_nodes.insert(node);
-            response.node_to_top = Some(node);
 
             // Que the event handler
-            if let Some(handler) = self.event_handler {
+            if let Some(_handler) = self.event_handler {
                 // let handled_val = self.get_node(node).unwrap();
                 // let res = handler(SnarlEvent::NodeClick());
                 // res.expect("Undecided to how to handle event system error");
@@ -1115,12 +1109,6 @@ impl<T> Snarl<T> {
                 viewer.show_node_menu(node, &inputs, &outputs, ui, snarl_state.scale(), self);
             });
         }
-
-        // =================================================================
-
-        r.context_menu(|ui| {
-            viewer.node_menu(node, &inputs, &outputs, ui, snarl_state.scale(), self);
-        });
 
         if !self.nodes.contains(node.0) {
             node_state.clear(ui.ctx());

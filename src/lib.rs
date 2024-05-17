@@ -700,10 +700,6 @@ impl<'a, T> Iterator for NodesPosIdsIter<'a, T> {
         Some((NodeId(idx), node.pos, &node.value))
     }
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.nodes.size_hint()
-    }
-
     fn nth(&mut self, n: usize) -> Option<(NodeId, Pos2, &'a T)> {
         let (idx, node) = self.nodes.nth(n)?;
         Some((NodeId(idx), node.pos, &node.value))
@@ -718,10 +714,6 @@ pub struct NodesPosIdsIterMut<'a, T> {
 
 impl<'a, T> Iterator for NodesPosIdsIterMut<'a, T> {
     type Item = (NodeId, Pos2, &'a mut T);
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.nodes.size_hint()
-    }
 
     fn next(&mut self) -> Option<(NodeId, Pos2, &'a mut T)> {
         let (idx, node) = self.nodes.next()?;
