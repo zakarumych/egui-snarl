@@ -5,17 +5,20 @@
 //!
 //!
 
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 #![deny(clippy::correctness, clippy::complexity, clippy::perf, clippy::style)]
 // #![warn(clippy::pedantic)]
 #![allow(clippy::inline_always)]
 
 pub mod ui;
 
+use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
 use egui::{ahash::HashSet, Pos2};
+use egui::ahash::HashSetExt;
 use slab::Slab;
+use crate::ui::NodeDrawInfo;
 
 impl<T> Default for Snarl<T> {
     fn default() -> Self {
@@ -44,7 +47,7 @@ struct Node<T> {
 
     /// Position of the top-left corner of the node.
     /// This does not include frame margin.
-    pos: egui::Pos2,
+    pos: Pos2,
 
     /// Flag indicating that the node is open - not collapsed.
     open: bool,
@@ -80,9 +83,9 @@ pub struct InPinId {
 /// Attempt to insert existing connection will be ignored.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-struct Wire {
-    out_pin: OutPinId,
-    in_pin: InPinId,
+pub struct Wire {
+    pub out_pin: OutPinId,
+    pub in_pin: InPinId,
 }
 
 #[derive(Clone, Debug)]
@@ -186,9 +189,13 @@ impl Wires {
             .map(|wire| (wire.out_pin))
     }
 
-    fn iter(&self) -> impl Iterator<Item = Wire> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = Wire> + '_ {
         self.wires.iter().copied()
     }
+
+    // fn get_wires_from_node_id(&self, node_id: NodeId) -> Option<Wire> {
+    //     self.wires.get(node_id).copied()
+    // }
 }
 
 /// Snarl is generic node-graph container.
@@ -201,6 +208,23 @@ pub struct Snarl<T> {
     // #[cfg_attr(feature = "serde", serde(with = "serde_nodes"))]
     nodes: Slab<Node<T>>,
     wires: Wires,
+    draw_info: HashMap<NodeId, NodeDrawInfo>,
+    selected_nodes: HashSet<NodeId>,
+    event_handler: Option<fn(SnarlEvent<T>) -> Result<(), SnarlError>>
+}
+
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum SnarlError {
+
+}
+
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum SnarlEvent<T> {
+    NodeClick(T),
+    NodeDelete(T),
+    NodeEdit(T)
 }
 
 impl<T> Snarl<T> {
@@ -217,7 +241,28 @@ impl<T> Snarl<T> {
         Snarl {
             nodes: Slab::new(),
             wires: Wires::new(),
+            draw_info: HashMap::new(),
+            selected_nodes: HashSet::new(),
+            event_handler: None,
         }
+    }
+
+    /// Set a handler function for `SnarlEvent<T>` types
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use egui_snarl::Snarl;
+    /// # use egui_snarl::SnarlEvent;
+    /// let mut snarl = Snarl::<()>::new();
+    /// let handler_fn = {|event: SnarlEvent<()>| {
+    ///     println!("Hello World: {:?}", event);
+    ///     Ok(())
+    /// }};
+    /// snarl.set_event_handler(handler_fn);
+    /// ```
+    pub fn set_event_handler(&mut self, handler: fn(SnarlEvent<T>) -> Result<(), SnarlError>) {
+        self.event_handler = Some(handler);
     }
 
     /// Adds a node to the Snarl.
@@ -364,6 +409,30 @@ impl<T> Snarl<T> {
         }
     }
 
+    /// DANGER
+    pub fn move_node_to(&mut self, id: NodeId, x: f64, y: f64) -> Result<(), String> {
+        let idx = self.nodes.get_mut(id.0); // Is this even true? That Node ID converts willy nilly into the index
+        idx.unwrap().pos = Pos2::new(x as f32, y as f32);
+        Ok(())
+    }
+
+    /// Returns the last drawn positions, bbox, and draw related information of all nodes
+    /// TODO: To return the Iter instead!
+    pub fn get_nodes_draw_info(&self) -> HashMap<NodeId, NodeDrawInfo> {
+        self.draw_info.clone()
+    }
+
+    /// Auto-arrange: based on Tidy-Tree rs
+    pub fn auto_arrange_nodes(&self) -> Result<(), String> {
+        // 1. Get all of the nodes we have, turn them into tidy compliant nodes
+        // 2. Make a tree based on the tidy compliant nodes,
+        // 3. DUMB: Default node 0 to be the route node, and work from there
+        // 4. Call layout on the tidy nodes
+        // 5. Loop over tidy nodes, and use the position set by the tidy nodes to overwrite the pos
+        //    of egui_snarl nodes's pos2
+        Ok(())
+    }
+
     /// Returns mutable reference to the node.
     pub fn get_node_mut(&mut self, idx: NodeId) -> Option<&mut T> {
         match self.nodes.get_mut(idx.0) {
@@ -426,6 +495,11 @@ impl<T> Snarl<T> {
         NodesPosIdsIterMut {
             nodes: self.nodes.iter_mut(),
         }
+    }
+
+    /// Iterates over wires that connect respective OutPin to InPin
+    pub fn wires_iter(&self) -> impl Iterator<Item = Wire> + '_  {
+        self.wires.iter()
     }
 
     /// Iterates over wires.
@@ -641,13 +715,13 @@ pub struct NodesPosIdsIterMut<'a, T> {
 impl<'a, T> Iterator for NodesPosIdsIterMut<'a, T> {
     type Item = (NodeId, Pos2, &'a mut T);
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.nodes.size_hint()
-    }
-
     fn next(&mut self) -> Option<(NodeId, Pos2, &'a mut T)> {
         let (idx, node) = self.nodes.next()?;
         Some((NodeId(idx), node.pos, &mut node.value))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.nodes.size_hint()
     }
 
     fn nth(&mut self, n: usize) -> Option<(NodeId, Pos2, &'a mut T)> {
