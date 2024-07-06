@@ -1017,12 +1017,12 @@ impl<T> Snarl<T> {
         let mut pin_hovered = None;
 
         // Rect for node + frame margin.
-        let node_frame_rect = node_frame.total_margin().expand_rect(node_rect);
+        let node_frame_rect = node_rect + node_frame.total_margin();
 
         if snarl_state.selected_nodes().contains(&node) {
             let select_style = style.select_style(snarl_state.scale(), ui);
 
-            let select_rect = select_style.margin.expand_rect(node_frame_rect);
+            let select_rect = node_frame_rect + select_style.margin;
 
             ui.painter().rect(
                 select_rect,
@@ -1045,7 +1045,11 @@ impl<T> Snarl<T> {
             .collect::<Vec<_>>();
 
         // Interact with node frame.
-        let r = ui.interact(node_frame_rect, node_id, Sense::click_and_drag());
+        let r = ui.interact(
+            node_frame_rect,
+            node_id.with("frame"),
+            Sense::click_and_drag(),
+        );
 
         if !input.modifiers.shift
             && !input.modifiers.command
@@ -1093,20 +1097,22 @@ impl<T> Snarl<T> {
         let node_ui = &mut ui.child_ui_with_id_source(
             node_frame_rect,
             Layout::top_down(Align::Center),
-            ("node", node_id),
+            node_id,
+            None,
         );
 
         let r = node_frame.show(node_ui, |ui| {
             // Render header frame.
             let mut header_rect = node_rect;
 
-            let mut header_frame_rect = header_frame.total_margin().expand_rect(header_rect);
+            let mut header_frame_rect = header_rect + header_frame.total_margin();
 
             // Show node's header
             let header_ui = &mut ui.child_ui_with_id_source(
                 header_frame_rect,
                 Layout::top_down(Align::Center),
                 "header",
+                None,
             );
 
             header_frame.show(header_ui, |ui: &mut Ui| {
@@ -1131,7 +1137,7 @@ impl<T> Snarl<T> {
                     header_rect = ui.min_rect();
                 });
 
-                header_frame_rect = header_frame.total_margin().expand_rect(header_rect);
+                header_frame_rect = header_rect + header_frame.total_margin();
 
                 ui.advance_cursor_after_rect(Rect::from_min_max(
                     header_rect.min,
@@ -1185,6 +1191,7 @@ impl<T> Snarl<T> {
                 payload_rect,
                 Layout::top_down(Align::Min),
                 "inputs",
+                None,
             );
 
             inputs_ui.set_clip_rect(payload_clip_rect.intersect(viewport));
@@ -1305,6 +1312,7 @@ impl<T> Snarl<T> {
                 payload_rect,
                 Layout::top_down(Align::Max),
                 "outputs",
+                None,
             );
 
             outputs_ui.set_clip_rect(payload_clip_rect.intersect(viewport));
@@ -1439,6 +1447,7 @@ impl<T> Snarl<T> {
                     body_rect,
                     Layout::left_to_right(Align::Min),
                     "body",
+                    None,
                 );
                 body_ui.set_clip_rect(payload_clip_rect.intersect(viewport));
 
@@ -1483,6 +1492,7 @@ impl<T> Snarl<T> {
                     footer_rect,
                     Layout::left_to_right(Align::Min),
                     "footer",
+                    None,
                 );
                 footer_ui.set_clip_rect(payload_clip_rect.intersect(viewport));
 

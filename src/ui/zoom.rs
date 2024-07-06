@@ -1,6 +1,6 @@
 use egui::{
     epaint::Shadow,
-    style::{Interaction, ScrollStyle, Spacing, WidgetVisuals, Widgets},
+    style::{Interaction, ScrollStyle, Spacing, TextCursorStyle, WidgetVisuals, Widgets},
     FontId, Frame, Margin, Rounding, Stroke, Style, Vec2, Visuals,
 };
 
@@ -99,6 +99,13 @@ impl Zoom for Widgets {
         self.hovered.zoom(zoom);
         self.active.zoom(zoom);
         self.open.zoom(zoom);
+    }
+}
+
+impl Zoom for TextCursorStyle {
+    #[inline(always)]
+    fn zoom(&mut self, zoom: f32) {
+        self.stroke.zoom(zoom);
     }
 }
 

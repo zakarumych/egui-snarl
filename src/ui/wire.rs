@@ -294,7 +294,7 @@ fn draw_bezier_5(shapes: &mut Vec<Shape>, points: &[Pos2; 6], stroke: Stroke) {
         points: path,
         closed: false,
         fill: Color32::TRANSPARENT,
-        stroke,
+        stroke: stroke.into(),
     });
 
     shapes.push(shape);
@@ -315,7 +315,7 @@ fn draw_bezier_3(shapes: &mut Vec<Shape>, points: &[Pos2; 4], stroke: Stroke) {
         points: path,
         closed: false,
         fill: Color32::TRANSPARENT,
-        stroke,
+        stroke: stroke.into(),
     });
 
     shapes.push(shape);
@@ -746,7 +746,7 @@ fn draw_axis_aligned(
         points: path,
         closed: false,
         fill: Color32::TRANSPARENT,
-        stroke,
+        stroke: stroke.into(),
     });
 
     shapes.push(shape);

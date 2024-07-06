@@ -212,7 +212,7 @@ pub fn draw_pin(
                 points,
                 closed: true,
                 fill: fill,
-                stroke: stroke,
+                stroke: stroke.into(),
             }));
         }
         PinShape::Square => {
@@ -227,7 +227,7 @@ pub fn draw_pin(
                 points,
                 closed: true,
                 fill: fill,
-                stroke: stroke,
+                stroke: stroke.into(),
             }));
         }
 
@@ -249,7 +249,7 @@ pub fn draw_pin(
                 points,
                 closed: true,
                 fill,
-                stroke,
+                stroke: stroke.into(),
             }));
         }
 

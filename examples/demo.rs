@@ -1030,7 +1030,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "egui-snarl demo",
         native_options,
-        Box::new(|cx| Box::new(DemoApp::new(cx))),
+        Box::new(|cx| Ok(Box::new(DemoApp::new(cx)))),
     )
 }
 
