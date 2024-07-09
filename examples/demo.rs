@@ -940,6 +940,10 @@ pub struct DemoApp {
 
 impl DemoApp {
     pub fn new(cx: &CreationContext) -> Self {
+        egui_extras::install_image_loaders(&cx.egui_ctx);
+
+        cx.egui_ctx.style_mut(|style| style.animation_time *= 10.0);
+
         let snarl = match cx.storage {
             None => Snarl::new(),
             Some(storage) => {
@@ -972,7 +976,6 @@ impl DemoApp {
 
 impl App for DemoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui_extras::install_image_loaders(ctx);
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
@@ -998,7 +1001,7 @@ impl App for DemoApp {
 
         egui::SidePanel::left("style").show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
-                egui_probe::Probe::new("Snarl style", &mut self.style).show(ui);
+                egui_probe::Probe::new(&mut self.style).show(ui);
             });
         });
 

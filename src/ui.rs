@@ -360,7 +360,6 @@ impl SnarlStyle {
         self._header_frame.zoomed(scale).unwrap_or_else(|| {
             self.node_frame(scale, ui)
                 .shadow(Shadow::NONE)
-                .fill(Color32::TRANSPARENT)
         })
     }
 
@@ -1032,9 +1031,9 @@ impl<T> Snarl<T> {
             );
         }
 
-        let pin_size = style.pin_size(snarl_state.scale(), ui);
+        let pin_size = style.pin_size(snarl_state.scale(), ui).max(0.0);
 
-        let header_drag_space = style.header_drag_space(snarl_state.scale(), ui);
+        let header_drag_space = style.header_drag_space(snarl_state.scale(), ui).max(Vec2::ZERO);
 
         let inputs = (0..inputs_count)
             .map(|idx| InPin::new(self, InPinId { node, input: idx }))
@@ -1101,63 +1100,13 @@ impl<T> Snarl<T> {
             None,
         );
 
+        
+
+        let mut new_pins_size = Vec2::ZERO;
+
         let r = node_frame.show(node_ui, |ui| {
-            // Render header frame.
-            let mut header_rect = node_rect;
 
-            let mut header_frame_rect = header_rect + header_frame.total_margin();
-
-            // Show node's header
-            let header_ui = &mut ui.child_ui_with_id_source(
-                header_frame_rect,
-                Layout::top_down(Align::Center),
-                "header",
-                None,
-            );
-
-            header_frame.show(header_ui, |ui: &mut Ui| {
-                ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
-                    if style.collapsible() {
-                        let (_, r) = ui.allocate_exact_size(
-                            vec2(ui.spacing().icon_width, ui.spacing().icon_width),
-                            Sense::click(),
-                        );
-                        paint_default_icon(ui, openness, &r);
-
-                        if r.clicked_by(PointerButton::Primary) {
-                            // Toggle node's openness.
-                            self.open_node(node, !open);
-                        }
-                    }
-
-                    ui.allocate_exact_size(header_drag_space, Sense::hover());
-
-                    viewer.show_header(node, &inputs, &outputs, ui, snarl_state.scale(), self);
-
-                    header_rect = ui.min_rect();
-                });
-
-                header_frame_rect = header_rect + header_frame.total_margin();
-
-                ui.advance_cursor_after_rect(Rect::from_min_max(
-                    header_rect.min,
-                    pos2(
-                        f32::max(header_rect.max.x, node_rect.max.x),
-                        header_rect.min.y,
-                    ),
-                ));
-            });
-            let header_rect = header_rect;
-            ui.expand_to_include_rect(header_rect);
-            let header_size = header_rect.size();
-            node_state.set_header_height(header_size.y);
-
-            if !self.nodes.contains(node.0) {
-                // If removed
-                return;
-            }
-
-            let min_pin_y = header_rect.center().y;
+            let min_pin_y = node_rect.min.y + node_state.header_height() * 0.5;
 
             let input_x = node_frame_rect.left() + node_frame.inner_margin.left + pin_size;
 
@@ -1172,16 +1121,16 @@ impl<T> Snarl<T> {
             // Pins are placed under the header and must not go outside of the header frame.
             let payload_rect = Rect::from_min_max(
                 pos2(
-                    header_rect.min.x,
-                    header_frame_rect.max.y + ui.spacing().item_spacing.y
+                    node_rect.min.x,
+                    node_rect.min.y + node_state.header_height() + header_frame.total_margin().bottom + ui.spacing().item_spacing.y
                         - node_state.payload_offset(openness),
                 ),
-                pos2(f32::max(node_rect.max.x, header_rect.max.x), f32::INFINITY),
+                node_rect.max,
             );
 
             let payload_clip_rect = Rect::from_min_max(
-                pos2(header_rect.min.x, header_frame_rect.max.y),
-                pos2(f32::max(node_rect.max.x, header_rect.max.x), f32::INFINITY),
+                node_rect.min,
+                pos2(node_rect.max.x, f32::INFINITY),
             );
 
             // Show input pins.
@@ -1426,7 +1375,7 @@ impl<T> Snarl<T> {
                 return;
             }
 
-            let mut new_pins_size = vec2(
+            new_pins_size = vec2(
                 inputs_size.x + outputs_size.x + ui.spacing().item_spacing.x,
                 f32::max(inputs_size.y, outputs_size.y),
             );
@@ -1519,6 +1468,57 @@ impl<T> Snarl<T> {
                 }
             }
 
+            
+            // Render header frame.
+            let mut header_rect = Rect::NAN;
+
+            let mut header_frame_rect = Rect::NAN;//node_rect + header_frame.total_margin();
+
+            // Show node's header
+            let header_ui: &mut Ui = &mut ui.child_ui_with_id_source(
+                node_rect + header_frame.total_margin(),
+                Layout::top_down(Align::Center),
+                "header",
+                None,
+            );
+
+            header_frame.show(header_ui, |ui: &mut Ui| {
+                ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
+                    if style.collapsible() {
+                        let (_, r) = ui.allocate_exact_size(
+                            vec2(ui.spacing().icon_width, ui.spacing().icon_width),
+                            Sense::click(),
+                        );
+                        paint_default_icon(ui, openness, &r);
+
+                        if r.clicked_by(PointerButton::Primary) {
+                            // Toggle node's openness.
+                            self.open_node(node, !open);
+                        }
+                    }
+
+                    ui.allocate_exact_size(header_drag_space, Sense::hover());
+
+                    viewer.show_header(node, &inputs, &outputs, ui, snarl_state.scale(), self);
+
+                    header_rect = ui.min_rect();
+                });
+
+                header_frame_rect = header_rect + header_frame.total_margin();
+
+                ui.advance_cursor_after_rect(Rect::from_min_max(
+                    header_rect.min,
+                    pos2(
+                        f32::max(header_rect.max.x, node_rect.max.x),
+                        header_rect.min.y,
+                    ),
+                ));
+            });
+
+            ui.expand_to_include_rect(header_rect);
+            let header_size = header_rect.size();
+            node_state.set_header_height(header_size.y);
+
             node_state.set_size(vec2(
                 f32::max(header_size.x, new_pins_size.x),
                 header_size.y
@@ -1526,6 +1526,7 @@ impl<T> Snarl<T> {
                     + ui.spacing().item_spacing.y
                     + new_pins_size.y,
             ));
+
         });
 
         if !self.nodes.contains(node.0) {

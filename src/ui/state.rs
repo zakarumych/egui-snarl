@@ -95,6 +95,10 @@ impl NodeState {
         }
     }
 
+    pub fn header_height(&mut self) -> f32 {
+        self.header_height
+    }
+
     pub fn set_header_height(&mut self, height: f32) {
         if self.header_height != height {
             self.header_height = height;
