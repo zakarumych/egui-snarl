@@ -1047,7 +1047,7 @@ fn main() {
             .start(
                 "egui_snarl_demo",
                 web_options,
-                Box::new(|cx| Box::new(DemoApp::new(cx))),
+                Box::new(|cx| Ok(Box::new(DemoApp::new(cx)))),
             )
             .await
             .expect("failed to start eframe");
