@@ -1387,9 +1387,10 @@ impl<T> Snarl<T> {
                 let body_left = inputs_rect.right() + ui.spacing().item_spacing.x;
                 let body_right = outputs_rect.left() - ui.spacing().item_spacing.x;
                 let body_top = payload_rect.top();
+                let body_bottom = payload_rect.bottom();
 
                 let mut body_rect =
-                    Rect::from_min_max(pos2(body_left, body_top), pos2(body_right, f32::INFINITY));
+                    Rect::from_min_max(pos2(body_left, body_top), pos2(body_right, body_bottom));
                 body_rect = node_state.align_body(body_rect);
 
                 let mut body_ui = ui.child_ui_with_id_source(
@@ -1429,10 +1430,11 @@ impl<T> Snarl<T> {
                 let footer_left = node_rect.left();
                 let footer_right = node_rect.right();
                 let footer_top = pins_bottom + ui.spacing().item_spacing.y;
+                let footer_bottom = node_rect.bottom();
 
                 let mut footer_rect = Rect::from_min_max(
                     pos2(footer_left, footer_top),
-                    pos2(footer_right, f32::INFINITY),
+                    pos2(footer_right, footer_bottom),
                 );
 
                 footer_rect = node_state.align_footer(footer_rect);
