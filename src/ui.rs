@@ -357,10 +357,9 @@ impl SnarlStyle {
     }
 
     fn header_frame(&self, scale: f32, ui: &Ui) -> Frame {
-        self._header_frame.zoomed(scale).unwrap_or_else(|| {
-            self.node_frame(scale, ui)
-                .shadow(Shadow::NONE)
-        })
+        self._header_frame
+            .zoomed(scale)
+            .unwrap_or_else(|| self.node_frame(scale, ui).shadow(Shadow::NONE))
     }
 
     fn centering(&self) -> bool {
@@ -861,24 +860,23 @@ impl<T> Snarl<T> {
                             );
                         });
                     }
-                } else {
-                    if snarl_state.is_link_menu_open() || viewer.has_graph_menu(interact_pos, self)
-                    {
-                        bg_r.context_menu(|ui| {
-                            is_menu_visible = true;
-                            if !snarl_state.is_link_menu_open() {
-                                // Mark link menu is now visible.
-                                snarl_state.open_link_menu();
-                            }
+                } else if snarl_state.is_link_menu_open()
+                    || viewer.has_graph_menu(interact_pos, self)
+                {
+                    bg_r.context_menu(|ui| {
+                        is_menu_visible = true;
+                        if !snarl_state.is_link_menu_open() {
+                            // Mark link menu is now visible.
+                            snarl_state.open_link_menu();
+                        }
 
-                            viewer.show_graph_menu(
-                                snarl_state.screen_pos_to_graph(ui.cursor().min, viewport),
-                                ui,
-                                snarl_state.scale(),
-                                self,
-                            );
-                        });
-                    }
+                        viewer.show_graph_menu(
+                            snarl_state.screen_pos_to_graph(ui.cursor().min, viewport),
+                            ui,
+                            snarl_state.scale(),
+                            self,
+                        );
+                    });
                 }
             }
 
@@ -1033,7 +1031,9 @@ impl<T> Snarl<T> {
 
         let pin_size = style.pin_size(snarl_state.scale(), ui).max(0.0);
 
-        let header_drag_space = style.header_drag_space(snarl_state.scale(), ui).max(Vec2::ZERO);
+        let header_drag_space = style
+            .header_drag_space(snarl_state.scale(), ui)
+            .max(Vec2::ZERO);
 
         let inputs = (0..inputs_count)
             .map(|idx| InPin::new(self, InPinId { node, input: idx }))
@@ -1100,12 +1100,9 @@ impl<T> Snarl<T> {
             None,
         );
 
-        
-
         let mut new_pins_size = Vec2::ZERO;
 
         let r = node_frame.show(node_ui, |ui| {
-
             let min_pin_y = node_rect.min.y + node_state.header_height() * 0.5;
 
             let input_x = node_frame_rect.left() + node_frame.inner_margin.left + pin_size;
@@ -1122,16 +1119,17 @@ impl<T> Snarl<T> {
             let payload_rect = Rect::from_min_max(
                 pos2(
                     node_rect.min.x,
-                    node_rect.min.y + node_state.header_height() + header_frame.total_margin().bottom + ui.spacing().item_spacing.y
+                    node_rect.min.y
+                        + node_state.header_height()
+                        + header_frame.total_margin().bottom
+                        + ui.spacing().item_spacing.y
                         - node_state.payload_offset(openness),
                 ),
                 node_rect.max,
             );
 
-            let payload_clip_rect = Rect::from_min_max(
-                node_rect.min,
-                pos2(node_rect.max.x, f32::INFINITY),
-            );
+            let payload_clip_rect =
+                Rect::from_min_max(node_rect.min, pos2(node_rect.max.x, f32::INFINITY));
 
             // Show input pins.
 
@@ -1470,11 +1468,10 @@ impl<T> Snarl<T> {
                 }
             }
 
-            
             // Render header frame.
             let mut header_rect = Rect::NAN;
 
-            let mut header_frame_rect = Rect::NAN;//node_rect + header_frame.total_margin();
+            let mut header_frame_rect = Rect::NAN; //node_rect + header_frame.total_margin();
 
             // Show node's header
             let header_ui: &mut Ui = &mut ui.child_ui_with_id_source(
@@ -1528,7 +1525,6 @@ impl<T> Snarl<T> {
                     + ui.spacing().item_spacing.y
                     + new_pins_size.y,
             ));
-
         });
 
         if !self.nodes.contains(node.0) {

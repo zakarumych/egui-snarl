@@ -238,8 +238,8 @@ impl<T> Snarl<T> {
             pos,
             open: true,
         });
-        let id = NodeId(idx);
-        id
+
+        NodeId(idx)
     }
 
     /// Adds a node to the Snarl in collapsed state.
@@ -258,8 +258,8 @@ impl<T> Snarl<T> {
             pos,
             open: false,
         });
-        let id = NodeId(idx);
-        id
+
+        NodeId(idx)
     }
 
     /// Opens or collapses a node.

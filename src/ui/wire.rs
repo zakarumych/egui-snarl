@@ -6,30 +6,28 @@ use egui::{epaint::PathShape, pos2, Color32, Pos2, Rect, Shape, Stroke, Ui};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
+#[derive(Default)]
 pub enum WireLayer {
     /// Wires are rendered behind nodes.
     /// This is default.
+    #[default]
     BehindNodes,
 
     /// Wires are rendered above nodes.
     AboveNodes,
 }
 
-impl Default for WireLayer {
-    fn default() -> Self {
-        WireLayer::BehindNodes
-    }
-}
-
 /// Controls style in which wire is rendered.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
+#[derive(Default)]
 pub enum WireStyle {
     /// Draw wire as 3rd degree Bezier curve.
     Bezier3,
 
     /// Draw wire as 5th degree Bezier curve.
+    #[default]
     Bezier5,
 
     /// Draw wire as straight lines with 90 degree turns.
@@ -38,12 +36,6 @@ pub enum WireStyle {
         /// Radius of corners in wire.
         corner_radius: f32,
     },
-}
-
-impl Default for WireStyle {
-    fn default() -> Self {
-        WireStyle::Bezier5
-    }
 }
 
 pub(crate) fn pick_wire_style(
@@ -233,6 +225,7 @@ pub fn draw_wire(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn hit_wire(
     pos: Pos2,
     frame_size: f32,

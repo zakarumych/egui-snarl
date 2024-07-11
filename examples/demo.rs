@@ -59,7 +59,7 @@ impl DemoNode {
 
     fn string_out(&self) -> &str {
         match self {
-            DemoNode::String(value) => &value,
+            DemoNode::String(value) => value,
             _ => unreachable!(),
         }
     }
@@ -289,61 +289,58 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 if changed {
                     let expr_node = snarl[pin.id.node].expr_node();
 
-                    match syn::parse_str(&expr_node.text) {
-                        Ok(expr) => {
-                            expr_node.expr = expr;
+                    if let Ok(expr) = syn::parse_str(&expr_node.text) {
+                        expr_node.expr = expr;
 
-                            let values = Iterator::zip(
-                                expr_node.bindings.iter().map(String::clone),
-                                expr_node.values.iter().copied(),
-                            )
-                            .collect::<HashMap<String, f64>>();
+                        let values = Iterator::zip(
+                            expr_node.bindings.iter().map(String::clone),
+                            expr_node.values.iter().copied(),
+                        )
+                        .collect::<HashMap<String, f64>>();
 
-                            let mut new_bindings = Vec::new();
-                            expr_node.expr.extend_bindings(&mut new_bindings);
+                        let mut new_bindings = Vec::new();
+                        expr_node.expr.extend_bindings(&mut new_bindings);
 
-                            let old_bindings =
-                                std::mem::replace(&mut expr_node.bindings, new_bindings.clone());
+                        let old_bindings =
+                            std::mem::replace(&mut expr_node.bindings, new_bindings.clone());
 
-                            let new_values = new_bindings
-                                .iter()
-                                .map(|name| values.get(&**name).copied().unwrap_or(0.0))
-                                .collect::<Vec<_>>();
+                        let new_values = new_bindings
+                            .iter()
+                            .map(|name| values.get(&**name).copied().unwrap_or(0.0))
+                            .collect::<Vec<_>>();
 
-                            expr_node.values = new_values;
+                        expr_node.values = new_values;
 
-                            let old_inputs = (0..old_bindings.len())
-                                .map(|idx| {
-                                    snarl.in_pin(InPinId {
-                                        node: pin.id.node,
-                                        input: idx + 1,
-                                    })
+                        let old_inputs = (0..old_bindings.len())
+                            .map(|idx| {
+                                snarl.in_pin(InPinId {
+                                    node: pin.id.node,
+                                    input: idx + 1,
                                 })
-                                .collect::<Vec<_>>();
+                            })
+                            .collect::<Vec<_>>();
 
-                            for (idx, name) in old_bindings.iter().enumerate() {
-                                let new_idx =
-                                    new_bindings.iter().position(|new_name| *new_name == *name);
+                        for (idx, name) in old_bindings.iter().enumerate() {
+                            let new_idx =
+                                new_bindings.iter().position(|new_name| *new_name == *name);
 
-                                match new_idx {
-                                    None => {
-                                        snarl.drop_inputs(old_inputs[idx].id);
-                                    }
-                                    Some(new_idx) if new_idx != idx => {
-                                        let new_in_pin = InPinId {
-                                            node: pin.id.node,
-                                            input: new_idx,
-                                        };
-                                        for &remote in &old_inputs[idx].remotes {
-                                            snarl.disconnect(remote, old_inputs[idx].id);
-                                            snarl.connect(remote, new_in_pin);
-                                        }
-                                    }
-                                    _ => {}
+                            match new_idx {
+                                None => {
+                                    snarl.drop_inputs(old_inputs[idx].id);
                                 }
+                                Some(new_idx) if new_idx != idx => {
+                                    let new_in_pin = InPinId {
+                                        node: pin.id.node,
+                                        input: new_idx,
+                                    };
+                                    for &remote in &old_inputs[idx].remotes {
+                                        snarl.disconnect(remote, old_inputs[idx].id);
+                                        snarl.connect(remote, new_in_pin);
+                                    }
+                                }
+                                _ => {}
                             }
                         }
-                        Err(_) => {}
                     }
                 }
                 PinInfo::triangle().with_fill(STRING_COLOR).with_wire_style(
@@ -523,19 +520,17 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 ];
 
                 for (name, ctor, in_ty) in dst_in_candidates {
-                    if src_out_ty & in_ty != 0 {
-                        if ui.button(name).clicked() {
-                            // Create new node.
-                            let new_node = snarl.insert_node(pos, ctor());
-                            let dst_pin = InPinId {
-                                node: new_node,
-                                input: 0,
-                            };
+                    if src_out_ty & in_ty != 0 && ui.button(name).clicked() {
+                        // Create new node.
+                        let new_node = snarl.insert_node(pos, ctor());
+                        let dst_pin = InPinId {
+                            node: new_node,
+                            input: 0,
+                        };
 
-                            // Connect the wire.
-                            snarl.connect(src_pin, dst_pin);
-                            ui.close_menu();
-                        }
+                        // Connect the wire.
+                        snarl.connect(src_pin, dst_pin);
+                        ui.close_menu();
                     }
                 }
             }
@@ -556,31 +551,27 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 ];
 
                 for (name, ctor, out_ty) in dst_out_candidates {
-                    if all_src_types & out_ty != 0 {
-                        if ui.button(name).clicked() {
-                            // Create new node.
-                            let new_node = ctor();
-                            let dst_ty = pin_out_compat(&new_node);
+                    if all_src_types & out_ty != 0 && ui.button(name).clicked() {
+                        // Create new node.
+                        let new_node = ctor();
+                        let dst_ty = pin_out_compat(&new_node);
 
-                            let new_node = snarl.insert_node(pos, new_node);
-                            let dst_pin = OutPinId {
-                                node: new_node,
-                                output: 0,
-                            };
+                        let new_node = snarl.insert_node(pos, new_node);
+                        let dst_pin = OutPinId {
+                            node: new_node,
+                            output: 0,
+                        };
 
-                            // Connect the wire.
-                            for src_pin in pins {
-                                let src_ty = pin_in_compat(
-                                    snarl.get_node(src_pin.node).unwrap(),
-                                    src_pin.input,
-                                );
-                                if src_ty & dst_ty != 0 {
-                                    // In this demo, input pin MUST be unique ...
-                                    // Therefore here we drop inputs of source input pin.
-                                    snarl.drop_inputs(*src_pin);
-                                    snarl.connect(dst_pin, *src_pin);
-                                    ui.close_menu();
-                                }
+                        // Connect the wire.
+                        for src_pin in pins {
+                            let src_ty =
+                                pin_in_compat(snarl.get_node(src_pin.node).unwrap(), src_pin.input);
+                            if src_ty & dst_ty != 0 {
+                                // In this demo, input pin MUST be unique ...
+                                // Therefore here we drop inputs of source input pin.
+                                snarl.drop_inputs(*src_pin);
+                                snarl.connect(dst_pin, *src_pin);
+                                ui.close_menu();
                             }
                         }
                     }
@@ -653,7 +644,7 @@ struct ExprNode {
 impl ExprNode {
     fn new() -> Self {
         ExprNode {
-            text: format!("0"),
+            text: "0".to_string(),
             bindings: Vec::new(),
             values: Vec::new(),
             expr: Expr::Val(0.0),
@@ -946,27 +937,19 @@ impl DemoApp {
 
         let snarl = match cx.storage {
             None => Snarl::new(),
-            Some(storage) => {
-                let snarl = storage
-                    .get_string("snarl")
-                    .and_then(|snarl| serde_json::from_str(&snarl).ok())
-                    .unwrap_or_else(Snarl::new);
-
-                snarl
-            }
+            Some(storage) => storage
+                .get_string("snarl")
+                .and_then(|snarl| serde_json::from_str(&snarl).ok())
+                .unwrap_or_else(Snarl::new),
         };
         // let snarl = Snarl::new();
 
         let style = match cx.storage {
             None => SnarlStyle::new(),
-            Some(storage) => {
-                let style = storage
-                    .get_string("style")
-                    .and_then(|style| serde_json::from_str(&style).ok())
-                    .unwrap_or_else(SnarlStyle::new);
-
-                style
-            }
+            Some(storage) => storage
+                .get_string("style")
+                .and_then(|style| serde_json::from_str(&style).ok())
+                .unwrap_or_else(SnarlStyle::new),
         };
         // let style = SnarlStyle::new();
 
@@ -976,7 +959,6 @@ impl DemoApp {
 
 impl App for DemoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
 
