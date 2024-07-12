@@ -98,7 +98,7 @@ impl Grid {
     }
 
     fn draw(&self, style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui) {
-        let bg_stroke = style.bg_pattern_stroke(viewport.scale, ui);
+        let bg_stroke = style.get_bg_pattern_stroke(viewport.scale, ui);
 
         let spacing = vec2(self.spacing.x.max(1.0), self.spacing.y.max(1.0));
 

@@ -232,7 +232,7 @@ impl SnarlState {
         }
 
         let mut offset = Vec2::ZERO;
-        let mut scale = 1.0f32.clamp(style.min_scale(), style.max_scale());
+        let mut scale = 1.0f32.clamp(style.get_min_scale(), style.get_max_scale());
 
         if bb.is_positive() {
             bb = bb.expand(100.0);
@@ -243,8 +243,8 @@ impl SnarlState {
             scale = (viewport_size.x / bb_size.x)
                 .min(1.0)
                 .min(viewport_size.y / bb_size.y)
-                .min(style.max_scale())
-                .max(style.min_scale());
+                .min(style.get_max_scale())
+                .max(style.get_min_scale());
 
             offset = bb.center().to_vec2() * scale;
         }

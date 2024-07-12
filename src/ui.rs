@@ -59,28 +59,28 @@ pub struct SnarlStyle {
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _pin_size: Option<f32>,
+    pub pin_size: Option<f32>,
 
     /// Default fill color for pins.
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _pin_fill: Option<Color32>,
+    pub pin_fill: Option<Color32>,
 
     /// Default stroke for pins.
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _pin_stroke: Option<Stroke>,
+    pub pin_stroke: Option<Stroke>,
 
     /// Shape of pins.
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _pin_shape: Option<BasicPinShape>,
+    pub pin_shape: Option<BasicPinShape>,
 
     /// Width of wires.
     #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
@@ -88,7 +88,7 @@ pub struct SnarlStyle {
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _wire_width: Option<f32>,
+    pub wire_width: Option<f32>,
 
     /// Size of wire frame which controls curvature of wires.
     #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
@@ -96,42 +96,42 @@ pub struct SnarlStyle {
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _wire_frame_size: Option<f32>,
+    pub wire_frame_size: Option<f32>,
 
     /// Whether to downscale wire frame when nodes are close.
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _downscale_wire_frame: Option<bool>,
+    pub downscale_wire_frame: Option<bool>,
 
     /// Weather to upscale wire frame when nodes are far.
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _upscale_wire_frame: Option<bool>,
+    pub upscale_wire_frame: Option<bool>,
 
     /// Controls default style of wires.
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _wire_style: Option<WireStyle>,
+    pub wire_style: Option<WireStyle>,
 
     /// Layer where wires are rendered.
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _wire_layer: Option<WireLayer>,
+    pub wire_layer: Option<WireLayer>,
 
     /// Additional blank space for dragging node by header.
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _header_drag_space: Option<Vec2>,
+    pub header_drag_space: Option<Vec2>,
 
     /// Whether nodes can be collapsed.
     /// If true, headers will have collapsing button.
@@ -140,7 +140,7 @@ pub struct SnarlStyle {
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _collapsible: Option<bool>,
+    pub collapsible: Option<bool>,
 
     /// Frame used to draw background
     #[cfg_attr(
@@ -151,7 +151,7 @@ pub struct SnarlStyle {
             with = "serde_frame_option"
         )
     )]
-    pub _bg_frame: Option<Frame>,
+    pub bg_frame: Option<Frame>,
 
     /// Background pattern.
     /// Defaults to [`BackgroundPattern::Grid`].
@@ -159,7 +159,7 @@ pub struct SnarlStyle {
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _bg_pattern: Option<BackgroundPattern>,
+    pub bg_pattern: Option<BackgroundPattern>,
 
     /// Stroke for background pattern.
     /// Defaults to `ui.visuals().widgets.noninteractive.bg_stroke`.
@@ -167,7 +167,7 @@ pub struct SnarlStyle {
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _bg_pattern_stroke: Option<Stroke>,
+    pub bg_pattern_stroke: Option<Stroke>,
 
     /// Minimum scale that can be set.
     #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..=1.0))]
@@ -175,7 +175,7 @@ pub struct SnarlStyle {
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _min_scale: Option<f32>,
+    pub min_scale: Option<f32>,
 
     /// Maximum scale that can be set.
     #[cfg_attr(feature = "egui-probe", egui_probe(range = 1.0..))]
@@ -183,7 +183,7 @@ pub struct SnarlStyle {
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _max_scale: Option<f32>,
+    pub max_scale: Option<f32>,
 
     /// Scale velocity when scaling with mouse wheel.
     #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
@@ -191,7 +191,7 @@ pub struct SnarlStyle {
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _scale_velocity: Option<f32>,
+    pub scale_velocity: Option<f32>,
 
     /// Frame used to draw nodes.
     /// Defaults to [`Frame::window`] constructed from current ui's style.
@@ -203,7 +203,7 @@ pub struct SnarlStyle {
             with = "serde_frame_option"
         )
     )]
-    pub _node_frame: Option<Frame>,
+    pub node_frame: Option<Frame>,
 
     /// Frame used to draw node headers.
     /// Defaults to [`node_frame`] without shadow and transparent fill.
@@ -218,40 +218,40 @@ pub struct SnarlStyle {
             with = "serde_frame_option"
         )
     )]
-    pub _header_frame: Option<Frame>,
+    pub header_frame: Option<Frame>,
 
     /// Enable centering by double click on background
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _centering: Option<bool>,
+    pub centering: Option<bool>,
 
     /// Stroke for selection.
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _select_stoke: Option<Stroke>,
+    pub select_stoke: Option<Stroke>,
 
     /// Fill for selection.
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _select_fill: Option<Color32>,
+    pub select_fill: Option<Color32>,
 
     /// Flag to control how rect selection works.
     /// If set to true, only nodes fully contained in selection rect will be selected.
     /// If set to false, nodes intersecting with selection rect will be selected.
-    pub _select_rect_contained: Option<bool>,
+    pub select_rect_contained: Option<bool>,
 
     /// Style for node selection.
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub _select_style: Option<SelectionStyle>,
+    pub select_style: Option<SelectionStyle>,
 
     #[doc(hidden)]
     #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
@@ -261,133 +261,132 @@ pub struct SnarlStyle {
 }
 
 impl SnarlStyle {
-    fn pin_size(&self, scale: f32, ui: &Ui) -> f32 {
-        self._pin_size
+    fn get_pin_size(&self, scale: f32, ui: &Ui) -> f32 {
+        self.pin_size
             .zoomed(scale)
             .unwrap_or_else(|| ui.spacing().interact_size.y * 0.5)
     }
 
-    fn pin_fill(&self, ui: &Ui) -> Color32 {
-        self._pin_fill
-            .unwrap_or(ui.visuals().widgets.active.bg_fill)
+    fn get_pin_fill(&self, ui: &Ui) -> Color32 {
+        self.pin_fill.unwrap_or(ui.visuals().widgets.active.bg_fill)
     }
 
-    fn pin_stoke(&self, scale: f32, ui: &Ui) -> Stroke {
-        self._pin_stroke.zoomed(scale).unwrap_or(Stroke::new(
+    fn get_pin_stoke(&self, scale: f32, ui: &Ui) -> Stroke {
+        self.pin_stroke.zoomed(scale).unwrap_or(Stroke::new(
             ui.visuals().widgets.active.bg_stroke.width,
             ui.visuals().widgets.active.bg_stroke.color,
         ))
     }
 
-    fn pin_shape(&self) -> PinShape {
-        self._pin_shape.unwrap_or(BasicPinShape::Circle).into()
+    fn get_pin_shape(&self) -> PinShape {
+        self.pin_shape.unwrap_or(BasicPinShape::Circle).into()
     }
 
-    fn wire_width(&self, scale: f32, ui: &Ui) -> f32 {
-        self._wire_width
+    fn get_wire_width(&self, scale: f32, ui: &Ui) -> f32 {
+        self.wire_width
             .zoomed(scale)
-            .unwrap_or(self.pin_size(scale, ui) * 0.2)
+            .unwrap_or(self.get_pin_size(scale, ui) * 0.2)
     }
 
-    fn wire_frame_size(&self, scale: f32, ui: &Ui) -> f32 {
-        self._wire_frame_size
+    fn get_wire_frame_size(&self, scale: f32, ui: &Ui) -> f32 {
+        self.wire_frame_size
             .zoomed(scale)
-            .unwrap_or(self.pin_size(scale, ui) * 5.0)
+            .unwrap_or(self.get_pin_size(scale, ui) * 5.0)
     }
 
-    fn downscale_wire_frame(&self) -> bool {
-        self._downscale_wire_frame.unwrap_or(true)
+    fn get_downscale_wire_frame(&self) -> bool {
+        self.downscale_wire_frame.unwrap_or(true)
     }
 
-    fn upscale_wire_frame(&self) -> bool {
-        self._upscale_wire_frame.unwrap_or(false)
+    fn get_upscale_wire_frame(&self) -> bool {
+        self.upscale_wire_frame.unwrap_or(false)
     }
 
-    fn wire_style(&self, scale: f32) -> WireStyle {
-        self._wire_style.zoomed(scale).unwrap_or(WireStyle::Bezier5)
+    fn get_wire_style(&self, scale: f32) -> WireStyle {
+        self.wire_style.zoomed(scale).unwrap_or(WireStyle::Bezier5)
     }
 
-    fn wire_layer(&self) -> WireLayer {
-        self._wire_layer.unwrap_or(WireLayer::BehindNodes)
+    fn get_wire_layer(&self) -> WireLayer {
+        self.wire_layer.unwrap_or(WireLayer::BehindNodes)
     }
 
-    fn header_drag_space(&self, scale: f32, ui: &Ui) -> Vec2 {
-        self._header_drag_space
+    fn get_header_drag_space(&self, scale: f32, ui: &Ui) -> Vec2 {
+        self.header_drag_space
             .zoomed(scale)
             .unwrap_or(vec2(ui.spacing().icon_width, ui.spacing().icon_width))
     }
 
-    fn collapsible(&self) -> bool {
-        self._collapsible.unwrap_or(true)
+    fn get_collapsible(&self) -> bool {
+        self.collapsible.unwrap_or(true)
     }
 
-    fn bg_frame(&self, ui: &Ui) -> Frame {
-        self._bg_frame.unwrap_or(Frame::canvas(ui.style()))
+    fn get_bg_frame(&self, ui: &Ui) -> Frame {
+        self.bg_frame.unwrap_or(Frame::canvas(ui.style()))
     }
 
-    fn draw_bg_pattern(&self, style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui) {
-        match &self._bg_pattern {
+    fn get_draw_bg_pattern(&self, style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui) {
+        match &self.bg_pattern {
             None => BackgroundPattern::new().draw(style, viewport, ui),
             Some(pattern) => pattern.draw(style, viewport, ui),
         }
     }
 
-    fn bg_pattern_stroke(&self, scale: f32, ui: &Ui) -> Stroke {
-        self._bg_pattern_stroke
+    fn get_bg_pattern_stroke(&self, scale: f32, ui: &Ui) -> Stroke {
+        self.bg_pattern_stroke
             .zoomed(scale)
             .unwrap_or(ui.visuals().widgets.noninteractive.bg_stroke)
     }
 
-    fn min_scale(&self) -> f32 {
-        self._min_scale.unwrap_or(0.2)
+    fn get_min_scale(&self) -> f32 {
+        self.min_scale.unwrap_or(0.2)
     }
 
-    fn max_scale(&self) -> f32 {
-        self._max_scale.unwrap_or(5.0)
+    fn get_max_scale(&self) -> f32 {
+        self.max_scale.unwrap_or(5.0)
     }
 
-    fn scale_velocity(&self) -> f32 {
-        self._scale_velocity.unwrap_or(0.005)
+    fn get_scale_velocity(&self) -> f32 {
+        self.scale_velocity.unwrap_or(0.005)
     }
 
-    fn node_frame(&self, scale: f32, ui: &Ui) -> Frame {
-        self._node_frame
+    fn get_node_frame(&self, scale: f32, ui: &Ui) -> Frame {
+        self.node_frame
             .zoomed(scale)
             .unwrap_or_else(|| Frame::window(ui.style()))
     }
 
-    fn header_frame(&self, scale: f32, ui: &Ui) -> Frame {
-        self._header_frame
+    fn get_header_frame(&self, scale: f32, ui: &Ui) -> Frame {
+        self.header_frame
             .zoomed(scale)
-            .unwrap_or_else(|| self.node_frame(scale, ui).shadow(Shadow::NONE))
+            .unwrap_or_else(|| self.get_node_frame(scale, ui).shadow(Shadow::NONE))
     }
 
-    fn centering(&self) -> bool {
-        self._centering.unwrap_or(true)
+    fn get_centering(&self) -> bool {
+        self.centering.unwrap_or(true)
     }
 
-    fn select_stroke(&self, scale: f32, ui: &Ui) -> Stroke {
-        self._select_stoke.zoomed(scale).unwrap_or(Stroke::new(
+    fn get_select_stroke(&self, scale: f32, ui: &Ui) -> Stroke {
+        self.select_stoke.zoomed(scale).unwrap_or(Stroke::new(
             ui.visuals().selection.stroke.width,
             ui.visuals().selection.stroke.color.gamma_multiply(0.5),
         ))
     }
 
-    fn select_fill(&self, ui: &Ui) -> Color32 {
-        self._select_fill
+    fn get_select_fill(&self, ui: &Ui) -> Color32 {
+        self.select_fill
             .unwrap_or(ui.visuals().selection.bg_fill.gamma_multiply(0.3))
     }
 
-    fn select_rect_contained(&self) -> bool {
-        self._select_rect_contained.unwrap_or(false)
+    fn get_select_rect_contained(&self) -> bool {
+        self.select_rect_contained.unwrap_or(false)
     }
 
-    fn select_style(&self, scale: f32, ui: &Ui) -> SelectionStyle {
-        self._select_style.zoomed(scale).unwrap_or(SelectionStyle {
+    fn get_select_style(&self, scale: f32, ui: &Ui) -> SelectionStyle {
+        self.select_style.zoomed(scale).unwrap_or(SelectionStyle {
             margin: ui.spacing().window_margin,
             rounding: ui.visuals().window_rounding,
-            fill: self.select_fill(ui),
-            stroke: self.select_stroke(scale, ui),
+            fill: self.get_select_fill(ui),
+            stroke: self.get_select_stroke(scale, ui),
         })
     }
 }
@@ -445,33 +444,33 @@ impl SnarlStyle {
     #[must_use]
     pub const fn new() -> Self {
         SnarlStyle {
-            _pin_size: None,
-            _pin_fill: None,
-            _pin_stroke: None,
-            _pin_shape: None,
-            _wire_width: None,
-            _wire_frame_size: None,
-            _downscale_wire_frame: None,
-            _upscale_wire_frame: None,
-            _wire_style: None,
-            _wire_layer: None,
-            _header_drag_space: None,
-            _collapsible: None,
+            pin_size: None,
+            pin_fill: None,
+            pin_stroke: None,
+            pin_shape: None,
+            wire_width: None,
+            wire_frame_size: None,
+            downscale_wire_frame: None,
+            upscale_wire_frame: None,
+            wire_style: None,
+            wire_layer: None,
+            header_drag_space: None,
+            collapsible: None,
 
-            _bg_frame: None,
-            _bg_pattern: None,
-            _bg_pattern_stroke: None,
+            bg_frame: None,
+            bg_pattern: None,
+            bg_pattern_stroke: None,
 
-            _min_scale: None,
-            _max_scale: None,
-            _scale_velocity: None,
-            _node_frame: None,
-            _header_frame: None,
-            _centering: None,
-            _select_stoke: None,
-            _select_fill: None,
-            _select_rect_contained: None,
-            _select_style: None,
+            min_scale: None,
+            max_scale: None,
+            scale_velocity: None,
+            node_frame: None,
+            header_frame: None,
+            centering: None,
+            select_stoke: None,
+            select_fill: None,
+            select_rect_contained: None,
+            select_style: None,
 
             _non_exhaustive: (),
         }
@@ -516,7 +515,7 @@ impl<T> Snarl<T> {
             offset: snarl_state.offset(),
         };
 
-        style.draw_bg_pattern(style, &viewport, ui);
+        style.get_draw_bg_pattern(style, &viewport, ui);
     }
 
     /// Render [`Snarl`] using given viewer and style into the [`Ui`].
@@ -530,7 +529,7 @@ impl<T> Snarl<T> {
         let snarl_id = ui.make_persistent_id(id_source);
 
         // Draw background pattern.
-        let bg_frame = style.bg_frame(ui);
+        let bg_frame = style.get_bg_frame(ui);
 
         let input = ui.ctx().input(|i| Input {
             scroll_delta: i.raw_scroll_delta.y,
@@ -562,12 +561,12 @@ impl<T> Snarl<T> {
             //Draw background
             Self::draw_background(style, &snarl_state, &viewport, ui);
 
-            let wire_frame_size = style.wire_frame_size(snarl_state.scale(), ui);
-            let wire_width = style.wire_width(snarl_state.scale(), ui);
-            let node_frame = style.node_frame(snarl_state.scale(), ui);
-            let header_frame = style.header_frame(snarl_state.scale(), ui);
+            let wire_frame_size = style.get_wire_frame_size(snarl_state.scale(), ui);
+            let wire_width = style.get_wire_width(snarl_state.scale(), ui);
+            let node_frame = style.get_node_frame(snarl_state.scale(), ui);
+            let header_frame = style.get_header_frame(snarl_state.scale(), ui);
 
-            let wire_shape_idx = match style.wire_layer() {
+            let wire_shape_idx = match style.get_wire_layer() {
                 WireLayer::BehindNodes => Some(ui.painter().add(Shape::Noop)),
                 WireLayer::AboveNodes => None,
             };
@@ -577,8 +576,8 @@ impl<T> Snarl<T> {
                 Some(hover_pos) if viewport.contains(hover_pos) => {
                     if input.scroll_delta != 0.0 {
                         let new_scale = (snarl_state.scale()
-                            * (1.0 + input.scroll_delta * style.scale_velocity()))
-                        .clamp(style.min_scale(), style.max_scale());
+                            * (1.0 + input.scroll_delta * style.get_scale_velocity()))
+                        .clamp(style.get_min_scale(), style.get_max_scale());
 
                         snarl_state.set_scale(new_scale);
                     }
@@ -654,13 +653,13 @@ impl<T> Snarl<T> {
                         wire_hit = hit_wire(
                             interact_pos,
                             wire_frame_size,
-                            style.upscale_wire_frame(),
-                            style.downscale_wire_frame(),
+                            style.get_upscale_wire_frame(),
+                            style.get_downscale_wire_frame(),
                             from_r.pos,
                             to_r.pos,
                             wire_width.max(1.5),
                             pick_wire_style(
-                                style.wire_style(snarl_state.scale()),
+                                style.get_wire_style(snarl_state.scale()),
                                 from_r.wire_style,
                                 to_r.wire_style,
                             )
@@ -691,13 +690,13 @@ impl<T> Snarl<T> {
                     ui,
                     &mut wire_shapes,
                     wire_frame_size,
-                    style.upscale_wire_frame(),
-                    style.downscale_wire_frame(),
+                    style.get_upscale_wire_frame(),
+                    style.get_downscale_wire_frame(),
                     from_r.pos,
                     to_r.pos,
                     Stroke::new(draw_width, color),
                     pick_wire_style(
-                        style.wire_style(snarl_state.scale()),
+                        style.get_wire_style(snarl_state.scale()),
                         from_r.wire_style.zoomed(snarl_state.scale()),
                         to_r.wire_style.zoomed(snarl_state.scale()),
                     ),
@@ -732,7 +731,7 @@ impl<T> Snarl<T> {
             if bg_r.drag_stopped_by(PointerButton::Primary) {
                 if let Some(select_rect) = snarl_state.rect_selection() {
                     let select_nodes = node_rects.into_iter().filter_map(|(id, rect)| {
-                        let select = match style.select_rect_contained() {
+                        let select = match style.get_select_rect_contained() {
                             true => select_rect.contains_rect(rect),
                             false => select_rect.intersects(rect),
                         };
@@ -758,8 +757,8 @@ impl<T> Snarl<T> {
                 ui.painter().rect(
                     snarl_state.graph_rect_to_screen(select_rect, viewport),
                     0.0,
-                    style.select_fill(ui),
-                    style.select_stroke(snarl_state.scale(), ui),
+                    style.get_select_fill(ui),
+                    style.get_select_stroke(snarl_state.scale(), ui),
                 );
             }
 
@@ -777,7 +776,7 @@ impl<T> Snarl<T> {
             }
 
             //Do centering
-            if style.centering() && bg_r.double_clicked() {
+            if style.get_centering() && bg_r.double_clicked() {
                 centers_sum /= centers_weight as f32;
                 snarl_state.set_offset(centers_sum * snarl_state.scale());
             }
@@ -896,14 +895,14 @@ impl<T> Snarl<T> {
                             ui,
                             &mut wire_shapes,
                             wire_frame_size,
-                            style.upscale_wire_frame(),
-                            style.downscale_wire_frame(),
+                            style.get_upscale_wire_frame(),
+                            style.get_downscale_wire_frame(),
                             from_pos,
                             to_r.pos,
                             Stroke::new(wire_width, to_r.pin_fill),
                             to_r.wire_style
                                 .zoomed(snarl_state.scale())
-                                .unwrap_or(style.wire_style(snarl_state.scale())),
+                                .unwrap_or(style.get_wire_style(snarl_state.scale())),
                         );
                     }
                 }
@@ -916,15 +915,15 @@ impl<T> Snarl<T> {
                             ui,
                             &mut wire_shapes,
                             wire_frame_size,
-                            style.upscale_wire_frame(),
-                            style.downscale_wire_frame(),
+                            style.get_upscale_wire_frame(),
+                            style.get_downscale_wire_frame(),
                             from_r.pos,
                             to_pos,
                             Stroke::new(wire_width, from_r.pin_fill),
                             from_r
                                 .wire_style
                                 .zoomed(snarl_state.scale())
-                                .unwrap_or(style.wire_style(snarl_state.scale())),
+                                .unwrap_or(style.get_wire_style(snarl_state.scale())),
                         );
                     }
                 }
@@ -1017,7 +1016,7 @@ impl<T> Snarl<T> {
         let node_frame_rect = node_rect + node_frame.total_margin();
 
         if snarl_state.selected_nodes().contains(&node) {
-            let select_style = style.select_style(snarl_state.scale(), ui);
+            let select_style = style.get_select_style(snarl_state.scale(), ui);
 
             let select_rect = node_frame_rect + select_style.margin;
 
@@ -1029,10 +1028,10 @@ impl<T> Snarl<T> {
             );
         }
 
-        let pin_size = style.pin_size(snarl_state.scale(), ui).max(0.0);
+        let pin_size = style.get_pin_size(snarl_state.scale(), ui).max(0.0);
 
         let header_drag_space = style
-            .header_drag_space(snarl_state.scale(), ui)
+            .get_header_drag_space(snarl_state.scale(), ui)
             .max(Vec2::ZERO);
 
         let inputs = (0..inputs_count)
@@ -1218,16 +1217,16 @@ impl<T> Snarl<T> {
                         _ => {}
                     }
 
-                    let pin_fill = pin_info.fill.unwrap_or(style.pin_fill(ui));
+                    let pin_fill = pin_info.fill.unwrap_or(style.get_pin_fill(ui));
 
                     draw_pin(
                         ui.painter(),
-                        pin_info.shape.as_ref().unwrap_or(&style.pin_shape()),
+                        pin_info.shape.as_ref().unwrap_or(&style.get_pin_shape()),
                         pin_fill,
                         pin_info
                             .stroke
                             .zoomed(snarl_state.scale())
-                            .unwrap_or(style.pin_stoke(snarl_state.scale(), ui)),
+                            .unwrap_or(style.get_pin_stoke(snarl_state.scale(), ui)),
                         pin_pos,
                         pin_size,
                     );
@@ -1340,16 +1339,16 @@ impl<T> Snarl<T> {
                         _ => {}
                     }
 
-                    let pin_fill = pin_info.fill.unwrap_or(style.pin_fill(ui));
+                    let pin_fill = pin_info.fill.unwrap_or(style.get_pin_fill(ui));
 
                     draw_pin(
                         ui.painter(),
-                        pin_info.shape.as_ref().unwrap_or(&style.pin_shape()),
+                        pin_info.shape.as_ref().unwrap_or(&style.get_pin_shape()),
                         pin_fill,
                         pin_info
                             .stroke
                             .zoomed(snarl_state.scale())
-                            .unwrap_or(style.pin_stoke(snarl_state.scale(), ui)),
+                            .unwrap_or(style.get_pin_stoke(snarl_state.scale(), ui)),
                         pin_pos,
                         pin_size,
                     );
@@ -1483,7 +1482,7 @@ impl<T> Snarl<T> {
 
             header_frame.show(header_ui, |ui: &mut Ui| {
                 ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
-                    if style.collapsible() {
+                    if style.get_collapsible() {
                         let (_, r) = ui.allocate_exact_size(
                             vec2(ui.spacing().icon_width, ui.spacing().icon_width),
                             Sense::click(),
