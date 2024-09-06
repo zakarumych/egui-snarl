@@ -3,8 +3,8 @@
 use std::{collections::HashMap, hash::Hash};
 
 use egui::{
-    collapsing_header::paint_default_icon, epaint::Shadow, pos2, vec2, Align, Color32, Frame, Id,
-    Layout, Margin, Modifiers, PointerButton, Pos2, Rect, Rounding, Sense, Shape, Stroke, Ui, Vec2,
+    collapsing_header::paint_default_icon, pos2, vec2, Align, Color32, Frame, Id, Layout, Margin,
+    Modifiers, PointerButton, Pos2, Rect, Rounding, Sense, Shape, Stroke, Ui, Vec2,
 };
 
 use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl};
@@ -205,21 +205,6 @@ pub struct SnarlStyle {
     )]
     pub node_frame: Option<Frame>,
 
-    /// Frame used to draw node headers.
-    /// Defaults to [`node_frame`] without shadow and transparent fill.
-    ///
-    /// If set, it should not have shadow and fill should be either opaque of fully transparent
-    /// unless layering of header fill color with node fill color is desired.
-    #[cfg_attr(
-        feature = "serde",
-        serde(
-            skip_serializing_if = "Option::is_none",
-            default,
-            with = "serde_frame_option"
-        )
-    )]
-    pub header_frame: Option<Frame>,
-
     /// Enable centering by double click on background
     #[cfg_attr(
         feature = "serde",
@@ -355,12 +340,6 @@ impl SnarlStyle {
             .unwrap_or_else(|| Frame::window(ui.style()))
     }
 
-    fn get_header_frame(&self, scale: f32, ui: &Ui) -> Frame {
-        self.header_frame
-            .zoomed(scale)
-            .unwrap_or_else(|| self.get_node_frame(scale, ui).shadow(Shadow::NONE))
-    }
-
     fn get_centering(&self) -> bool {
         self.centering.unwrap_or(true)
     }
@@ -465,7 +444,6 @@ impl SnarlStyle {
             max_scale: None,
             scale_velocity: None,
             node_frame: None,
-            header_frame: None,
             centering: None,
             select_stoke: None,
             select_fill: None,
@@ -564,7 +542,6 @@ impl<T> Snarl<T> {
             let wire_frame_size = style.get_wire_frame_size(snarl_state.scale(), ui);
             let wire_width = style.get_wire_width(snarl_state.scale(), ui);
             let node_frame = style.get_node_frame(snarl_state.scale(), ui);
-            let header_frame = style.get_header_frame(snarl_state.scale(), ui);
 
             let wire_shape_idx = match style.get_wire_layer() {
                 WireLayer::BehindNodes => Some(ui.painter().add(Shape::Noop)),
@@ -608,7 +585,6 @@ impl<T> Snarl<T> {
                     style,
                     snarl_id,
                     &node_frame,
-                    &header_frame,
                     &mut input_info,
                     &input,
                     &mut output_info,
@@ -976,7 +952,6 @@ impl<T> Snarl<T> {
         style: &SnarlStyle,
         snarl_id: Id,
         node_frame: &Frame,
-        header_frame: &Frame,
         input_positions: &mut HashMap<InPinId, PinResponse>,
         input: &Input,
         output_positions: &mut HashMap<OutPinId, PinResponse>,
@@ -1113,6 +1088,8 @@ impl<T> Snarl<T> {
             if (openness < 1.0 && open) || (openness > 0.0 && !open) {
                 ui.ctx().request_repaint();
             }
+
+            let header_frame = viewer.header_frame(node, ui, snarl_state.scale(), self);
 
             // Pins are placed under the header and must not go outside of the header frame.
             let payload_rect = Rect::from_min_max(
@@ -1492,6 +1469,11 @@ impl<T> Snarl<T> {
                         if r.clicked_by(PointerButton::Primary) {
                             // Toggle node's openness.
                             self.open_node(node, !open);
+                            if open {
+                                viewer.on_expand(node, self);
+                            } else {
+                                viewer.on_collapse(node, self);
+                            }
                         }
                     }
 

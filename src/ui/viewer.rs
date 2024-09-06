@@ -1,4 +1,4 @@
-use egui::{Pos2, Rect, Ui};
+use egui::{Frame, Pos2, Rect, Ui};
 
 use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
@@ -25,6 +25,18 @@ pub trait SnarlViewer<T> {
     ) {
         let _ = (inputs, outputs, scale);
         ui.label(self.title(&snarl[node]));
+    }
+
+    /// Returns the frame that the node will use
+    fn header_frame(
+        &mut self,
+        node: NodeId,
+        ui: &mut Ui,
+        scale: f32,
+        snarl: &mut Snarl<T>,
+    ) -> Frame {
+        let _ = (node, scale, snarl);
+        Frame::side_top_panel(ui.style())
     }
 
     /// Returns number of output pins of the node.
@@ -239,5 +251,17 @@ pub trait SnarlViewer<T> {
     #[inline]
     fn drop_inputs(&mut self, pin: &InPin, snarl: &mut Snarl<T>) {
         snarl.drop_inputs(pin.id);
+    }
+
+    /// Is ran when a node is collapsed
+    /// By default this does nothing
+    fn on_collapse(&mut self, node: NodeId, snarl: &mut Snarl<T>) {
+        let _ = (node, snarl);
+    }
+
+    /// Is ran when a node is expanded
+    /// By default this does nothing
+    fn on_expand(&mut self, node: NodeId, snarl: &mut Snarl<T>) {
+        let _ = (node, snarl);
     }
 }

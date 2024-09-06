@@ -1,4 +1,4 @@
-workspace = { members = ["demo"] }
+
 [package]
 name = "egui-snarl"
 version = "0.4.3"
