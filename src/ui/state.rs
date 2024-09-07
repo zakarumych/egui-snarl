@@ -172,6 +172,9 @@ pub struct SnarlState {
 
     /// Set of currently selected nodes.
     selected_nodes: HashSet<NodeId>,
+
+    /// Whether or not a node is currently hovered
+    over_node: bool,
 }
 
 #[derive(Clone)]
@@ -184,6 +187,7 @@ struct SnarlStateData {
     draw_order: Vec<NodeId>,
     rect_selection: Option<RectSelect>,
     selected_nodes: HashSet<NodeId>,
+    over_node: bool,
 }
 
 impl SnarlState {
@@ -221,6 +225,7 @@ impl SnarlState {
             draw_order: data.draw_order,
             rect_selection: data.rect_selection,
             selected_nodes: data.selected_nodes,
+            over_node: data.over_node,
         }
     }
 
@@ -260,6 +265,7 @@ impl SnarlState {
             draw_order: Vec::new(),
             rect_selection: None,
             selected_nodes: HashSet::default(),
+            over_node: false,
         }
     }
 
@@ -278,6 +284,7 @@ impl SnarlState {
                         draw_order: self.draw_order,
                         rect_selection: self.rect_selection,
                         selected_nodes: self.selected_nodes,
+                        over_node: self.over_node,
                     },
                 )
             });
@@ -301,8 +308,18 @@ impl SnarlState {
     }
 
     #[inline(always)]
+    pub fn node_hovered(&self) -> bool {
+        self.over_node
+    }
+
+    #[inline(always)]
     pub fn set_scale(&mut self, scale: f32) {
         self.target_scale = scale;
+        self.dirty = true;
+    }
+    #[inline(always)]
+    pub fn set_node_hovered(&mut self, hovered: bool) {
+        self.over_node = hovered;
         self.dirty = true;
     }
 

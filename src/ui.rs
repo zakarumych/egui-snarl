@@ -238,6 +238,10 @@ pub struct SnarlStyle {
     )]
     pub select_style: Option<SelectionStyle>,
 
+    /// Flag to prevent scrolling when hovering over a node to affect zoom
+    /// defaults to true, which allows scrolling and zooming
+    pub allow_scroll_over_node: Option<bool>,
+
     #[doc(hidden)]
     #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
@@ -450,6 +454,8 @@ impl SnarlStyle {
             select_rect_contained: None,
             select_style: None,
 
+            allow_scroll_over_node: None,
+
             _non_exhaustive: (),
         }
     }
@@ -551,7 +557,10 @@ impl<T> Snarl<T> {
             // Zooming
             match input.hover_pos {
                 Some(hover_pos) if viewport.contains(hover_pos) => {
-                    if input.scroll_delta != 0.0 {
+                    if input.scroll_delta != 0.0
+                        && (!snarl_state.node_hovered()
+                            || style.allow_scroll_over_node.unwrap_or(true))
+                    {
                         let new_scale = (snarl_state.scale()
                             * (1.0 + input.scroll_delta * style.get_scale_velocity()))
                         .clamp(style.get_min_scale(), style.get_max_scale());
@@ -561,6 +570,7 @@ impl<T> Snarl<T> {
                 }
                 _ => {}
             }
+            snarl_state.set_node_hovered(false);
 
             let mut input_info = HashMap::new();
             let mut output_info = HashMap::new();
@@ -1534,6 +1544,9 @@ impl<T> Snarl<T> {
         ui.ctx().request_repaint();
 
         self.nodes[node.0].last_size = body_size;
+        if !snarl_state.node_hovered() {
+            snarl_state.set_node_hovered(r.response.hovered());
+        }
 
         Some(DrawNodeResponse {
             node_moved,
