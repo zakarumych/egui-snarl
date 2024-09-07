@@ -963,6 +963,7 @@ impl<T> Snarl<T> {
             pos,
             open,
             ref value,
+            last_size: _,
         } = self.nodes[node.0];
 
         let viewport = ui.max_rect();
@@ -1075,6 +1076,7 @@ impl<T> Snarl<T> {
         );
 
         let mut new_pins_size = Vec2::ZERO;
+        let mut body_size = Vec2::ZERO;
 
         let r = node_frame.show(node_ui, |ui| {
             let min_pin_y = node_rect.min.y + node_state.header_height() * 0.5;
@@ -1133,6 +1135,7 @@ impl<T> Snarl<T> {
                         // If removed
                         return;
                     }
+                    body_size.x += ui.min_rect().size().x;
 
                     let y1 = ui.min_rect().max.y;
 
@@ -1256,6 +1259,7 @@ impl<T> Snarl<T> {
                         // If removed
                         return;
                     }
+                    body_size.x += ui.min_rect().size().x;
 
                     let y1 = ui.min_rect().max.y;
 
@@ -1386,13 +1390,14 @@ impl<T> Snarl<T> {
 
                 body_rect = body_ui.min_rect();
                 ui.expand_to_include_rect(body_rect.intersect(payload_clip_rect));
-                let body_size = body_rect.size();
-                node_state.set_body_width(body_size.x);
+                let body_size_ = body_rect.size();
+                node_state.set_body_width(body_size_.x);
 
-                new_pins_size.x += body_size.x + ui.spacing().item_spacing.x;
+                new_pins_size.x += body_size_.x + ui.spacing().item_spacing.x;
                 new_pins_size.y = f32::max(new_pins_size.y, body_size.y);
 
                 pins_bottom = f32::max(pins_bottom, body_rect.bottom());
+                body_size += body_size_;
 
                 if !self.nodes.contains(node.0) {
                     // If removed
@@ -1527,6 +1532,9 @@ impl<T> Snarl<T> {
 
         node_state.store(ui.ctx());
         ui.ctx().request_repaint();
+
+        self.nodes[node.0].last_size = body_size;
+
         Some(DrawNodeResponse {
             node_moved,
             node_to_top,

@@ -14,7 +14,7 @@ pub mod ui;
 
 use std::ops::{Index, IndexMut};
 
-use egui::{ahash::HashSet, Pos2};
+use egui::{ahash::HashSet, Pos2, Vec2};
 use slab::Slab;
 
 impl<T> Default for Snarl<T> {
@@ -47,6 +47,9 @@ pub struct Node<T> {
     /// Position of the top-left corner of the node.
     /// This does not include frame margin.
     pub pos: egui::Pos2,
+
+    /// Last size of this node
+    pub last_size: egui::Vec2,
 
     /// Flag indicating that the node is open - not collapsed.
     pub open: bool,
@@ -237,6 +240,7 @@ impl<T> Snarl<T> {
             value: node,
             pos,
             open: true,
+            last_size: Vec2::new(0., 0.),
         });
 
         NodeId(idx)
@@ -257,6 +261,7 @@ impl<T> Snarl<T> {
             value: node,
             pos,
             open: false,
+            last_size: Vec2::new(0., 0.),
         });
 
         NodeId(idx)
