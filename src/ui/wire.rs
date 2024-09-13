@@ -693,7 +693,7 @@ fn draw_axis_aligned(
     to: Pos2,
     stroke: Stroke,
 ) {
-    let aabb = Rect::from_min_max(from, to);
+    let aabb = Rect::from_two_pos(from, to);
 
     if !ui.is_rect_visible(aabb) {
         return;
