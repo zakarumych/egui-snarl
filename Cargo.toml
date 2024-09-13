@@ -6,6 +6,8 @@ edition = "2021"
 description = "Node-graphs for egui"
 license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/egui-snarl"
+repository = "https://github.com/zakarumych/egui-snarl"
+readme = "README.md"
 keywords = ["egui", "node", "graph", "ui", "node-graph"]
 categories = ["gui", "visualization"]
 
