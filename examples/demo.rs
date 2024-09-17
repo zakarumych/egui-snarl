@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use eframe::{App, CreationContext};
-use egui::{Color32, Ui};
+use egui::{Color32, Id, Ui};
 use egui_snarl::{
     ui::{AnyPins, PinInfo, SnarlStyle, SnarlViewer, WireStyle},
     InPin, InPinId, NodeId, OutPin, OutPinId, Snarl,
@@ -34,6 +34,16 @@ enum DemoNode {
 }
 
 impl DemoNode {
+    fn name(&self) -> &str {
+        match self {
+            DemoNode::Sink => "Sink",
+            DemoNode::Number(_) => "Number",
+            DemoNode::String(_) => "String",
+            DemoNode::ShowImage(_) => "ShowImage",
+            DemoNode::ExprNode(_) => "ExprNode",
+        }
+    }
+
     fn number_out(&self) -> f64 {
         match self {
             DemoNode::Number(value) => *value,
@@ -927,6 +937,7 @@ impl Expr {
 pub struct DemoApp {
     snarl: Snarl<DemoNode>,
     style: SnarlStyle,
+    snarl_ui_id: Option<Id>,
 }
 
 impl DemoApp {
@@ -953,7 +964,7 @@ impl DemoApp {
         };
         // let style = SnarlStyle::new();
 
-        DemoApp { snarl, style }
+        DemoApp { snarl, style, snarl_ui_id: None }
     }
 }
 
@@ -987,9 +998,44 @@ impl App for DemoApp {
             });
         });
 
+        if let Some(snarl_ui_id) = self.snarl_ui_id {
+            egui::SidePanel::right("selected-list").show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.strong("Selected nodes");
+
+                    let selected = Snarl::<DemoNode>::get_selected_nodes_at("snarl", snarl_ui_id, ui.ctx());
+                    let mut selected = selected
+                        .into_iter()
+                        .map(|id| (id, &self.snarl[id]))
+                        .collect::<Vec<_>>();
+
+                    selected.sort_by_key(|(id, _)| *id);
+
+                    let mut remove = None;
+
+                    for (id, node) in selected {
+                        ui.horizontal(|ui| {
+                            ui.label(format!("{:?}", id));
+                            ui.label(node.name());
+                            ui.add_space(ui.spacing().item_spacing.x);
+                            if ui.button("Remove").clicked() {
+                                remove = Some(id);
+                            }
+                        });
+                    }
+
+                    if let Some(id) = remove {
+                        self.snarl.remove_node(id);
+                    }
+                });
+            });
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
+            self.snarl_ui_id = Some(ui.id());
+
             self.snarl
-                .show(&mut DemoViewer, &self.style, egui::Id::new("snarl"), ui);
+                .show(&mut DemoViewer, &self.style, "snarl", ui);
         });
     }
 

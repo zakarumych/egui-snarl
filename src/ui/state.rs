@@ -1,4 +1,6 @@
-use egui::{ahash::HashSet, style::Spacing, Align, Context, Id, Pos2, Rect, Vec2};
+use std::hash::Hash;
+
+use egui::{ahash::HashSet, style::Spacing, Align, Context, Id, Pos2, Rect, Ui, Vec2};
 
 use crate::{InPinId, NodeId, OutPinId, Snarl};
 
@@ -170,20 +172,100 @@ pub struct SnarlState {
     /// Active rect selection.
     rect_selection: Option<RectSelect>,
 
-    /// Set of currently selected nodes.
-    selected_nodes: HashSet<NodeId>,
+    /// List of currently selected nodes.
+    selected_nodes: Vec<NodeId>,
 }
 
 #[derive(Clone)]
+struct DrawOrder(Vec<NodeId>);
+
+#[derive(Clone)]
+struct SelectedNodes(Vec<NodeId>);
+
 struct SnarlStateData {
     offset: Vec2,
     scale: f32,
     target_scale: f32,
-    new_wires: Option<NewWires>,
     is_link_menu_open: bool,
     draw_order: Vec<NodeId>,
+    new_wires: Option<NewWires>,
     rect_selection: Option<RectSelect>,
-    selected_nodes: HashSet<NodeId>,
+    selected_nodes: Vec<NodeId>,
+}
+
+#[derive(Clone)]
+struct SnarlStateDataHeader {
+    offset: Vec2,
+    scale: f32,
+    target_scale: f32,
+    is_link_menu_open: bool,
+}
+
+impl SnarlStateData {
+    fn save(self, cx: &Context, id: Id) {
+        cx.data_mut(|d| {
+            d.insert_temp(id, SnarlStateDataHeader {
+                offset: self.offset,
+                scale: self.scale,
+                target_scale: self.target_scale,
+                is_link_menu_open: self.is_link_menu_open,
+            });
+
+            if let Some(new_wires) = self.new_wires {
+                d.insert_temp::<NewWires>(id, new_wires);
+            } else {
+                d.remove::<NewWires>(id);
+            }
+
+            if let Some(rect_selection) = self.rect_selection {
+                d.insert_temp::<RectSelect>(id, rect_selection);
+            } else {
+                d.remove::<RectSelect>(id);
+            }
+
+            if !self.selected_nodes.is_empty() {
+                d.insert_temp::<SelectedNodes>(id, SelectedNodes(self.selected_nodes));
+            } else {
+                d.remove::<SelectedNodes>(id);
+            }
+
+            if !self.draw_order.is_empty() {
+                d.insert_temp::<DrawOrder>(id, DrawOrder(self.draw_order));
+            } else {
+                d.remove::<DrawOrder>(id);
+            }
+        });
+    }
+
+    fn load(cx: &Context, id: Id) -> Option<Self> {
+        cx.data(|d| {
+            let Some(small) = d.get_temp::<SnarlStateDataHeader>(id) else {
+                return None;
+            };
+            let new_wires = d.get_temp(id);
+            let rect_selection = d.get_temp(id);
+
+            let selected_nodes = d.get_temp(id).unwrap_or(SelectedNodes(Vec::new())).0;
+            let draw_order = d.get_temp(id).unwrap_or(DrawOrder(Vec::new())).0;
+
+            Some(SnarlStateData {
+                offset: small.offset,
+                scale: small.scale,
+                target_scale: small.target_scale,
+                is_link_menu_open: small.is_link_menu_open,
+                new_wires,
+                rect_selection,
+                selected_nodes,
+                draw_order,
+            })
+        })
+    }
+}
+
+fn prune_selected_nodes<T>(selected_nodes: &mut Vec<NodeId>, snarl: &Snarl<T>) -> bool {
+    let old_size = selected_nodes.len();
+    selected_nodes.retain(|node| snarl.nodes.contains(node.0));
+    old_size != selected_nodes.len()
 }
 
 impl SnarlState {
@@ -195,7 +277,7 @@ impl SnarlState {
         snarl: &Snarl<T>,
         style: &SnarlStyle,
     ) -> Self {
-        let Some(mut data) = cx.data_mut(|d| d.get_temp::<SnarlStateData>(id)) else {
+        let Some(mut data) = SnarlStateData::load(cx, id) else {
             return Self::initial(id, viewport, snarl, style);
         };
 
@@ -209,6 +291,8 @@ impl SnarlState {
             data.scale = new_scale;
             dirty = true;
         }
+
+        dirty |= prune_selected_nodes(&mut data.selected_nodes, snarl);
 
         SnarlState {
             offset: data.offset,
@@ -259,28 +343,26 @@ impl SnarlState {
             dirty: true,
             draw_order: Vec::new(),
             rect_selection: None,
-            selected_nodes: HashSet::default(),
+            selected_nodes: Vec::new(),
         }
     }
 
     #[inline(always)]
-    pub fn store(self, cx: &Context) {
+    pub fn store<T>(mut self, snarl: &Snarl<T>, cx: &Context) {
+        self.dirty |= prune_selected_nodes(&mut self.selected_nodes, snarl);
+
         if self.dirty {
-            cx.data_mut(|d| {
-                d.insert_temp(
-                    self.id,
-                    SnarlStateData {
-                        offset: self.offset,
-                        scale: self.scale,
-                        target_scale: self.target_scale,
-                        new_wires: self.new_wires,
-                        is_link_menu_open: self.is_link_menu_open,
-                        draw_order: self.draw_order,
-                        rect_selection: self.rect_selection,
-                        selected_nodes: self.selected_nodes,
-                    },
-                )
-            });
+            let data = SnarlStateData {
+                offset: self.offset,
+                scale: self.scale,
+                target_scale: self.target_scale,
+                new_wires: self.new_wires,
+                is_link_menu_open: self.is_link_menu_open,
+                draw_order: self.draw_order,
+                rect_selection: self.rect_selection,
+                selected_nodes: self.selected_nodes,
+            };
+            data.save(cx, self.id);
         }
     }
 
@@ -475,34 +557,54 @@ impl SnarlState {
         self.dirty = true;
     }
 
-    pub fn selected_nodes(&self) -> &HashSet<NodeId> {
+    pub fn selected_nodes(&self) -> &[NodeId] {
         &self.selected_nodes
     }
 
     pub fn select_one_node(&mut self, reset: bool, node: NodeId) {
         if reset {
-            self.deselect_all_nodes();
-        }
+            if self.selected_nodes[..] == [node] {
+                return;
+            }
 
-        self.dirty |= self.selected_nodes.insert(node);
+            self.deselect_all_nodes();
+            self.selected_nodes.push(node);
+            self.dirty = true;
+        } else {
+            if let Some(pos) = self.selected_nodes.iter().position(|n| *n == node) {
+                if pos == self.selected_nodes.len() - 1 {
+                    return;
+                }
+                self.selected_nodes.remove(pos);
+            }
+            self.selected_nodes.push(node);
+            self.dirty = true;
+        }
     }
 
     pub fn select_many_nodes(&mut self, reset: bool, nodes: impl Iterator<Item = NodeId>) {
         if reset {
             self.deselect_all_nodes();
+            self.selected_nodes.extend(nodes);
+            self.dirty = true;
+        } else {
+            nodes.for_each(|node| self.select_one_node(false, node));
         }
-
-        self.selected_nodes.extend(nodes);
-        self.dirty |= !self.selected_nodes.is_empty();
     }
 
     pub fn deselect_one_node(&mut self, node: NodeId) {
-        self.dirty |= self.selected_nodes.remove(&node);
+        if let Some(pos) = self.selected_nodes.iter().position(|n| *n == node) {
+            self.selected_nodes.remove(pos);
+            self.dirty = true;
+        }
     }
 
     pub fn deselect_many_nodes(&mut self, nodes: impl Iterator<Item = NodeId>) {
         for node in nodes {
-            self.dirty |= self.selected_nodes.remove(&node);
+            if let Some(pos) = self.selected_nodes.iter().position(|n| *n == node) {
+                self.selected_nodes.remove(pos);
+                self.dirty = true;
+            }
         }
     }
 
@@ -538,5 +640,28 @@ impl SnarlState {
     pub fn rect_selection(&self) -> Option<Rect> {
         let rect = self.rect_selection?;
         Some(Rect::from_two_pos(rect.origin, rect.current))
+    }
+}
+
+impl<T> Snarl<T> {
+    /// Returns nodes selected in the UI.
+    /// 
+    /// Use `id_source` and [`Ui`] that were used in [`Snarl::show`] method.
+    /// 
+    /// If same [`Ui`] is not available, use [`Snarl::get_selected_nodes_at`] and provide `id` of the [`Ui`] used in [`Snarl::show`] method.
+    pub fn get_selected_nodes(id_source: impl Hash, ui: &mut Ui) -> Vec<NodeId> {
+        Self::get_selected_nodes_at(id_source, ui.id(), ui.ctx())
+    }
+
+    /// Returns nodes selected in the UI.
+    /// 
+    /// Use `id_source` as well as [`Id`] and [`Context`] of the [`Ui`] that were used in [`Snarl::show`] method.
+    pub fn get_selected_nodes_at(id_source: impl Hash, id: Id, cx: &Context) -> Vec<NodeId> {
+        let snarl_id = id.with(id_source);
+
+        cx.data(|d| {
+            d.get_temp::<SelectedNodes>(snarl_id)
+                .unwrap_or(SelectedNodes(Vec::new())).0
+        })
     }
 }

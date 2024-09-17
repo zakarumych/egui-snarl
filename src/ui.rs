@@ -599,6 +599,10 @@ impl<T> Snarl<T> {
             let mut node_rects = Vec::new();
 
             for node_idx in draw_order {
+                if !self.nodes.contains(node_idx.0) {
+                    continue;
+                }
+
                 // show_node(node_idx);
                 let response = self.draw_node(
                     ui,
@@ -941,24 +945,28 @@ impl<T> Snarl<T> {
             ui.advance_cursor_after_rect(Rect::from_min_size(viewport.min, Vec2::ZERO));
 
             if let Some(node) = node_to_top {
-                ui.ctx().request_repaint();
-                snarl_state.node_to_top(node);
-            }
-
-            if let Some((node, delta)) = node_moved {
-                ui.ctx().request_repaint();
-                if snarl_state.selected_nodes().contains(&node) {
-                    for node in snarl_state.selected_nodes() {
-                        let node = &mut self.nodes[node.0];
-                        node.pos += delta;
-                    }
-                } else {
-                    let node = &mut self.nodes[node.0];
-                    node.pos += delta;
+                if self.nodes.contains(node.0) {
+                    ui.ctx().request_repaint();
+                    snarl_state.node_to_top(node);
                 }
             }
 
-            snarl_state.store(ui.ctx());
+            if let Some((node, delta)) = node_moved {
+                if self.nodes.contains(node.0) {
+                    ui.ctx().request_repaint();
+                    if snarl_state.selected_nodes().contains(&node) {
+                        for node in snarl_state.selected_nodes() {
+                            let node = &mut self.nodes[node.0];
+                            node.pos += delta;
+                        }
+                    } else {
+                        let node = &mut self.nodes[node.0];
+                        node.pos += delta;
+                    }
+                }
+            }
+
+            snarl_state.store(self, ui.ctx());
         });
     }
 
