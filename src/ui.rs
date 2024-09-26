@@ -573,18 +573,17 @@ impl<T> Snarl<T> {
 
             // Zooming
             match input.hover_pos {
-                Some(hover_pos) if viewport.contains(hover_pos) => {
+                Some(hover_pos) if viewport.contains(hover_pos) && ui.rect_contains_pointer(viewport) => {
                     if input.scroll_delta != 0.0 {
                         let new_scale = (snarl_state.scale()
                             * (1.0 + input.scroll_delta * style.get_scale_velocity()))
-                        .clamp(style.get_min_scale(), style.get_max_scale());
+                            .clamp(style.get_min_scale(), style.get_max_scale());
 
                         snarl_state.set_scale(new_scale);
                     }
                 }
                 _ => {}
             }
-
             let mut input_info = HashMap::new();
             let mut output_info = HashMap::new();
 
