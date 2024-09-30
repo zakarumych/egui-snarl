@@ -61,6 +61,7 @@ Because that's how any complex visual graph looks like.
 # Example
 
 `demo` example shows some of the features of the crate.
+Run it with `cargo run --example=demo --features="serde egui-probe"`.
 
 [![demo](./demo.png)](./demo.png)
 
