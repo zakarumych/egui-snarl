@@ -521,13 +521,13 @@ impl<T> Snarl<T> {
 
     /// Render [`Snarl`] using given viewer and style into the [`Ui`].
 
-    pub fn show<V>(&mut self, viewer: &mut V, style: &SnarlStyle, id_source: impl Hash, ui: &mut Ui)
+    pub fn show<V>(&mut self, viewer: &mut V, style: &SnarlStyle, id_salt: impl Hash, ui: &mut Ui)
     where
         V: SnarlViewer<T>,
     {
         #![allow(clippy::too_many_lines)]
 
-        let snarl_id = ui.make_persistent_id(id_source);
+        let snarl_id = ui.make_persistent_id(id_salt);
 
         // Draw background pattern.
         let bg_frame = style.get_bg_frame(ui);
@@ -574,11 +574,13 @@ impl<T> Snarl<T> {
 
             // Zooming
             match input.hover_pos {
-                Some(hover_pos) if viewport.contains(hover_pos) && ui.rect_contains_pointer(viewport) => {
+                Some(hover_pos)
+                    if viewport.contains(hover_pos) && ui.rect_contains_pointer(viewport) =>
+                {
                     if input.scroll_delta != 0.0 {
                         let new_scale = (snarl_state.scale()
                             * (1.0 + input.scroll_delta * style.get_scale_velocity()))
-                            .clamp(style.get_min_scale(), style.get_max_scale());
+                        .clamp(style.get_min_scale(), style.get_max_scale());
 
                         snarl_state.set_scale(new_scale);
                     }

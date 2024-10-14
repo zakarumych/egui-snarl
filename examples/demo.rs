@@ -964,7 +964,11 @@ impl DemoApp {
         };
         // let style = SnarlStyle::new();
 
-        DemoApp { snarl, style, snarl_ui_id: None }
+        DemoApp {
+            snarl,
+            style,
+            snarl_ui_id: None,
+        }
     }
 }
 
@@ -984,7 +988,7 @@ impl App for DemoApp {
                     ui.add_space(16.0);
                 }
 
-                egui::widgets::global_dark_light_mode_switch(ui);
+                egui::widgets::global_theme_preference_switch(ui);
 
                 if ui.button("Clear All").clicked() {
                     self.snarl = Default::default();
@@ -1003,7 +1007,8 @@ impl App for DemoApp {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.strong("Selected nodes");
 
-                    let selected = Snarl::<DemoNode>::get_selected_nodes_at("snarl", snarl_ui_id, ui.ctx());
+                    let selected =
+                        Snarl::<DemoNode>::get_selected_nodes_at("snarl", snarl_ui_id, ui.ctx());
                     let mut selected = selected
                         .into_iter()
                         .map(|id| (id, &self.snarl[id]))
@@ -1034,8 +1039,7 @@ impl App for DemoApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             self.snarl_ui_id = Some(ui.id());
 
-            self.snarl
-                .show(&mut DemoViewer, &self.style, "snarl", ui);
+            self.snarl.show(&mut DemoViewer, &self.style, "snarl", ui);
         });
     }
 

@@ -204,12 +204,15 @@ struct SnarlStateDataHeader {
 impl SnarlStateData {
     fn save(self, cx: &Context, id: Id) {
         cx.data_mut(|d| {
-            d.insert_temp(id, SnarlStateDataHeader {
-                offset: self.offset,
-                scale: self.scale,
-                target_scale: self.target_scale,
-                is_link_menu_open: self.is_link_menu_open,
-            });
+            d.insert_temp(
+                id,
+                SnarlStateDataHeader {
+                    offset: self.offset,
+                    scale: self.scale,
+                    target_scale: self.target_scale,
+                    is_link_menu_open: self.is_link_menu_open,
+                },
+            );
 
             if let Some(new_wires) = self.new_wires {
                 d.insert_temp::<NewWires>(id, new_wires);
@@ -645,23 +648,24 @@ impl SnarlState {
 
 impl<T> Snarl<T> {
     /// Returns nodes selected in the UI.
-    /// 
-    /// Use `id_source` and [`Ui`] that were used in [`Snarl::show`] method.
-    /// 
+    ///
+    /// Use `id_salt` and [`Ui`] that were used in [`Snarl::show`] method.
+    ///
     /// If same [`Ui`] is not available, use [`Snarl::get_selected_nodes_at`] and provide `id` of the [`Ui`] used in [`Snarl::show`] method.
-    pub fn get_selected_nodes(id_source: impl Hash, ui: &mut Ui) -> Vec<NodeId> {
-        Self::get_selected_nodes_at(id_source, ui.id(), ui.ctx())
+    pub fn get_selected_nodes(id_salt: impl Hash, ui: &mut Ui) -> Vec<NodeId> {
+        Self::get_selected_nodes_at(id_salt, ui.id(), ui.ctx())
     }
 
     /// Returns nodes selected in the UI.
-    /// 
-    /// Use `id_source` as well as [`Id`] and [`Context`] of the [`Ui`] that were used in [`Snarl::show`] method.
-    pub fn get_selected_nodes_at(id_source: impl Hash, id: Id, cx: &Context) -> Vec<NodeId> {
-        let snarl_id = id.with(id_source);
+    ///
+    /// Use `id_salt` as well as [`Id`] and [`Context`] of the [`Ui`] that were used in [`Snarl::show`] method.
+    pub fn get_selected_nodes_at(id_salt: impl Hash, id: Id, cx: &Context) -> Vec<NodeId> {
+        let snarl_id = id.with(id_salt);
 
         cx.data(|d| {
             d.get_temp::<SelectedNodes>(snarl_id)
-                .unwrap_or(SelectedNodes(Vec::new())).0
+                .unwrap_or(SelectedNodes(Vec::new()))
+                .0
         })
     }
 }

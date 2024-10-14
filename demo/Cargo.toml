@@ -10,7 +10,7 @@ path = "../examples/demo.rs"
 
 [dependencies]
 egui = { version = "0.29" }
-egui-probe = { version = "0.5", features = ["derive"] }
+egui-probe = { version = "0.6", features = ["derive"] }
 eframe = { version = "0.29", features = ["serde", "persistence"] }
 egui_extras = { version = "0.29", features = ["all_loaders"] }
 syn = { version = "2.0", features = ["extra-traits"] }
