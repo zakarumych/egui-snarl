@@ -4,7 +4,8 @@ use std::{collections::HashMap, hash::Hash};
 
 use egui::{
     collapsing_header::paint_default_icon, epaint::Shadow, pos2, vec2, Align, Color32, Frame, Id,
-    Layout, Margin, Modifiers, PointerButton, Pos2, Rect, Rounding, Sense, Shape, Stroke, Ui, Vec2,
+    Layout, Margin, Modifiers, PointerButton, Pos2, Rect, Rounding, Sense, Shape, Stroke, Ui,
+    UiBuilder, Vec2,
 };
 
 use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl};
@@ -1099,11 +1100,11 @@ impl<T> Snarl<T> {
             return None;
         }
 
-        let node_ui = &mut ui.child_ui_with_id_source(
-            node_frame_rect,
-            Layout::top_down(Align::Center),
-            node_id,
-            None,
+        let node_ui = &mut ui.new_child(
+            UiBuilder::new()
+                .max_rect(node_frame_rect)
+                .layout(Layout::top_down(Align::Center))
+                .id_salt(node_id),
         );
 
         let mut new_pins_size = Vec2::ZERO;
@@ -1140,11 +1141,11 @@ impl<T> Snarl<T> {
             // Show input pins.
 
             // Input pins on the left.
-            let inputs_ui = &mut ui.child_ui_with_id_source(
-                payload_rect,
-                Layout::top_down(Align::Min),
-                "inputs",
-                None,
+            let inputs_ui = &mut ui.new_child(
+                UiBuilder::new()
+                    .max_rect(payload_rect)
+                    .layout(Layout::top_down(Align::Min))
+                    .id_salt("inputs"),
             );
 
             inputs_ui.set_clip_rect(payload_clip_rect.intersect(viewport));
@@ -1261,11 +1262,11 @@ impl<T> Snarl<T> {
 
             // Outputs are placed under the header and must not go outside of the header frame.
 
-            let outputs_ui = &mut ui.child_ui_with_id_source(
-                payload_rect,
-                Layout::top_down(Align::Max),
-                "outputs",
-                None,
+            let outputs_ui = &mut ui.new_child(
+                UiBuilder::new()
+                    .max_rect(payload_rect)
+                    .layout(Layout::top_down(Align::Max))
+                    .id_salt("outputs"),
             );
 
             outputs_ui.set_clip_rect(payload_clip_rect.intersect(viewport));
@@ -1397,11 +1398,11 @@ impl<T> Snarl<T> {
                     Rect::from_min_max(pos2(body_left, body_top), pos2(body_right, body_bottom));
                 body_rect = node_state.align_body(body_rect);
 
-                let mut body_ui = ui.child_ui_with_id_source(
-                    body_rect,
-                    Layout::left_to_right(Align::Min),
-                    "body",
-                    None,
+                let mut body_ui = ui.new_child(
+                    UiBuilder::new()
+                        .max_rect(body_rect)
+                        .layout(Layout::left_to_right(Align::Min))
+                        .id_salt("body"),
                 );
                 body_ui.set_clip_rect(payload_clip_rect.intersect(viewport));
 
@@ -1443,11 +1444,11 @@ impl<T> Snarl<T> {
 
                 footer_rect = node_state.align_footer(footer_rect);
 
-                let mut footer_ui = ui.child_ui_with_id_source(
-                    footer_rect,
-                    Layout::left_to_right(Align::Min),
-                    "footer",
-                    None,
+                let mut footer_ui = ui.new_child(
+                    UiBuilder::new()
+                        .max_rect(footer_rect)
+                        .layout(Layout::left_to_right(Align::Min))
+                        .id_salt("footer"),
                 );
                 footer_ui.set_clip_rect(payload_clip_rect.intersect(viewport));
 
@@ -1480,11 +1481,11 @@ impl<T> Snarl<T> {
             let mut header_frame_rect = Rect::NAN; //node_rect + header_frame.total_margin();
 
             // Show node's header
-            let header_ui: &mut Ui = &mut ui.child_ui_with_id_source(
-                node_rect + header_frame.total_margin(),
-                Layout::top_down(Align::Center),
-                "header",
-                None,
+            let header_ui: &mut Ui = &mut ui.new_child(
+                UiBuilder::new()
+                    .max_rect(node_rect + header_frame.total_margin())
+                    .layout(Layout::top_down(Align::Center))
+                    .id_salt("header"),
             );
 
             header_frame.show(header_ui, |ui: &mut Ui| {
