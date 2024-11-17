@@ -73,3 +73,7 @@ https://zakarumych.github.io/egui-snarl/
 Noise GUI by @attackgoat
 
 https://attackgoat.github.io/noise_gui/
+
+Codotaku Logic by @ilyas-taouaou made in a (livestream)[https://www.youtube.com/watch?v=zigPWkPm00U].
+
+https://github.com/ilyas-taouaou/codotaku_logic
