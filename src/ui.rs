@@ -101,6 +101,25 @@ pub struct SelectionStyle {
     pub stroke: Stroke,
 }
 
+/// Controls how pins are placed in the node.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
+pub enum PinPlacement {
+    /// Pins are placed inside the node frame.
+    #[default]
+    Inside,
+
+    /// Pins are placed on the edge of the node frame.
+    Edge,
+
+    /// Pins are placed outside the node frame.
+    Outside {
+        /// Margin between node frame and pins.
+        margin: f32,
+    },
+}
+
 /// Style for rendering Snarl.
 #[derive(Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -186,6 +205,13 @@ pub struct SnarlStyle {
         serde(skip_serializing_if = "Option::is_none", default)
     )]
     pub pin_shape: Option<PinShape>,
+
+    /// Placement of pins.
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    pub pin_placement: Option<PinPlacement>,
 
     /// Width of wires.
     #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
@@ -330,7 +356,7 @@ impl SnarlStyle {
     fn get_pin_size(&self, scale: f32, style: &Style) -> f32 {
         self.pin_size
             .zoomed(scale)
-            .unwrap_or_else(|| style.spacing.interact_size.y * 0.5)
+            .unwrap_or_else(|| style.spacing.interact_size.y * 0.6)
     }
 
     fn get_pin_fill(&self, style: &Style) -> Color32 {
@@ -349,16 +375,20 @@ impl SnarlStyle {
         self.pin_shape.unwrap_or(PinShape::Circle).into()
     }
 
+    fn get_pin_placement(&self) -> PinPlacement {
+        self.pin_placement.unwrap_or(PinPlacement::default())
+    }
+
     fn get_wire_width(&self, scale: f32, style: &Style) -> f32 {
         self.wire_width
             .zoomed(scale)
-            .unwrap_or(self.get_pin_size(scale, style) * 0.2)
+            .unwrap_or(self.get_pin_size(scale, style) * 0.1)
     }
 
     fn get_wire_frame_size(&self, scale: f32, style: &Style) -> f32 {
         self.wire_frame_size
             .zoomed(scale)
-            .unwrap_or(self.get_pin_size(scale, style) * 5.0)
+            .unwrap_or(self.get_pin_size(scale, style) * 3.0)
     }
 
     fn get_downscale_wire_frame(&self) -> bool {
@@ -509,6 +539,7 @@ impl SnarlStyle {
             pin_fill: None,
             pin_stroke: None,
             pin_shape: None,
+            pin_placement: None,
             wire_width: None,
             wire_frame_size: None,
             downscale_wire_frame: None,
@@ -733,8 +764,12 @@ impl<T> Snarl<T> {
             let mut wire_hit = false;
 
             for wire in self.wires.iter() {
-                let from_r = &output_info[&wire.out_pin];
-                let to_r = &input_info[&wire.in_pin];
+                let Some(from_r) = output_info.get(&wire.out_pin) else {
+                    continue;
+                };
+                let Some(to_r) = input_info.get(&wire.in_pin) else {
+                    continue;
+                };
 
                 if !wire_hit && !snarl_state.has_new_wires() && bg_r.hovered() && !bg_r.dragged() {
                     // Try to find hovered wire
@@ -1071,6 +1106,7 @@ impl<T> Snarl<T> {
         viewport: Rect,
         input_x: f32,
         min_pin_y: f32,
+        input_spacing: Option<f32>,
         snarl_state: &mut SnarlState,
         input: &Input,
         input_positions: &mut HashMap<InPinId, PinResponse>,
@@ -1094,8 +1130,9 @@ impl<T> Snarl<T> {
         for in_pin in inputs {
             // Show input pin.
             inputs_ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
-                // Allocate space for pin shape.
-                let (pin_id, _) = ui.allocate_space(vec2(pin_size * 1.5, pin_size * 1.5));
+                if let Some(input_spacing) = input_spacing {
+                    ui.allocate_space(vec2(input_spacing, pin_size));
+                }
 
                 let y0 = ui.cursor().min.y;
 
@@ -1116,11 +1153,15 @@ impl<T> Snarl<T> {
                 let pin_pos = pos2(input_x, y);
 
                 // Interact with pin shape.
+                ui.set_clip_rect(viewport);
+
                 let r = ui.interact(
                     Rect::from_center_size(pin_pos, vec2(pin_size, pin_size)),
-                    pin_id,
+                    ui.next_auto_id(),
                     Sense::click_and_drag(),
                 );
+
+                ui.skip_ahead_auto_ids(1);
 
                 if r.clicked_by(PointerButton::Secondary) {
                     if snarl_state.has_new_wires() {
@@ -1151,7 +1192,7 @@ impl<T> Snarl<T> {
                     drag_released = true;
                 }
 
-                let mut pin_size = pin_size;
+                let mut visual_pin_size = pin_size;
 
                 match input.hover_pos {
                     Some(hover_pos) if r.rect.contains(hover_pos) => {
@@ -1161,19 +1202,22 @@ impl<T> Snarl<T> {
                             snarl_state.remove_new_wire_in(in_pin.id);
                         }
                         pin_hovered = Some(AnyPin::In(in_pin.id));
-                        pin_size *= 1.2;
+                        visual_pin_size *= 1.2;
                     }
                     _ => {}
                 }
 
+                let mut pin_painter = ui.painter().clone();
+                pin_painter.set_clip_rect(viewport);
+
                 let pin_color = viewer.draw_input_pin(
                     in_pin,
                     &pin_info,
-                    pin_pos,
-                    pin_size,
+                    r.rect.center(),
+                    visual_pin_size,
                     style,
                     ui.style(),
-                    ui.painter(),
+                    &pin_painter,
                     snarl_state.scale(),
                     self,
                 );
@@ -1181,7 +1225,7 @@ impl<T> Snarl<T> {
                 input_positions.insert(
                     in_pin.id,
                     PinResponse {
-                        pos: pin_pos,
+                        pos: r.rect.center(),
                         pin_color,
                         wire_style: pin_info.wire_style,
                     },
@@ -1212,6 +1256,7 @@ impl<T> Snarl<T> {
         viewport: Rect,
         output_x: f32,
         min_pin_y: f32,
+        output_spacing: Option<f32>,
         snarl_state: &mut SnarlState,
         input: &Input,
         output_positions: &mut HashMap<OutPinId, PinResponse>,
@@ -1236,8 +1281,9 @@ impl<T> Snarl<T> {
             // Show output pin.
             outputs_ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
                 // Allocate space for pin shape.
-
-                let (pin_id, _) = ui.allocate_space(vec2(pin_size * 1.5, pin_size * 1.5));
+                if let Some(output_spacing) = output_spacing {
+                    ui.allocate_space(vec2(output_spacing, pin_size));
+                }
 
                 let y0 = ui.cursor().min.y;
 
@@ -1257,11 +1303,15 @@ impl<T> Snarl<T> {
 
                 let pin_pos = pos2(output_x, y);
 
+                ui.set_clip_rect(viewport);
+
                 let r = ui.interact(
                     Rect::from_center_size(pin_pos, vec2(pin_size, pin_size)),
-                    pin_id,
+                    ui.next_auto_id(),
                     Sense::click_and_drag(),
                 );
+
+                ui.skip_ahead_auto_ids(1);
 
                 if r.clicked_by(PointerButton::Secondary) {
                     if snarl_state.has_new_wires() {
@@ -1293,7 +1343,7 @@ impl<T> Snarl<T> {
                     drag_released = true;
                 }
 
-                let mut pin_size = pin_size;
+                let mut visual_pin_size = pin_size;
                 match input.hover_pos {
                     Some(hover_pos) if r.rect.contains(hover_pos) => {
                         if input.modifiers.shift {
@@ -1302,19 +1352,22 @@ impl<T> Snarl<T> {
                             snarl_state.remove_new_wire_out(out_pin.id);
                         }
                         pin_hovered = Some(AnyPin::Out(out_pin.id));
-                        pin_size *= 1.2;
+                        visual_pin_size *= 1.2;
                     }
                     _ => {}
                 }
 
+                let mut pin_painter = ui.painter().clone();
+                pin_painter.set_clip_rect(viewport);
+
                 let pin_color = viewer.draw_output_pin(
                     out_pin,
                     &pin_info,
-                    pin_pos,
-                    pin_size,
+                    r.rect.center(),
+                    visual_pin_size,
                     style,
                     ui.style(),
-                    ui.painter(),
+                    &pin_painter,
                     snarl_state.scale(),
                     self,
                 );
@@ -1322,7 +1375,7 @@ impl<T> Snarl<T> {
                 output_positions.insert(
                     out_pin.id,
                     PinResponse {
-                        pos: pin_pos,
+                        pos: r.rect.center(),
                         pin_color,
                         wire_style: pin_info.wire_style,
                     },
@@ -1444,7 +1497,11 @@ impl<T> Snarl<T> {
             );
         }
 
+        // Size of the pin.
+        // Side of the square or diameter of the circle.
         let pin_size = style.get_pin_size(snarl_state.scale(), ui.style()).max(0.0);
+
+        let pin_placement = style.get_pin_placement();
 
         let header_drag_space = style
             .get_header_drag_space(snarl_state.scale(), ui.style())
@@ -1520,9 +1577,45 @@ impl<T> Snarl<T> {
         let r = node_frame.show(node_ui, |ui| {
             let min_pin_y = node_rect.min.y + node_state.header_height() * 0.5;
 
-            let input_x = node_frame_rect.left() + node_frame.inner_margin.left + pin_size;
+            // Input pins' center side by X axis.
+            let input_x = match pin_placement {
+                PinPlacement::Inside => {
+                    node_frame_rect.left() + node_frame.inner_margin.left + pin_size * 0.5
+                }
+                PinPlacement::Edge => node_frame_rect.left(),
+                PinPlacement::Outside { margin } => {
+                    node_frame_rect.left() - margin - pin_size * 0.5
+                }
+            };
 
-            let output_x = node_frame_rect.right() - node_frame.inner_margin.right - pin_size;
+            // Input pins' spacing required.
+            let input_spacing = match pin_placement {
+                PinPlacement::Inside => Some(pin_size),
+                PinPlacement::Edge => {
+                    Some((pin_size * 0.5 - node_frame.inner_margin.left).max(0.0))
+                }
+                PinPlacement::Outside { .. } => None,
+            };
+
+            // Output pins' center side by X axis.
+            let output_x = match pin_placement {
+                PinPlacement::Inside => {
+                    node_frame_rect.right() - node_frame.inner_margin.right - pin_size * 0.5
+                }
+                PinPlacement::Edge => node_frame_rect.right(),
+                PinPlacement::Outside { margin } => {
+                    node_frame_rect.right() + margin + pin_size * 0.5
+                }
+            };
+
+            // Output pins' spacing required.
+            let output_spacing = match pin_placement {
+                PinPlacement::Inside => Some(pin_size),
+                PinPlacement::Edge => {
+                    Some((pin_size * 0.5 - node_frame.inner_margin.right).max(0.0))
+                }
+                PinPlacement::Outside { .. } => None,
+            };
 
             // Input/output pin block
 
@@ -1565,6 +1658,7 @@ impl<T> Snarl<T> {
                         viewport,
                         input_x,
                         min_pin_y,
+                        input_spacing,
                         snarl_state,
                         input,
                         input_positions,
@@ -1598,6 +1692,7 @@ impl<T> Snarl<T> {
                         viewport,
                         output_x,
                         min_pin_y,
+                        output_spacing,
                         snarl_state,
                         input,
                         output_positions,
@@ -1677,6 +1772,7 @@ impl<T> Snarl<T> {
                         viewport,
                         input_x,
                         min_pin_y,
+                        input_spacing,
                         snarl_state,
                         input,
                         input_positions,
@@ -1746,6 +1842,7 @@ impl<T> Snarl<T> {
                         viewport,
                         output_x,
                         min_pin_y,
+                        output_spacing,
                         snarl_state,
                         input,
                         output_positions,
@@ -1790,6 +1887,7 @@ impl<T> Snarl<T> {
                         viewport,
                         output_x,
                         min_pin_y,
+                        output_spacing,
                         snarl_state,
                         input,
                         output_positions,
@@ -1859,6 +1957,7 @@ impl<T> Snarl<T> {
                         viewport,
                         input_x,
                         min_pin_y,
+                        input_spacing,
                         snarl_state,
                         input,
                         input_positions,

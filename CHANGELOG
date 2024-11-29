@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Default implementation matches old behavior.
   This mechanism is meant to replace BackgroundPattern::Custom that was removed.
 
+- PinPlacement style option in SnarlStyle
+  This option controls how pins are placed in the node
+  Inside - pins are placed inside the node frame - default, old behavior
+  Edge - pin centers are placed on the edge of the node frame
+  Outside - pins are placed outside the node frame with specified margin
+
 ### Removed
 
 - BackgroundPattern::Custom is removed.

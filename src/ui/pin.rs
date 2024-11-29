@@ -142,8 +142,7 @@ impl PinInfo {
             .stroke
             .zoomed(scale)
             .unwrap_or(snarl_style.get_pin_stroke(scale, style));
-        let size = self.size.map_or(size, |s| s * size);
-
+        let size = self.size.zoomed(scale).unwrap_or(size);
         draw_pin(painter, shape, fill, stroke, pos, size);
 
         fill
