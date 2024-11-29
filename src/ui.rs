@@ -681,8 +681,6 @@ impl<T> Snarl<T> {
 
             let wire_frame_size = style.get_wire_frame_size(snarl_state.scale(), ui.style());
             let wire_width = style.get_wire_width(snarl_state.scale(), ui.style());
-            let node_frame = style.get_node_frame(snarl_state.scale(), ui.style());
-            let header_frame = style.get_header_frame(snarl_state.scale(), ui.style());
 
             let wire_shape_idx = match style.get_wire_layer() {
                 WireLayer::BehindNodes => Some(ui.painter().add(Shape::Noop)),
@@ -730,8 +728,6 @@ impl<T> Snarl<T> {
                     &mut snarl_state,
                     style,
                     snarl_id,
-                    &node_frame,
-                    &header_frame,
                     &mut input_info,
                     &input,
                     &mut output_info,
@@ -1444,8 +1440,6 @@ impl<T> Snarl<T> {
         snarl_state: &mut SnarlState,
         style: &SnarlStyle,
         snarl_id: Id,
-        node_frame: &Frame,
-        header_frame: &Frame,
         input_positions: &mut HashMap<InPinId, PinResponse>,
         input: &Input,
         output_positions: &mut HashMap<OutPinId, PinResponse>,
@@ -1465,6 +1459,14 @@ impl<T> Snarl<T> {
         let inputs_count = viewer.inputs(value);
         let outputs_count = viewer.outputs(value);
 
+        let inputs = (0..inputs_count)
+            .map(|idx| InPin::new(self, InPinId { node, input: idx }))
+            .collect::<Vec<_>>();
+
+        let outputs = (0..outputs_count)
+            .map(|idx| OutPin::new(self, OutPinId { node, output: idx }))
+            .collect::<Vec<_>>();
+
         let node_pos = snarl_state.graph_pos_to_screen(pos, viewport);
 
         // Generate persistent id for the node.
@@ -1480,6 +1482,21 @@ impl<T> Snarl<T> {
         let mut node_moved = None;
         let mut drag_released = false;
         let mut pin_hovered = None;
+
+        let node_frame = viewer.node_frame(
+            style.get_node_frame(snarl_state.scale(), ui.style()),
+            node,
+            &inputs,
+            &outputs,
+            self,
+        );
+        let header_frame = viewer.header_frame(
+            style.get_header_frame(snarl_state.scale(), ui.style()),
+            node,
+            &inputs,
+            &outputs,
+            self,
+        );
 
         // Rect for node + frame margin.
         let node_frame_rect = node_rect + node_frame.total_margin();
@@ -1506,14 +1523,6 @@ impl<T> Snarl<T> {
         let header_drag_space = style
             .get_header_drag_space(snarl_state.scale(), ui.style())
             .max(Vec2::ZERO);
-
-        let inputs = (0..inputs_count)
-            .map(|idx| InPin::new(self, InPinId { node, input: idx }))
-            .collect::<Vec<_>>();
-
-        let outputs = (0..outputs_count)
-            .map(|idx| OutPin::new(self, OutPinId { node, output: idx }))
-            .collect::<Vec<_>>();
 
         // Interact with node frame.
         let r = ui.interact(
@@ -1584,7 +1593,7 @@ impl<T> Snarl<T> {
                 }
                 PinPlacement::Edge => node_frame_rect.left(),
                 PinPlacement::Outside { margin } => {
-                    node_frame_rect.left() - margin - pin_size * 0.5
+                    node_frame_rect.left() - margin * snarl_state.scale() - pin_size * 0.5
                 }
             };
 
@@ -1604,7 +1613,7 @@ impl<T> Snarl<T> {
                 }
                 PinPlacement::Edge => node_frame_rect.right(),
                 PinPlacement::Outside { margin } => {
-                    node_frame_rect.right() + margin + pin_size * 0.5
+                    node_frame_rect.right() + margin * snarl_state.scale() + pin_size * 0.5
                 }
             };
 
@@ -1636,9 +1645,8 @@ impl<T> Snarl<T> {
                 node_rect.max,
             );
 
-            let node_layout = viewer
-                .node_layout(node, &inputs, &outputs, self)
-                .unwrap_or(style.get_node_layout());
+            let node_layout =
+                viewer.node_layout(style.get_node_layout(), node, &inputs, &outputs, self);
 
             let payload_clip_rect =
                 Rect::from_min_max(node_rect.min, pos2(node_rect.max.x, f32::INFINITY));
@@ -1785,7 +1793,8 @@ impl<T> Snarl<T> {
                     }
 
                     let inputs_rect = r.final_rect;
-                    let inputs_size = inputs_rect.size();
+
+                    new_pins_size = inputs_rect.size();
 
                     let mut next_y = inputs_rect.bottom() + ui.spacing().item_spacing.y;
 
@@ -1814,8 +1823,8 @@ impl<T> Snarl<T> {
 
                         let body_rect = r.final_rect;
 
-                        new_pins_size.x += body_rect.width() + ui.spacing().item_spacing.x;
-                        new_pins_size.y = f32::max(new_pins_size.y, body_rect.height());
+                        new_pins_size.x = f32::max(new_pins_size.x, body_rect.width());
+                        new_pins_size.y += body_rect.height() + ui.spacing().item_spacing.y;
 
                         if !self.nodes.contains(node.0) {
                             // If removed
@@ -1855,17 +1864,14 @@ impl<T> Snarl<T> {
                     }
 
                     let outputs_rect = r.final_rect;
-                    let outputs_size = outputs_rect.size();
 
                     if !self.nodes.contains(node.0) {
                         // If removed
                         return;
                     }
 
-                    new_pins_size = vec2(
-                        inputs_size.x + outputs_size.x + ui.spacing().item_spacing.x,
-                        f32::max(inputs_size.y, outputs_size.y),
-                    );
+                    new_pins_size.x = f32::max(new_pins_size.x, outputs_rect.width());
+                    new_pins_size.y += outputs_rect.height() + ui.spacing().item_spacing.y;
 
                     pins_rect = pins_rect.union(outputs_rect);
 
@@ -1900,7 +1906,8 @@ impl<T> Snarl<T> {
                     }
 
                     let outputs_rect = r.final_rect;
-                    let outputs_size = outputs_rect.size();
+
+                    new_pins_size = outputs_rect.size();
 
                     let mut next_y = outputs_rect.bottom() + ui.spacing().item_spacing.y;
 
@@ -1929,8 +1936,8 @@ impl<T> Snarl<T> {
 
                         let body_rect = r.final_rect;
 
-                        new_pins_size.x += body_rect.width() + ui.spacing().item_spacing.x;
-                        new_pins_size.y = f32::max(new_pins_size.y, body_rect.height());
+                        new_pins_size.x = f32::max(new_pins_size.x, body_rect.width());
+                        new_pins_size.y += body_rect.height() + ui.spacing().item_spacing.y;
 
                         if !self.nodes.contains(node.0) {
                             // If removed
@@ -1970,17 +1977,14 @@ impl<T> Snarl<T> {
                     }
 
                     let inputs_rect = r.final_rect;
-                    let inputs_size = inputs_rect.size();
 
                     if !self.nodes.contains(node.0) {
                         // If removed
                         return;
                     }
 
-                    new_pins_size = vec2(
-                        inputs_size.x + outputs_size.x + ui.spacing().item_spacing.x,
-                        f32::max(inputs_size.y, outputs_size.y),
-                    );
+                    new_pins_size.x = f32::max(new_pins_size.x, inputs_rect.width());
+                    new_pins_size.y += inputs_rect.height() + ui.spacing().item_spacing.y;
 
                     pins_rect = pins_rect.union(inputs_rect);
 

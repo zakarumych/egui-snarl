@@ -12,6 +12,32 @@ pub trait SnarlViewer<T> {
     /// Returns title of the node.
     fn title(&mut self, node: &T) -> String;
 
+    /// Returns the node's frame.
+    fn node_frame(
+        &mut self,
+        default: egui::Frame,
+        node: NodeId,
+        inputs: &[InPin],
+        outputs: &[OutPin],
+        snarl: &Snarl<T>,
+    ) -> egui::Frame {
+        let _ = (node, inputs, outputs, snarl);
+        default
+    }
+
+    /// Returns the node's header frame.
+    fn header_frame(
+        &mut self,
+        default: egui::Frame,
+        node: NodeId,
+        inputs: &[InPin],
+        outputs: &[OutPin],
+        snarl: &Snarl<T>,
+    ) -> egui::Frame {
+        let _ = (node, inputs, outputs, snarl);
+        default
+    }
+
     /// Returns layout override for the node.
     ///
     /// This method can be used to override the default layout of the node.
@@ -19,13 +45,14 @@ pub trait SnarlViewer<T> {
     #[inline]
     fn node_layout(
         &mut self,
+        default: NodeLayout,
         node: NodeId,
         inputs: &[InPin],
         outputs: &[OutPin],
         snarl: &Snarl<T>,
-    ) -> Option<NodeLayout> {
+    ) -> NodeLayout {
         let _ = (node, inputs, outputs, snarl);
-        None
+        default
     }
 
     /// Renders the node's header.

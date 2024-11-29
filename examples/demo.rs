@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use eframe::{App, CreationContext};
 use egui::{Color32, Id, Ui};
 use egui_snarl::{
-    ui::{AnyPins, PinInfo, SnarlStyle, SnarlViewer, WireStyle},
+    ui::{AnyPins, NodeLayout, PinInfo, PinPlacement, SnarlStyle, SnarlViewer, WireStyle},
     InPin, InPinId, NodeId, OutPin, OutPinId, Snarl,
 };
 
@@ -185,20 +185,20 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 match &*pin.remotes {
                     [] => {
                         ui.label("None");
-                        PinInfo::star().with_fill(UNTYPED_COLOR)
+                        PinInfo::circle().with_fill(UNTYPED_COLOR)
                     }
                     [remote] => match snarl[remote.node] {
                         DemoNode::Sink => unreachable!("Sink node has no outputs"),
                         DemoNode::Number(value) => {
                             assert_eq!(remote.output, 0, "Number node has only one output");
                             ui.label(format_float(value));
-                            PinInfo::square().with_fill(NUMBER_COLOR)
+                            PinInfo::circle().with_fill(NUMBER_COLOR)
                         }
                         DemoNode::String(ref value) => {
                             assert_eq!(remote.output, 0, "String node has only one output");
                             ui.label(format!("{:?}", value));
 
-                            PinInfo::triangle().with_fill(STRING_COLOR).with_wire_style(
+                            PinInfo::circle().with_fill(STRING_COLOR).with_wire_style(
                                 WireStyle::AxisAligned {
                                     corner_radius: 10.0,
                                 },
@@ -207,7 +207,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         DemoNode::ExprNode(ref expr) => {
                             assert_eq!(remote.output, 0, "Expr node has only one output");
                             ui.label(format_float(expr.eval()));
-                            PinInfo::square().with_fill(NUMBER_COLOR)
+                            PinInfo::circle().with_fill(NUMBER_COLOR)
                         }
                         DemoNode::ShowImage(ref uri) => {
                             assert_eq!(remote.output, 0, "ShowImage node has only one output");
@@ -237,7 +237,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         .desired_width(0.0)
                         .margin(ui.spacing().item_spacing)
                         .show(ui);
-                    PinInfo::triangle().with_fill(STRING_COLOR).with_wire_style(
+                    PinInfo::circle().with_fill(STRING_COLOR).with_wire_style(
                         WireStyle::AxisAligned {
                             corner_radius: 10.0,
                         },
@@ -255,7 +255,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                     let input = snarl[pin.id.node].string_in();
                     *input = new_value;
 
-                    PinInfo::triangle().with_fill(STRING_COLOR).with_wire_style(
+                    PinInfo::circle().with_fill(STRING_COLOR).with_wire_style(
                         WireStyle::AxisAligned {
                             corner_radius: 10.0,
                         },
@@ -353,11 +353,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         }
                     }
                 }
-                PinInfo::triangle().with_fill(STRING_COLOR).with_wire_style(
-                    WireStyle::AxisAligned {
+                PinInfo::circle()
+                    .with_fill(STRING_COLOR)
+                    .with_wire_style(WireStyle::AxisAligned {
                         corner_radius: 10.0,
-                    },
-                )
+                    })
             }
             DemoNode::ExprNode(ref expr_node) => {
                 if pin.id.input <= expr_node.bindings.len() {
@@ -366,7 +366,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                             let node = &mut snarl[pin.id.node];
                             ui.label(node.label_in(pin.id.input));
                             ui.add(egui::DragValue::new(node.number_in(pin.id.input)));
-                            PinInfo::square().with_fill(NUMBER_COLOR)
+                            PinInfo::circle().with_fill(NUMBER_COLOR)
                         }
                         [remote] => {
                             let new_value = snarl[remote.node].number_out();
@@ -374,7 +374,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                             ui.label(node.label_in(pin.id.input));
                             ui.label(format_float(new_value));
                             *node.number_in(pin.id.input) = new_value;
-                            PinInfo::square().with_fill(NUMBER_COLOR)
+                            PinInfo::circle().with_fill(NUMBER_COLOR)
                         }
                         _ => unreachable!("Expr pins has only one wire"),
                     }
@@ -400,7 +400,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             DemoNode::Number(ref mut value) => {
                 assert_eq!(pin.id.output, 0, "Number node has only one output");
                 ui.add(egui::DragValue::new(value));
-                PinInfo::square().with_fill(NUMBER_COLOR)
+                PinInfo::circle().with_fill(NUMBER_COLOR)
             }
             DemoNode::String(ref mut value) => {
                 assert_eq!(pin.id.output, 0, "String node has only one output");
@@ -409,17 +409,17 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                     .desired_width(0.0)
                     .margin(ui.spacing().item_spacing);
                 ui.add(edit);
-                PinInfo::triangle().with_fill(STRING_COLOR).with_wire_style(
-                    WireStyle::AxisAligned {
+                PinInfo::circle()
+                    .with_fill(STRING_COLOR)
+                    .with_wire_style(WireStyle::AxisAligned {
                         corner_radius: 10.0,
-                    },
-                )
+                    })
             }
             DemoNode::ExprNode(ref expr_node) => {
                 let value = expr_node.eval();
                 assert_eq!(pin.id.output, 0, "Expr node has only one output");
                 ui.label(format_float(value));
-                PinInfo::square().with_fill(NUMBER_COLOR)
+                PinInfo::circle().with_fill(NUMBER_COLOR)
             }
             DemoNode::ShowImage(_) => {
                 ui.allocate_at_least(egui::Vec2::ZERO, egui::Sense::hover());
@@ -639,6 +639,23 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             DemoNode::ExprNode(_) => {
                 ui.label("Evaluates algebraic expression with input for each unique variable name");
             }
+        }
+    }
+
+    fn header_frame(
+        &mut self,
+        frame: egui::Frame,
+        node: NodeId,
+        _inputs: &[InPin],
+        _outputs: &[OutPin],
+        snarl: &Snarl<DemoNode>,
+    ) -> egui::Frame {
+        match snarl[node] {
+            DemoNode::Sink => frame.fill(egui::Color32::from_rgb(70, 70, 80)),
+            DemoNode::Number(_) => frame.fill(egui::Color32::from_rgb(70, 40, 40)),
+            DemoNode::String(_) => frame.fill(egui::Color32::from_rgb(40, 70, 40)),
+            DemoNode::ShowImage(_) => frame.fill(egui::Color32::from_rgb(40, 40, 70)),
+            DemoNode::ExprNode(_) => frame.fill(egui::Color32::from_rgb(70, 66, 40)),
         }
     }
 }
@@ -940,6 +957,36 @@ pub struct DemoApp {
     snarl_ui_id: Option<Id>,
 }
 
+fn default_style() -> SnarlStyle {
+    SnarlStyle {
+        node_layout: Some(NodeLayout::FlippedSandwich),
+        pin_placement: Some(PinPlacement::Edge),
+        pin_size: Some(7.0),
+        node_frame: Some(egui::Frame {
+            inner_margin: egui::Margin::same(8.0),
+            outer_margin: egui::Margin {
+                left: 0.0,
+                right: 0.0,
+                top: 0.0,
+                bottom: 4.0,
+            },
+            rounding: egui::Rounding::same(8.0),
+            fill: egui::Color32::from_gray(30),
+            stroke: egui::Stroke::NONE,
+            shadow: egui::Shadow::NONE,
+        }),
+        bg_frame: Some(egui::Frame {
+            inner_margin: egui::Margin::same(2.0),
+            outer_margin: egui::Margin::ZERO,
+            rounding: egui::Rounding::ZERO,
+            fill: egui::Color32::from_gray(40),
+            stroke: egui::Stroke::NONE,
+            shadow: egui::Shadow::NONE,
+        }),
+        ..SnarlStyle::new()
+    }
+}
+
 impl DemoApp {
     pub fn new(cx: &CreationContext) -> Self {
         egui_extras::install_image_loaders(&cx.egui_ctx);
@@ -956,11 +1003,11 @@ impl DemoApp {
         // let snarl = Snarl::new();
 
         let style = match cx.storage {
-            None => SnarlStyle::new(),
+            None => default_style(),
             Some(storage) => storage
                 .get_string("style")
                 .and_then(|style| serde_json::from_str(&style).ok())
-                .unwrap_or_else(SnarlStyle::new),
+                .unwrap_or_else(default_style),
         };
         // let style = SnarlStyle::new();
 

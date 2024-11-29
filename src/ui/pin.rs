@@ -124,6 +124,23 @@ impl PinInfo {
         }
     }
 
+    /// Returns the shape of the pin.
+    pub fn get_shape(&self, snarl_style: &SnarlStyle) -> PinShape {
+        self.shape.unwrap_or(snarl_style.get_pin_shape())
+    }
+
+    /// Returns fill color of the pin.
+    pub fn get_fill(&self, snarl_style: &SnarlStyle, style: &Style) -> Color32 {
+        self.fill.unwrap_or(snarl_style.get_pin_fill(style))
+    }
+
+    /// Returns outline stroke of the pin.
+    pub fn get_stroke(&self, snarl_style: &SnarlStyle, style: &Style, scale: f32) -> Stroke {
+        self.stroke
+            .zoomed(scale)
+            .unwrap_or(snarl_style.get_pin_stroke(scale, style))
+    }
+
     /// Draws the pin and returns color.
     ///
     /// Wires are drawn with returned color by default.
@@ -136,12 +153,9 @@ impl PinInfo {
         painter: &Painter,
         scale: f32,
     ) -> Color32 {
-        let shape = self.shape.unwrap_or(snarl_style.get_pin_shape());
-        let fill = self.fill.unwrap_or(snarl_style.get_pin_fill(style));
-        let stroke = self
-            .stroke
-            .zoomed(scale)
-            .unwrap_or(snarl_style.get_pin_stroke(scale, style));
+        let shape = self.get_shape(snarl_style);
+        let fill = self.get_fill(snarl_style, style);
+        let stroke = self.get_stroke(snarl_style, style, scale);
         let size = self.size.zoomed(scale).unwrap_or(size);
         draw_pin(painter, shape, fill, stroke, pos, size);
 
