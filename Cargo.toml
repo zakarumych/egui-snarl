@@ -1,7 +1,7 @@
 workspace = { members = ["demo"] }
 [package]
 name = "egui-snarl"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 description = "Node-graphs for egui"
 license = "MIT OR Apache-2.0"
@@ -18,7 +18,6 @@ serde = ["dep:serde", "egui/serde", "slab/serde"]
 egui = { version = "0.29" }
 slab = { version = "0.4" }
 serde = { version = "1.0", features = ["derive"], optional = true }
-tiny-fn = { version = "0.1.7" }
 
 egui-probe = { version = "0.6.0", features = ["derive"], optional = true }
 

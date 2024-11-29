@@ -1,0 +1,40 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+- NodeLayout enum
+  To control layout of nodes in the graph
+  Can be set globally in SnarlStyle and overridden per node with SnarlViewer::node_layout
+  Defaults to NodeLayout::Basic which is the previous layout
+  NodeLayout::Sandwich is a new layout that places inputs, body and outputs vertically with inputs on top and outputs on bottom
+  NodeLayout::FlippedSandwich is the same as Sandwich but with outputs on top and inputs on bottom
+
+- SnarlViewer::draw_input_pin/draw_output_pin can be used to override how pins are drawn.
+  Default implementation matches old behavior.
+  This mechanism is meant to replace PinShape::Custom that was removed.
+
+- SnarlViewer::draw_node_background can be used to override how node background is drawn.
+  Default implementation matches old behavior.
+  This mechanism is meant to replace BackgroundPattern::Custom that was removed.
+
+### Removed
+
+- BackgroundPattern::Custom is removed.
+  It contained opaque function to draw custom background pattern
+  and permitted !Send and !Sync captures which made SnarlStyle !Send and !Sync as well
+
+- PinShape::Custom is removed.
+  It is replaced by SnarlViewer::draw_input_pin/draw_output_pin which is more flexible.
+
+- BasicPinShape is removed. SnarlStyle::pin_shape has PinShape type now.
+
+### Fixed
+
+- Crash after centering graph when no nodes are present and adding a node afterwards

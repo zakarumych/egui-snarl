@@ -1,6 +1,4 @@
-use std::fmt;
-
-use egui::{emath::Rot2, vec2, Pos2, Rect, Ui, Vec2};
+use egui::{emath::Rot2, vec2, Painter, Pos2, Rect, Style, Vec2};
 
 use super::SnarlStyle;
 
@@ -97,8 +95,14 @@ impl Grid {
         Self { spacing, angle }
     }
 
-    fn draw(&self, style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui) {
-        let bg_stroke = style.get_bg_pattern_stroke(viewport.scale, ui);
+    fn draw(
+        &self,
+        viewport: &Viewport,
+        snarl_style: &SnarlStyle,
+        style: &Style,
+        painter: &Painter,
+    ) {
+        let bg_stroke = snarl_style.get_bg_pattern_stroke(viewport.scale, style);
 
         let spacing = vec2(self.spacing.x.max(1.0), self.spacing.y.max(1.0));
 
@@ -125,7 +129,7 @@ impl Grid {
             let top = viewport.graph_pos_to_screen(top);
             let bottom = viewport.graph_pos_to_screen(bottom);
 
-            ui.painter().line_segment([top, bottom], bg_stroke);
+            painter.line_segment([top, bottom], bg_stroke);
         }
 
         let min_y = (pattern_bounds.min.y / spacing.y).ceil();
@@ -141,35 +145,13 @@ impl Grid {
             let top = viewport.graph_pos_to_screen(top);
             let bottom = viewport.graph_pos_to_screen(bottom);
 
-            ui.painter().line_segment([top, bottom], bg_stroke);
+            painter.line_segment([top, bottom], bg_stroke);
         }
     }
 }
 
-tiny_fn::tiny_fn! {
-    /// Custom background pattern function with signature
-    /// `Fn(style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui)`
-    pub struct CustomBackground = Fn(style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui);
-}
-
-impl<const INLINE_SIZE: usize> Default for CustomBackground<'_, INLINE_SIZE> {
-    fn default() -> Self {
-        Self::new(|_, _, _| {})
-    }
-}
-
-#[cfg(feature = "egui-probe")]
-impl<const INLINE_SIZE: usize> egui_probe::EguiProbe for CustomBackground<'_, INLINE_SIZE> {
-    fn probe(
-        &mut self,
-        ui: &mut egui_probe::egui::Ui,
-        _style: &egui_probe::Style,
-    ) -> egui_probe::egui::Response {
-        ui.weak("Custom")
-    }
-}
-
 /// Background pattern show beneath nodes and wires.
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
 pub enum BackgroundPattern {
@@ -179,34 +161,6 @@ pub enum BackgroundPattern {
     /// Linear grid.
     #[cfg_attr(feature = "egui-probe", egui_probe(transparent))]
     Grid(Grid),
-
-    /// Custom pattern.
-    /// Contains function with signature
-    /// `Fn(style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui)`
-    #[cfg_attr(feature = "egui-probe", egui_probe(transparent))]
-    Custom(#[cfg_attr(feature = "serde", serde(skip))] CustomBackground<'static>),
-}
-
-impl PartialEq for BackgroundPattern {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (BackgroundPattern::Grid(l), BackgroundPattern::Grid(r)) => *l == *r,
-            _ => false,
-        }
-    }
-}
-
-impl fmt::Debug for BackgroundPattern {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BackgroundPattern::Grid(grid) => f
-                .debug_tuple("BackgroundPattern::Grid")
-                .field(grid)
-                .finish(),
-            BackgroundPattern::Custom(_) => f.write_str("BackgroundPattern::Custom"),
-            BackgroundPattern::NoPattern => f.write_str("BackgroundPattern::NoPattern"),
-        }
-    }
 }
 
 impl Default for BackgroundPattern {
@@ -232,19 +186,16 @@ impl BackgroundPattern {
         Self::Grid(Grid::new(spacing, angle))
     }
 
-    /// Create new custom background pattern.
-    pub fn custom<F>(f: F) -> Self
-    where
-        F: Fn(&SnarlStyle, &Viewport, &mut Ui) + 'static,
-    {
-        Self::Custom(CustomBackground::new(f))
-    }
-
     /// Draws background pattern.
-    pub(super) fn draw(&self, style: &SnarlStyle, viewport: &Viewport, ui: &mut Ui) {
+    pub fn draw(
+        &self,
+        viewport: &Viewport,
+        snarl_style: &SnarlStyle,
+        style: &Style,
+        painter: &Painter,
+    ) {
         match self {
-            BackgroundPattern::Grid(g) => g.draw(style, viewport, ui),
-            BackgroundPattern::Custom(c) => c.call(style, viewport, ui),
+            BackgroundPattern::Grid(g) => g.draw(viewport, snarl_style, style, painter),
             BackgroundPattern::NoPattern => {}
         }
     }

@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use egui::{ahash::HashSet, style::Spacing, Align, Context, Id, Pos2, Rect, Ui, Vec2};
+use egui::{ahash::HashSet, style::Spacing, Context, Id, Pos2, Rect, Ui, Vec2};
 
 use crate::{InPinId, NodeId, OutPinId, Snarl};
 
@@ -13,8 +13,6 @@ pub struct NodeState {
     /// It is updated to fit content.
     size: Vec2,
     header_height: f32,
-    body_width: f32,
-    footer_width: f32,
 
     id: Id,
     scale: f32,
@@ -25,8 +23,6 @@ pub struct NodeState {
 struct NodeData {
     unscaled_size: Vec2,
     unscaled_header_height: f32,
-    unscaled_body_width: f32,
-    unsacled_footer_width: f32,
 }
 
 impl NodeState {
@@ -35,8 +31,6 @@ impl NodeState {
             Some(data) => NodeState {
                 size: data.unscaled_size * scale,
                 header_height: data.unscaled_header_height * scale,
-                body_width: data.unscaled_body_width * scale,
-                footer_width: data.unsacled_footer_width * scale,
                 id,
                 scale,
                 dirty: false,
@@ -57,8 +51,6 @@ impl NodeState {
                     NodeData {
                         unscaled_size: self.size / self.scale,
                         unscaled_header_height: self.header_height / self.scale,
-                        unscaled_body_width: self.body_width / self.scale,
-                        unsacled_footer_width: self.footer_width / self.scale,
                     },
                 )
             });
@@ -80,16 +72,6 @@ impl NodeState {
         (self.size.y) * (1.0 - openness)
     }
 
-    pub fn align_body(&mut self, rect: Rect) -> Rect {
-        let x_range = Align::Center.align_size_within_range(self.body_width, rect.x_range());
-        Rect::from_x_y_ranges(x_range, rect.y_range())
-    }
-
-    pub fn align_footer(&mut self, rect: Rect) -> Rect {
-        let x_range = Align::Center.align_size_within_range(self.footer_width, rect.x_range());
-        Rect::from_x_y_ranges(x_range, rect.y_range())
-    }
-
     pub fn set_size(&mut self, size: Vec2) {
         if self.size != size {
             self.size = size;
@@ -108,26 +90,10 @@ impl NodeState {
         }
     }
 
-    pub fn set_body_width(&mut self, width: f32) {
-        if self.body_width != width {
-            self.body_width = width;
-            self.dirty = true;
-        }
-    }
-
-    pub fn set_footer_width(&mut self, width: f32) {
-        if self.footer_width != width {
-            self.footer_width = width;
-            self.dirty = true;
-        }
-    }
-
     fn initial(id: Id, spacing: &Spacing, scale: f32) -> Self {
         NodeState {
             size: spacing.interact_size,
             header_height: spacing.interact_size.y,
-            body_width: 0.0,
-            footer_width: 0.0,
             id,
             dirty: true,
             scale,

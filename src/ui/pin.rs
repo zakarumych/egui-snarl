@@ -1,8 +1,8 @@
-use egui::{epaint::PathShape, vec2, Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2};
+use egui::{epaint::PathShape, vec2, Color32, Painter, Pos2, Shape, Stroke, Style, Vec2};
 
 use crate::{InPinId, OutPinId};
 
-use super::WireStyle;
+use super::{zoom::Zoom, SnarlStyle, WireStyle};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum AnyPin {
@@ -20,36 +20,13 @@ pub enum AnyPins<'a> {
     In(&'a [InPinId]),
 }
 
-tiny_fn::tiny_fn! {
-    /// Custom pin shape drawing function with signature
-    /// `Fn(painter: &Painter, rect: Rect, fill: Color32, stroke: Stroke)`
-    pub struct CustomPinShape = Fn(painter: &Painter, rect: Rect, fill: Color32, stroke: Stroke);
-}
-
 /// Shape of a pin.
-pub enum PinShape {
-    /// Circle shape.
-    Circle,
-
-    /// Triangle shape.
-    Triangle,
-
-    /// Square shape.
-    Square,
-
-    /// Star shape.
-    Star,
-
-    /// Custom shape.
-    Custom(CustomPinShape<'static>),
-}
-
-/// Default shape of a pin.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
-pub enum BasicPinShape {
+pub enum PinShape {
     /// Circle shape.
+    #[default]
     Circle,
 
     /// Triangle shape.
@@ -60,25 +37,6 @@ pub enum BasicPinShape {
 
     /// Star shape.
     Star,
-}
-
-impl Default for BasicPinShape {
-    #[inline(always)]
-    fn default() -> Self {
-        BasicPinShape::Circle
-    }
-}
-
-impl From<BasicPinShape> for PinShape {
-    #[inline(always)]
-    fn from(shape: BasicPinShape) -> Self {
-        match shape {
-            BasicPinShape::Circle => PinShape::Circle,
-            BasicPinShape::Triangle => PinShape::Triangle,
-            BasicPinShape::Square => PinShape::Square,
-            BasicPinShape::Star => PinShape::Star,
-        }
-    }
 }
 
 /// Information about a pin returned by `SnarlViewer::show_input` and `SnarlViewer::show_output`.
@@ -166,21 +124,35 @@ impl PinInfo {
         }
     }
 
-    /// Creates a square pin.
-    pub fn custom<F>(f: F) -> Self
-    where
-        F: Fn(&Painter, Rect, Color32, Stroke) + 'static,
-    {
-        PinInfo {
-            shape: Some(PinShape::Custom(CustomPinShape::new(f))),
-            ..Default::default()
-        }
+    /// Draws the pin and returns color.
+    ///
+    /// Wires are drawn with returned color by default.
+    pub fn draw(
+        &self,
+        pos: Pos2,
+        size: f32,
+        snarl_style: &SnarlStyle,
+        style: &Style,
+        painter: &Painter,
+        scale: f32,
+    ) -> Color32 {
+        let shape = self.shape.unwrap_or(snarl_style.get_pin_shape());
+        let fill = self.fill.unwrap_or(snarl_style.get_pin_fill(style));
+        let stroke = self
+            .stroke
+            .zoomed(scale)
+            .unwrap_or(snarl_style.get_pin_stroke(scale, style));
+        let size = self.size.map_or(size, |s| s * size);
+
+        draw_pin(painter, shape, fill, stroke, pos, size);
+
+        fill
     }
 }
 
 pub fn draw_pin(
     painter: &Painter,
-    shape: &PinShape,
+    shape: PinShape,
     fill: Color32,
     stroke: Stroke,
     pos: Pos2,
@@ -241,12 +213,5 @@ pub fn draw_pin(
                 stroke: stroke.into(),
             }));
         }
-
-        PinShape::Custom(f) => f.call(
-            painter,
-            Rect::from_center_size(pos, vec2(size, size)),
-            fill,
-            stroke,
-        ),
     }
 }

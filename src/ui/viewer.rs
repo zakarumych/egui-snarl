@@ -1,8 +1,8 @@
-use egui::{Pos2, Rect, Ui};
+use egui::{Color32, Painter, Pos2, Rect, Style, Ui};
 
 use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
-use super::pin::{AnyPins, PinInfo};
+use super::{pin::AnyPins, BackgroundPattern, NodeLayout, PinInfo, SnarlStyle, Viewport};
 
 /// SnarlViewer is a trait for viewing a Snarl.
 ///
@@ -11,6 +11,22 @@ use super::pin::{AnyPins, PinInfo};
 pub trait SnarlViewer<T> {
     /// Returns title of the node.
     fn title(&mut self, node: &T) -> String;
+
+    /// Returns layout override for the node.
+    ///
+    /// This method can be used to override the default layout of the node.
+    /// By default it returns `None` and layout from the style is used.
+    #[inline]
+    fn node_layout(
+        &mut self,
+        node: NodeId,
+        inputs: &[InPin],
+        outputs: &[OutPin],
+        snarl: &Snarl<T>,
+    ) -> Option<NodeLayout> {
+        let _ = (node, inputs, outputs, snarl);
+        None
+    }
 
     /// Renders the node's header.
     #[inline]
@@ -27,17 +43,21 @@ pub trait SnarlViewer<T> {
         ui.label(self.title(&snarl[node]));
     }
 
-    /// Returns number of output pins of the node.
-    fn outputs(&mut self, node: &T) -> usize;
-
     /// Returns number of input pins of the node.
+    ///
+    /// [`SnarlViewer::show_input`] and [`SnarlViewer::draw_input_pin`] will be called for each input in range `0..inputs()`.
     fn inputs(&mut self, node: &T) -> usize;
 
-    /// Renders the node's input pin.
+    /// Renders the node's input.
     fn show_input(&mut self, pin: &InPin, ui: &mut Ui, scale: f32, snarl: &mut Snarl<T>)
         -> PinInfo;
 
-    /// Renders the node's output pin.
+    /// Returns number of output pins of the node.
+    ///
+    /// [`SnarlViewer::show_output`] and [`SnarlViewer::show_output_ping`] will be called for each output in range `0..outputs()`.
+    fn outputs(&mut self, node: &T) -> usize;
+
+    /// Renders the node's output.
     fn show_output(
         &mut self,
         pin: &OutPin,
@@ -91,7 +111,7 @@ pub trait SnarlViewer<T> {
     /// Reports the final node's rect after rendering.
     ///
     /// It aimed to be used for custom positioning of nodes that requires node dimensions for calculations.
-    /// Node's position can be modfied directly in this method.
+    /// Node's position can be modified directly in this method.
     #[inline]
     fn final_node_rect(
         &mut self,
@@ -239,5 +259,73 @@ pub trait SnarlViewer<T> {
     #[inline]
     fn drop_inputs(&mut self, pin: &InPin, snarl: &mut Snarl<T>) {
         snarl.drop_inputs(pin.id);
+    }
+
+    /// Draws the node's input pin.
+    ///
+    /// This method is called after [`SnarlViewer::show_input`] and can be used to draw the pin shape.
+    /// By default it draws a pin with the shape and style returned by [`SnarlViewer::show_input`].
+    ///
+    /// If you want to draw the pin yourself, you can override this method.
+    fn draw_input_pin(
+        &mut self,
+        pin: &InPin,
+        pin_info: &PinInfo,
+        pos: Pos2,
+        size: f32,
+        snarl_style: &SnarlStyle,
+        style: &Style,
+        painter: &Painter,
+        scale: f32,
+        snarl: &Snarl<T>,
+    ) -> Color32 {
+        let _ = (pin, snarl);
+
+        pin_info.draw(pos, size, snarl_style, style, painter, scale)
+    }
+
+    /// Draws the node's output pin.
+    ///
+    /// This method is called after [`SnarlViewer::show_output`] and can be used to draw the pin shape.
+    /// By default it draws a pin with the shape and style returned by [`SnarlViewer::show_output`].
+    ///
+    /// If you want to draw the pin yourself, you can override this method.
+    fn draw_output_pin(
+        &mut self,
+        pin: &OutPin,
+        pin_info: &PinInfo,
+        pos: Pos2,
+        size: f32,
+        snarl_style: &SnarlStyle,
+        style: &Style,
+        painter: &Painter,
+        scale: f32,
+        snarl: &Snarl<T>,
+    ) -> Color32 {
+        let _ = (pin, snarl);
+
+        pin_info.draw(pos, size, snarl_style, style, painter, scale)
+    }
+
+    /// Draws background of the snarl view.
+    ///
+    /// By default it draws the background pattern using [`BackgroundPattern::draw`].
+    ///
+    /// If you want to draw the background yourself, you can override this method.
+    fn draw_background(
+        &mut self,
+        background: Option<&BackgroundPattern>,
+        viewport: &Viewport,
+        snarl_style: &SnarlStyle,
+        style: &Style,
+        painter: &Painter,
+        snarl: &Snarl<T>,
+    ) {
+        let _ = snarl;
+
+        match background {
+            Some(background) => background.draw(viewport, snarl_style, style, painter),
+            None => {}
+        }
     }
 }
