@@ -2110,7 +2110,6 @@ impl<T> Snarl<T> {
         );
 
         node_state.store(ui.ctx());
-        ui.ctx().request_repaint();
         Some(DrawNodeResponse {
             node_moved,
             node_to_top,
