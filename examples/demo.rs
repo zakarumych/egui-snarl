@@ -668,7 +668,7 @@ struct ExprNode {
 
 impl ExprNode {
     fn new() -> Self {
-        Self {
+        ExprNode {
             text: "0".to_string(),
             bindings: Vec::new(),
             values: Vec::new(),
@@ -1004,7 +1004,7 @@ impl DemoApp {
         });
         // let style = SnarlStyle::new();
 
-        Self {
+        DemoApp {
             snarl,
             style,
             snarl_ui_id: None,

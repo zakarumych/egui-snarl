@@ -100,7 +100,7 @@ impl PinInfo {
     /// Creates a circle pin.
     #[must_use]
     pub fn circle() -> Self {
-        Self {
+        PinInfo {
             shape: Some(PinShape::Circle),
             ..Default::default()
         }
@@ -109,7 +109,7 @@ impl PinInfo {
     /// Creates a triangle pin.
     #[must_use]
     pub fn triangle() -> Self {
-        Self {
+        PinInfo {
             shape: Some(PinShape::Triangle),
             ..Default::default()
         }
@@ -118,7 +118,7 @@ impl PinInfo {
     /// Creates a square pin.
     #[must_use]
     pub fn square() -> Self {
-        Self {
+        PinInfo {
             shape: Some(PinShape::Square),
             ..Default::default()
         }
@@ -127,7 +127,7 @@ impl PinInfo {
     /// Creates a star pin.
     #[must_use]
     pub fn star() -> Self {
-        Self {
+        PinInfo {
             shape: Some(PinShape::Star),
             ..Default::default()
         }

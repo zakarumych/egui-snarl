@@ -88,7 +88,7 @@ macro_rules! default_grid_angle {
 
 impl Default for Grid {
     fn default() -> Self {
-        Self {
+        Grid {
             spacing: DEFAULT_GRID_SPACING,
             angle: DEFAULT_GRID_ANGLE,
         }
@@ -99,7 +99,7 @@ impl Grid {
     /// Create new grid with given spacing and angle.
     #[must_use]
     pub const fn new(spacing: Vec2, angle: f32) -> Self {
-        Self { spacing, angle }
+        Grid { spacing, angle }
     }
 
     fn draw(

@@ -91,7 +91,7 @@ impl NodeState {
     }
 
     const fn initial(id: Id, spacing: &Spacing, scale: f32) -> Self {
-        Self {
+        NodeState {
             size: spacing.interact_size,
             header_height: spacing.interact_size.y,
             id,
@@ -215,7 +215,7 @@ impl SnarlStateData {
             let selected_nodes = d.get_temp(id).unwrap_or(SelectedNodes(Vec::new())).0;
             let draw_order = d.get_temp(id).unwrap_or(DrawOrder(Vec::new())).0;
 
-            Some(Self {
+            Some(SnarlStateData {
                 offset: small.offset,
                 scale: small.scale,
                 target_scale: small.target_scale,
@@ -263,7 +263,7 @@ impl SnarlState {
 
         dirty |= prune_selected_nodes(&mut data.selected_nodes, snarl);
 
-        Self {
+        SnarlState {
             offset: data.offset,
             scale: data.scale,
             target_scale: data.target_scale,
