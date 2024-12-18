@@ -19,7 +19,7 @@ use slab::Slab;
 
 impl<T> Default for Snarl<T> {
     fn default() -> Self {
-        Snarl::new()
+        Self::new()
     }
 }
 
@@ -136,13 +136,13 @@ impl<'de> serde::Deserialize<'de> for Wires {
         }
 
         let wires = deserializer.deserialize_seq(Visitor)?;
-        Ok(Wires { wires })
+        Ok(Self { wires })
     }
 }
 
 impl Wires {
     fn new() -> Self {
-        Wires {
+        Self {
             wires: HashSet::with_hasher(egui::ahash::RandomState::new()),
         }
     }
@@ -216,7 +216,7 @@ impl<T> Snarl<T> {
     /// ```
     #[must_use]
     pub fn new() -> Self {
-        Snarl {
+        Self {
             nodes: Slab::new(),
             wires: Wires::new(),
         }
@@ -360,10 +360,7 @@ impl<T> Snarl<T> {
     /// Returns reference to the node.
     #[must_use]
     pub fn get_node(&self, idx: NodeId) -> Option<&T> {
-        match self.nodes.get(idx.0) {
-            Some(node) => Some(&node.value),
-            None => None,
-        }
+        self.nodes.get(idx.0).map(|node| &node.value)
     }
 
     /// Returns mutable reference to the node.
@@ -377,18 +374,12 @@ impl<T> Snarl<T> {
     /// Returns reference to the node data.
     #[must_use]
     pub fn get_node_info(&self, idx: NodeId) -> Option<&Node<T>> {
-        match self.nodes.get(idx.0) {
-            Some(node) => Some(node),
-            None => None,
-        }
+        self.nodes.get(idx.0)
     }
 
     /// Returns mutable reference to the node data.
     pub fn get_node_info_mut(&mut self, idx: NodeId) -> Option<&mut Node<T>> {
-        match self.nodes.get_mut(idx.0) {
-            Some(node) => Some(node),
-            None => None,
-        }
+        self.nodes.get_mut(idx.0)
     }
 
     /// Iterates over shared references to each node.
@@ -821,7 +812,7 @@ pub struct InPin {
 
 impl OutPin {
     fn new<T>(snarl: &Snarl<T>, pin: OutPinId) -> Self {
-        OutPin {
+        Self {
             id: pin,
             remotes: snarl.wires.wired_inputs(pin).collect(),
         }
@@ -830,7 +821,7 @@ impl OutPin {
 
 impl InPin {
     fn new<T>(snarl: &Snarl<T>, pin: InPinId) -> Self {
-        InPin {
+        Self {
             id: pin,
             remotes: snarl.wires.wired_outputs(pin).collect(),
         }

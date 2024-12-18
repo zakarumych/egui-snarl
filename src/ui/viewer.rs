@@ -4,7 +4,7 @@ use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
 use super::{pin::AnyPins, BackgroundPattern, NodeLayout, PinInfo, SnarlStyle, Viewport};
 
-/// SnarlViewer is a trait for viewing a Snarl.
+/// `SnarlViewer` is a trait for viewing a Snarl.
 ///
 /// It can extract necessary data from the nodes and controls their
 /// response to certain events.
@@ -353,7 +353,7 @@ pub trait SnarlViewer<T> {
         let _ = snarl;
 
         if let Some(background) = background {
-            background.draw(viewport, snarl_style, style, painter)
+            background.draw(viewport, snarl_style, style, painter);
         }
     }
 }

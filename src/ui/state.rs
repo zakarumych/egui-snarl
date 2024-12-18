@@ -7,7 +7,6 @@ use crate::{InPinId, NodeId, OutPinId, Snarl};
 use super::SnarlStyle;
 
 /// Node UI state.
-
 pub struct NodeState {
     /// Node size for this frame.
     /// It is updated to fit content.
@@ -27,16 +26,16 @@ struct NodeData {
 
 impl NodeState {
     pub fn load(cx: &Context, id: Id, spacing: &Spacing, scale: f32) -> Self {
-        match cx.data_mut(|d| d.get_temp::<NodeData>(id)) {
-            Some(data) => NodeState {
+        cx.data_mut(|d| d.get_temp::<NodeData>(id)).map_or_else(
+            || Self::initial(id, spacing, scale),
+            |data| Self {
                 size: data.unscaled_size * scale,
                 header_height: data.unscaled_header_height * scale,
                 id,
                 scale,
                 dirty: false,
             },
-            None => Self::initial(id, spacing, scale),
-        }
+        )
     }
 
     pub fn clear(self, cx: &Context) {
@@ -52,7 +51,7 @@ impl NodeState {
                         unscaled_size: self.size / self.scale,
                         unscaled_header_height: self.header_height / self.scale,
                     },
-                )
+                );
             });
         }
     }
@@ -79,19 +78,20 @@ impl NodeState {
         }
     }
 
-    pub fn header_height(&mut self) -> f32 {
+    pub const fn header_height(&self) -> f32 {
         self.header_height
     }
 
     pub fn set_header_height(&mut self, height: f32) {
+        #[allow(clippy::float_cmp)]
         if self.header_height != height {
             self.header_height = height;
             self.dirty = true;
         }
     }
 
-    fn initial(id: Id, spacing: &Spacing, scale: f32) -> Self {
-        NodeState {
+    const fn initial(id: Id, spacing: &Spacing, scale: f32) -> Self {
+        Self {
             size: spacing.interact_size,
             header_height: spacing.interact_size.y,
             id,
@@ -192,16 +192,16 @@ impl SnarlStateData {
                 d.remove::<RectSelect>(id);
             }
 
-            if !self.selected_nodes.is_empty() {
-                d.insert_temp::<SelectedNodes>(id, SelectedNodes(self.selected_nodes));
-            } else {
+            if self.selected_nodes.is_empty() {
                 d.remove::<SelectedNodes>(id);
+            } else {
+                d.insert_temp::<SelectedNodes>(id, SelectedNodes(self.selected_nodes));
             }
 
-            if !self.draw_order.is_empty() {
-                d.insert_temp::<DrawOrder>(id, DrawOrder(self.draw_order));
-            } else {
+            if self.draw_order.is_empty() {
                 d.remove::<DrawOrder>(id);
+            } else {
+                d.insert_temp::<DrawOrder>(id, DrawOrder(self.draw_order));
             }
         });
     }
@@ -215,7 +215,7 @@ impl SnarlStateData {
             let selected_nodes = d.get_temp(id).unwrap_or(SelectedNodes(Vec::new())).0;
             let draw_order = d.get_temp(id).unwrap_or(DrawOrder(Vec::new())).0;
 
-            Some(SnarlStateData {
+            Some(Self {
                 offset: small.offset,
                 scale: small.scale,
                 target_scale: small.target_scale,
@@ -250,18 +250,20 @@ impl SnarlState {
 
         let new_scale = cx.animate_value_with_time(id.with("zoom-scale"), data.target_scale, 0.1);
 
-        let mut dirty = false;
-        if new_scale != data.scale {
+        #[allow(clippy::float_cmp)]
+        let mut dirty = if new_scale == data.scale {
+            false
+        } else {
             let a = pivot + data.offset - viewport.center().to_vec2();
 
             data.offset += a * new_scale / data.scale - a;
             data.scale = new_scale;
-            dirty = true;
-        }
+            true
+        };
 
         dirty |= prune_selected_nodes(&mut data.selected_nodes, snarl);
 
-        SnarlState {
+        Self {
             offset: data.offset,
             scale: data.scale,
             target_scale: data.target_scale,
@@ -278,7 +280,7 @@ impl SnarlState {
     fn initial<T>(id: Id, viewport: Rect, snarl: &Snarl<T>, style: &SnarlStyle) -> Self {
         let mut bb = Rect::NOTHING;
 
-        for (_, node) in snarl.nodes.iter() {
+        for (_, node) in &snarl.nodes {
             bb.extend_with(node.pos);
         }
 
@@ -300,7 +302,7 @@ impl SnarlState {
             offset = bb.center().to_vec2() * scale;
         }
 
-        SnarlState {
+        Self {
             offset,
             scale,
             target_scale: scale,
@@ -340,12 +342,12 @@ impl SnarlState {
     }
 
     #[inline(always)]
-    pub fn scale(&self) -> f32 {
+    pub const fn scale(&self) -> f32 {
         self.scale
     }
 
     #[inline(always)]
-    pub fn offset(&self) -> Vec2 {
+    pub const fn offset(&self) -> Vec2 {
         self.offset
     }
 
@@ -457,11 +459,11 @@ impl SnarlState {
         }
     }
 
-    pub fn has_new_wires(&self) -> bool {
+    pub const fn has_new_wires(&self) -> bool {
         self.new_wires.is_some()
     }
 
-    pub fn new_wires(&self) -> Option<&NewWires> {
+    pub const fn new_wires(&self) -> Option<&NewWires> {
         self.new_wires.as_ref()
     }
 
@@ -485,7 +487,7 @@ impl SnarlState {
         self.dirty = true;
     }
 
-    pub(crate) fn is_link_menu_open(&self) -> bool {
+    pub(crate) const fn is_link_menu_open(&self) -> bool {
         self.is_link_menu_open
     }
 
@@ -535,18 +537,14 @@ impl SnarlState {
             }
 
             self.deselect_all_nodes();
-            self.selected_nodes.push(node);
-            self.dirty = true;
-        } else {
-            if let Some(pos) = self.selected_nodes.iter().position(|n| *n == node) {
-                if pos == self.selected_nodes.len() - 1 {
-                    return;
-                }
-                self.selected_nodes.remove(pos);
+        } else if let Some(pos) = self.selected_nodes.iter().position(|n| *n == node) {
+            if pos == self.selected_nodes.len() - 1 {
+                return;
             }
-            self.selected_nodes.push(node);
-            self.dirty = true;
+            self.selected_nodes.remove(pos);
         }
+        self.selected_nodes.push(node);
+        self.dirty = true;
     }
 
     pub fn select_many_nodes(&mut self, reset: bool, nodes: impl Iterator<Item = NodeId>) {
@@ -593,7 +591,7 @@ impl SnarlState {
         self.rect_selection = None;
     }
 
-    pub fn is_rect_selection(&self) -> bool {
+    pub const fn is_rect_selection(&self) -> bool {
         self.rect_selection.is_some()
     }
 

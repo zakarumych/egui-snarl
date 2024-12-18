@@ -34,57 +34,57 @@ enum DemoNode {
 }
 
 impl DemoNode {
-    fn name(&self) -> &str {
+    const fn name(&self) -> &str {
         match self {
-            DemoNode::Sink => "Sink",
-            DemoNode::Number(_) => "Number",
-            DemoNode::String(_) => "String",
-            DemoNode::ShowImage(_) => "ShowImage",
-            DemoNode::ExprNode(_) => "ExprNode",
+            Self::Sink => "Sink",
+            Self::Number(_) => "Number",
+            Self::String(_) => "String",
+            Self::ShowImage(_) => "ShowImage",
+            Self::ExprNode(_) => "ExprNode",
         }
     }
 
     fn number_out(&self) -> f64 {
         match self {
-            DemoNode::Number(value) => *value,
-            DemoNode::ExprNode(expr_node) => expr_node.eval(),
+            Self::Number(value) => *value,
+            Self::ExprNode(expr_node) => expr_node.eval(),
             _ => unreachable!(),
         }
     }
 
     fn number_in(&mut self, idx: usize) -> &mut f64 {
         match self {
-            DemoNode::ExprNode(expr_node) => &mut expr_node.values[idx - 1],
+            Self::ExprNode(expr_node) => &mut expr_node.values[idx - 1],
             _ => unreachable!(),
         }
     }
 
     fn label_in(&mut self, idx: usize) -> &str {
         match self {
-            DemoNode::ShowImage(_) if idx == 0 => "URL",
-            DemoNode::ExprNode(expr_node) => &expr_node.bindings[idx - 1],
+            Self::ShowImage(_) if idx == 0 => "URL",
+            Self::ExprNode(expr_node) => &expr_node.bindings[idx - 1],
             _ => unreachable!(),
         }
     }
 
     fn string_out(&self) -> &str {
         match self {
-            DemoNode::String(value) => value,
+            Self::String(value) => value,
             _ => unreachable!(),
         }
     }
 
     fn string_in(&mut self) -> &mut String {
         match self {
-            DemoNode::ShowImage(uri) => uri,
-            DemoNode::ExprNode(expr_node) => &mut expr_node.text,
+            Self::ShowImage(uri) => uri,
+            Self::ExprNode(expr_node) => &mut expr_node.text,
             _ => unreachable!(),
         }
     }
 
     fn expr_node(&mut self) -> &mut ExprNode {
         match self {
-            DemoNode::ExprNode(expr_node) => expr_node,
+            Self::ExprNode(expr_node) => expr_node,
             _ => unreachable!(),
         }
     }
@@ -96,6 +96,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     #[inline]
     fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<DemoNode>) {
         // Validate connection
+        #[allow(clippy::match_same_arms)] // For match clarity
         match (&snarl[from.id.node], &snarl[to.id.node]) {
             (DemoNode::Sink, _) => {
                 unreachable!("Sink node has no outputs")
@@ -153,10 +154,8 @@ impl SnarlViewer<DemoNode> for DemoViewer {
 
     fn inputs(&mut self, node: &DemoNode) -> usize {
         match node {
-            DemoNode::Sink => 1,
-            DemoNode::Number(_) => 0,
-            DemoNode::String(_) => 0,
-            DemoNode::ShowImage(_) => 1,
+            DemoNode::Sink | DemoNode::ShowImage(_) => 1,
+            DemoNode::Number(_) | DemoNode::String(_) => 0,
             DemoNode::ExprNode(expr_node) => 1 + expr_node.bindings.len(),
         }
     }
@@ -164,13 +163,14 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     fn outputs(&mut self, node: &DemoNode) -> usize {
         match node {
             DemoNode::Sink => 0,
-            DemoNode::Number(_) => 1,
-            DemoNode::String(_) => 1,
-            DemoNode::ShowImage(_) => 1,
-            DemoNode::ExprNode(_) => 1,
+            DemoNode::Number(_)
+            | DemoNode::String(_)
+            | DemoNode::ShowImage(_)
+            | DemoNode::ExprNode(_) => 1,
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn show_input(
         &mut self,
         pin: &InPin,
@@ -196,7 +196,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         }
                         DemoNode::String(ref value) => {
                             assert_eq!(remote.output, 0, "String node has only one output");
-                            ui.label(format!("{:?}", value));
+                            ui.label(format!("{value:?}"));
 
                             PinInfo::circle().with_fill(STRING_COLOR).with_wire_style(
                                 WireStyle::AxisAligned {
@@ -286,11 +286,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                             .show(ui);
 
                         let input = snarl[pin.id.node].string_in();
-                        if new_string != *input {
+                        if new_string == *input {
+                            false
+                        } else {
                             *input = new_string;
                             true
-                        } else {
-                            false
                         }
                     }
                     _ => unreachable!("Expr pins has only one wire"),
@@ -449,11 +449,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             ui.close_menu();
         }
         if ui.button("String").clicked() {
-            snarl.insert_node(pos, DemoNode::String("".to_owned()));
+            snarl.insert_node(pos, DemoNode::String(String::new()));
             ui.close_menu();
         }
         if ui.button("Show image").clicked() {
-            snarl.insert_node(pos, DemoNode::ShowImage("".to_owned()));
+            snarl.insert_node(pos, DemoNode::ShowImage(String::new()));
             ui.close_menu();
         }
         if ui.button("Sink").clicked() {
@@ -480,29 +480,25 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         // In your implementation, you may want to define specifications for each node's
         // pin inputs and outputs and compatibility to make this easier.
 
-        ui.label("Add node");
-
         type PinCompat = usize;
         const PIN_NUM: PinCompat = 1;
         const PIN_STR: PinCompat = 2;
         const PIN_IMG: PinCompat = 4;
         const PIN_SINK: PinCompat = PIN_NUM | PIN_STR | PIN_IMG;
 
-        fn pin_out_compat(node: &DemoNode) -> PinCompat {
+        const fn pin_out_compat(node: &DemoNode) -> PinCompat {
             match node {
                 DemoNode::Sink => 0,
-                DemoNode::Number(_) => PIN_NUM,
                 DemoNode::String(_) => PIN_STR,
                 DemoNode::ShowImage(_) => PIN_IMG,
-                DemoNode::ExprNode(_) => PIN_NUM,
+                DemoNode::Number(_) | DemoNode::ExprNode(_) => PIN_NUM,
             }
         }
 
-        fn pin_in_compat(node: &DemoNode, pin: usize) -> PinCompat {
+        const fn pin_in_compat(node: &DemoNode, pin: usize) -> PinCompat {
             match node {
                 DemoNode::Sink => PIN_SINK,
-                DemoNode::Number(_) => 0,
-                DemoNode::String(_) => 0,
+                DemoNode::Number(_) | DemoNode::String(_) => 0,
                 DemoNode::ShowImage(_) => PIN_STR,
                 DemoNode::ExprNode(_) => {
                     if pin == 0 {
@@ -513,6 +509,8 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 }
             }
         }
+
+        ui.label("Add node");
 
         match src_pins {
             AnyPins::Out(src_pins) => {
@@ -525,7 +523,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 let src_out_ty = pin_out_compat(snarl.get_node(src_pin.node).unwrap());
                 let dst_in_candidates = [
                     ("Sink", (|| DemoNode::Sink) as fn() -> DemoNode, PIN_SINK),
-                    ("Show Image", || DemoNode::ShowImage("".to_owned()), PIN_STR),
+                    ("Show Image", || DemoNode::ShowImage(String::new()), PIN_STR),
                     ("Expr", || DemoNode::ExprNode(ExprNode::new()), PIN_STR),
                 ];
 
@@ -555,9 +553,9 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         (|| DemoNode::Number(0.)) as fn() -> DemoNode,
                         PIN_NUM,
                     ),
-                    ("String", || DemoNode::String("".to_owned()), PIN_STR),
+                    ("String", || DemoNode::String(String::new()), PIN_STR),
                     ("Expr", || DemoNode::ExprNode(ExprNode::new()), PIN_NUM),
-                    ("Show Image", || DemoNode::ShowImage("".to_owned()), PIN_IMG),
+                    ("Show Image", || DemoNode::ShowImage(String::new()), PIN_IMG),
                 ];
 
                 for (name, ctor, out_ty) in dst_out_candidates {
@@ -670,7 +668,7 @@ struct ExprNode {
 
 impl ExprNode {
     fn new() -> Self {
-        ExprNode {
+        Self {
             text: "0".to_string(),
             bindings: Vec::new(),
             values: Vec::new(),
@@ -718,13 +716,13 @@ impl Expr {
             |name: &str| bindings.iter().position(|binding| binding == name).unwrap();
 
         match self {
-            Expr::Var(ref name) => args[binding_index(name)],
-            Expr::Val(value) => *value,
-            Expr::UnOp { op, ref expr } => match op {
+            Self::Var(ref name) => args[binding_index(name)],
+            Self::Val(value) => *value,
+            Self::UnOp { op, ref expr } => match op {
                 UnOp::Pos => expr.eval(bindings, args),
                 UnOp::Neg => -expr.eval(bindings, args),
             },
-            Expr::BinOp {
+            Self::BinOp {
                 ref lhs,
                 op,
                 ref rhs,
@@ -739,16 +737,16 @@ impl Expr {
 
     fn extend_bindings(&self, bindings: &mut Vec<String>) {
         match self {
-            Expr::Var(name) => {
+            Self::Var(name) => {
                 if !bindings.contains(name) {
                     bindings.push(name.clone());
                 }
             }
-            Expr::Val(_) => {}
-            Expr::UnOp { expr, .. } => {
+            Self::Val(_) => {}
+            Self::UnOp { expr, .. } => {
                 expr.extend_bindings(bindings);
             }
-            Expr::BinOp { lhs, rhs, .. } => {
+            Self::BinOp { lhs, rhs, .. } => {
                 lhs.extend_bindings(bindings);
                 rhs.extend_bindings(bindings);
             }
@@ -761,10 +759,10 @@ impl syn::parse::Parse for UnOp {
         let lookahead = input.lookahead1();
         if lookahead.peek(syn::Token![+]) {
             input.parse::<syn::Token![+]>()?;
-            Ok(UnOp::Pos)
+            Ok(Self::Pos)
         } else if lookahead.peek(syn::Token![-]) {
             input.parse::<syn::Token![-]>()?;
-            Ok(UnOp::Neg)
+            Ok(Self::Neg)
         } else {
             Err(lookahead.error())
         }
@@ -776,16 +774,16 @@ impl syn::parse::Parse for BinOp {
         let lookahead = input.lookahead1();
         if lookahead.peek(syn::Token![+]) {
             input.parse::<syn::Token![+]>()?;
-            Ok(BinOp::Add)
+            Ok(Self::Add)
         } else if lookahead.peek(syn::Token![-]) {
             input.parse::<syn::Token![-]>()?;
-            Ok(BinOp::Sub)
+            Ok(Self::Sub)
         } else if lookahead.peek(syn::Token![*]) {
             input.parse::<syn::Token![*]>()?;
-            Ok(BinOp::Mul)
+            Ok(Self::Mul)
         } else if lookahead.peek(syn::Token![/]) {
             input.parse::<syn::Token![/]>()?;
-            Ok(BinOp::Div)
+            Ok(Self::Div)
         } else {
             Err(lookahead.error())
         }
@@ -800,7 +798,7 @@ impl syn::parse::Parse for Expr {
         if lookahead.peek(syn::token::Paren) {
             let content;
             syn::parenthesized!(content in input);
-            let expr = content.parse::<Expr>()?;
+            let expr = content.parse::<Self>()?;
             if input.is_empty() {
                 return Ok(expr);
             }
@@ -816,14 +814,14 @@ impl syn::parse::Parse for Expr {
         } else if lookahead.peek(syn::LitInt) {
             let lit = input.parse::<syn::LitInt>()?;
             let value = lit.base10_parse::<f64>()?;
-            let expr = Expr::Val(value);
+            let expr = Self::Val(value);
             if input.is_empty() {
                 return Ok(expr);
             }
             lhs = expr;
         } else if lookahead.peek(syn::Ident) {
             let ident = input.parse::<syn::Ident>()?;
-            let expr = Expr::Var(ident.to_string());
+            let expr = Self::Var(ident.to_string());
             if input.is_empty() {
                 return Ok(expr);
             }
@@ -848,9 +846,9 @@ impl Expr {
         if lookahead.peek(syn::token::Paren) {
             let content;
             syn::parenthesized!(content in input);
-            let expr = Expr::UnOp {
+            let expr = Self::UnOp {
                 op,
-                expr: Box::new(content.parse::<Expr>()?),
+                expr: Box::new(content.parse::<Self>()?),
             };
             if input.is_empty() {
                 return Ok(expr);
@@ -859,9 +857,9 @@ impl Expr {
         } else if lookahead.peek(syn::LitFloat) {
             let lit = input.parse::<syn::LitFloat>()?;
             let value = lit.base10_parse::<f64>()?;
-            let expr = Expr::UnOp {
+            let expr = Self::UnOp {
                 op,
-                expr: Box::new(Expr::Val(value)),
+                expr: Box::new(Self::Val(value)),
             };
             if input.is_empty() {
                 return Ok(expr);
@@ -870,9 +868,9 @@ impl Expr {
         } else if lookahead.peek(syn::LitInt) {
             let lit = input.parse::<syn::LitInt>()?;
             let value = lit.base10_parse::<f64>()?;
-            let expr = Expr::UnOp {
+            let expr = Self::UnOp {
                 op,
-                expr: Box::new(Expr::Val(value)),
+                expr: Box::new(Self::Val(value)),
             };
             if input.is_empty() {
                 return Ok(expr);
@@ -880,9 +878,9 @@ impl Expr {
             lhs = expr;
         } else if lookahead.peek(syn::Ident) {
             let ident = input.parse::<syn::Ident>()?;
-            let expr = Expr::UnOp {
+            let expr = Self::UnOp {
                 op,
-                expr: Box::new(Expr::Var(ident.to_string())),
+                expr: Box::new(Self::Var(ident.to_string())),
             };
             if input.is_empty() {
                 return Ok(expr);
@@ -897,36 +895,36 @@ impl Expr {
         Self::parse_binop(Box::new(lhs), op, input)
     }
 
-    fn parse_binop(lhs: Box<Expr>, op: BinOp, input: syn::parse::ParseStream) -> syn::Result<Self> {
+    fn parse_binop(lhs: Box<Self>, op: BinOp, input: syn::parse::ParseStream) -> syn::Result<Self> {
         let lookahead = input.lookahead1();
 
         let rhs;
         if lookahead.peek(syn::token::Paren) {
             let content;
             syn::parenthesized!(content in input);
-            rhs = Box::new(content.parse::<Expr>()?);
+            rhs = Box::new(content.parse::<Self>()?);
             if input.is_empty() {
-                return Ok(Expr::BinOp { lhs, op, rhs });
+                return Ok(Self::BinOp { lhs, op, rhs });
             }
         } else if lookahead.peek(syn::LitFloat) {
             let lit = input.parse::<syn::LitFloat>()?;
             let value = lit.base10_parse::<f64>()?;
-            rhs = Box::new(Expr::Val(value));
+            rhs = Box::new(Self::Val(value));
             if input.is_empty() {
-                return Ok(Expr::BinOp { lhs, op, rhs });
+                return Ok(Self::BinOp { lhs, op, rhs });
             }
         } else if lookahead.peek(syn::LitInt) {
             let lit = input.parse::<syn::LitInt>()?;
             let value = lit.base10_parse::<f64>()?;
-            rhs = Box::new(Expr::Val(value));
+            rhs = Box::new(Self::Val(value));
             if input.is_empty() {
-                return Ok(Expr::BinOp { lhs, op, rhs });
+                return Ok(Self::BinOp { lhs, op, rhs });
             }
         } else if lookahead.peek(syn::Ident) {
             let ident = input.parse::<syn::Ident>()?;
-            rhs = Box::new(Expr::Var(ident.to_string()));
+            rhs = Box::new(Self::Var(ident.to_string()));
             if input.is_empty() {
-                return Ok(Expr::BinOp { lhs, op, rhs });
+                return Ok(Self::BinOp { lhs, op, rhs });
             }
         } else {
             return Err(lookahead.error());
@@ -934,19 +932,16 @@ impl Expr {
 
         let next_op = input.parse::<BinOp>()?;
 
-        match (op, next_op) {
-            (BinOp::Add | BinOp::Sub, BinOp::Mul | BinOp::Div) => {
-                let rhs = Self::parse_binop(rhs, next_op, input)?;
-                Ok(Expr::BinOp {
-                    lhs,
-                    op,
-                    rhs: Box::new(rhs),
-                })
-            }
-            _ => {
-                let lhs = Expr::BinOp { lhs, op, rhs };
-                Self::parse_binop(Box::new(lhs), next_op, input)
-            }
+        if let (BinOp::Add | BinOp::Sub, BinOp::Mul | BinOp::Div) = (op, next_op) {
+            let rhs = Self::parse_binop(rhs, next_op, input)?;
+            Ok(Self::BinOp {
+                lhs,
+                op,
+                rhs: Box::new(rhs),
+            })
+        } else {
+            let lhs = Self::BinOp { lhs, op, rhs };
+            Self::parse_binop(Box::new(lhs), next_op, input)
         }
     }
 }
@@ -957,7 +952,7 @@ pub struct DemoApp {
     snarl_ui_id: Option<Id>,
 }
 
-fn default_style() -> SnarlStyle {
+const fn default_style() -> SnarlStyle {
     SnarlStyle {
         node_layout: Some(NodeLayout::FlippedSandwich),
         pin_placement: Some(PinPlacement::Edge),
@@ -993,25 +988,23 @@ impl DemoApp {
 
         cx.egui_ctx.style_mut(|style| style.animation_time *= 10.0);
 
-        let snarl = match cx.storage {
-            None => Snarl::new(),
-            Some(storage) => storage
+        let snarl = cx.storage.map_or_else(Snarl::new, |storage| {
+            storage
                 .get_string("snarl")
                 .and_then(|snarl| serde_json::from_str(&snarl).ok())
-                .unwrap_or_else(Snarl::new),
-        };
+                .unwrap_or_default()
+        });
         // let snarl = Snarl::new();
 
-        let style = match cx.storage {
-            None => default_style(),
-            Some(storage) => storage
+        let style = cx.storage.map_or_else(default_style, |storage| {
+            storage
                 .get_string("style")
                 .and_then(|style| serde_json::from_str(&style).ok())
-                .unwrap_or_else(default_style),
-        };
+                .unwrap_or_else(default_style)
+        });
         // let style = SnarlStyle::new();
 
-        DemoApp {
+        Self {
             snarl,
             style,
             snarl_ui_id: None,
@@ -1029,7 +1022,7 @@ impl App for DemoApp {
                 {
                     ui.menu_button("File", |ui| {
                         if ui.button("Quit").clicked() {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close)
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                         }
                     });
                     ui.add_space(16.0);
@@ -1038,7 +1031,7 @@ impl App for DemoApp {
                 egui::widgets::global_theme_preference_switch(ui);
 
                 if ui.button("Clear All").clicked() {
-                    self.snarl = Default::default();
+                    self.snarl = Snarl::default();
                 }
             });
         });
@@ -1067,7 +1060,7 @@ impl App for DemoApp {
 
                     for (id, node) in selected {
                         ui.horizontal(|ui| {
-                            ui.label(format!("{:?}", id));
+                            ui.label(format!("{id:?}"));
                             ui.label(node.name());
                             ui.add_space(ui.spacing().item_spacing.x);
                             if ui.button("Remove").clicked() {
@@ -1135,5 +1128,5 @@ fn main() {
 
 fn format_float(v: f64) -> String {
     let v = (v * 1000.0).round() / 1000.0;
-    format!("{}", v)
+    format!("{v}")
 }
