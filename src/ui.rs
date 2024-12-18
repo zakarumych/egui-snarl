@@ -356,7 +356,7 @@ impl SnarlStyle {
     fn get_pin_size(&self, scale: f32, style: &Style) -> f32 {
         self.pin_size
             .zoomed(scale)
-            .unwrap_or_else(|| style.spacing.interact_size.y * 0.6)
+            .unwrap_or(style.spacing.interact_size.y * 0.6)
     }
 
     fn get_pin_fill(&self, style: &Style) -> Color32 {
@@ -372,11 +372,11 @@ impl SnarlStyle {
     }
 
     fn get_pin_shape(&self) -> PinShape {
-        self.pin_shape.unwrap_or(PinShape::Circle).into()
+        self.pin_shape.unwrap_or(PinShape::Circle)
     }
 
     fn get_pin_placement(&self) -> PinPlacement {
-        self.pin_placement.unwrap_or(PinPlacement::default())
+        self.pin_placement.unwrap_or_default()
     }
 
     fn get_wire_width(&self, scale: f32, style: &Style) -> f32 {
@@ -1089,6 +1089,7 @@ impl<T> Snarl<T> {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn draw_inputs<V>(
         &mut self,
         viewer: &mut V,
@@ -1239,6 +1240,7 @@ impl<T> Snarl<T> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn draw_outputs<V>(
         &mut self,
         viewer: &mut V,
@@ -1388,6 +1390,7 @@ impl<T> Snarl<T> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn draw_body<V>(
         &mut self,
         viewer: &mut V,
@@ -1413,8 +1416,8 @@ impl<T> Snarl<T> {
 
         viewer.show_body(
             node,
-            &inputs,
-            &outputs,
+            inputs,
+            outputs,
             &mut body_ui,
             snarl_state.scale(),
             self,

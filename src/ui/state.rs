@@ -208,9 +208,7 @@ impl SnarlStateData {
 
     fn load(cx: &Context, id: Id) -> Option<Self> {
         cx.data(|d| {
-            let Some(small) = d.get_temp::<SnarlStateDataHeader>(id) else {
-                return None;
-            };
+            let small = d.get_temp::<SnarlStateDataHeader>(id)?;
             let new_wires = d.get_temp(id);
             let rect_selection = d.get_temp(id);
 
