@@ -1111,15 +1111,26 @@ fn main() -> eframe::Result<()> {
     )
 }
 
+#[cfg(target_arch = "wasm32")]
+fn get_canvas_element() -> Option<web_sys::HtmlCanvasElement> {
+    use eframe::wasm_bindgen::JsCast;
+
+    let document = web_sys::window()?.document()?;
+    let canvas = document.get_element_by_id("egui_snarl_demo")?;
+    canvas.dyn_into::<web_sys::HtmlCanvasElement>().ok()
+}
+
 // When compiling to web using trunk:
 #[cfg(target_arch = "wasm32")]
 fn main() {
+    let canvas = get_canvas_element().expect("Failed to find canvas with id 'egui_snarl_demo'");
+
     let web_options = eframe::WebOptions::default();
 
     wasm_bindgen_futures::spawn_local(async {
         eframe::WebRunner::new()
             .start(
-                "egui_snarl_demo",
+                canvas,
                 web_options,
                 Box::new(|cx| Ok(Box::new(DemoApp::new(cx)))),
             )

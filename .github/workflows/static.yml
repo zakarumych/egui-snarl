@@ -1,6 +1,7 @@
 name: Build and Deploy to Github Pages
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "main" ]
     paths:
@@ -35,7 +36,7 @@ jobs:
     - name: Install trunk
       run: cargo install trunk
     - name: Build project
-      run: trunk build --release --verbose --public-url "/${{ github.event.repository.name }}" ./demo/index.html
+      run: trunk build --release --verbose --public-url "/${{ github.event.repository.name }}" ./demo/index.html --dist ./demo/dist
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:

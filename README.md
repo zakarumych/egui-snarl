@@ -1,5 +1,9 @@
 # egui-snarl <img src="./logo.png" width="32"/>
 
+[![docs.rs](https://img.shields.io/docsrs/egui-snarl?style=for-the-badge)](https://docs.rs/egui-snarl/)
+[![Crates.io Total Downloads](https://img.shields.io/crates/d/egui-snarl?style=for-the-badge)](https://crates.io/crates/egui-snarl)
+[![Discord](https://img.shields.io/discord/1270330377847832646?style=for-the-badge&logo=discord)](https://discord.com/channels/1270330377847832646/1318880578132770869)
+
 Crate for creating and manipulating node-graph UIs.
 It contains all necessary features and more are planned.
 
