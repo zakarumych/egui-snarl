@@ -8,7 +8,7 @@
 #![deny(missing_docs)]
 #![deny(clippy::correctness, clippy::complexity, clippy::perf, clippy::style)]
 // #![warn(clippy::pedantic)]
-#![allow(clippy::inline_always)]
+#![allow(clippy::inline_always, clippy::use_self)]
 
 pub mod ui;
 
