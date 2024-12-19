@@ -1,3 +1,5 @@
+#![allow(clippy::use_self)]
+
 use std::collections::HashMap;
 
 use eframe::{App, CreationContext};
