@@ -8,7 +8,7 @@
 #![deny(missing_docs)]
 #![deny(clippy::correctness, clippy::complexity, clippy::perf, clippy::style)]
 // #![warn(clippy::pedantic)]
-#![allow(clippy::inline_always)]
+#![allow(clippy::inline_always, clippy::use_self)]
 
 pub mod ui;
 
@@ -360,10 +360,7 @@ impl<T> Snarl<T> {
     /// Returns reference to the node.
     #[must_use]
     pub fn get_node(&self, idx: NodeId) -> Option<&T> {
-        match self.nodes.get(idx.0) {
-            Some(node) => Some(&node.value),
-            None => None,
-        }
+        self.nodes.get(idx.0).map(|node| &node.value)
     }
 
     /// Returns mutable reference to the node.
@@ -377,18 +374,12 @@ impl<T> Snarl<T> {
     /// Returns reference to the node data.
     #[must_use]
     pub fn get_node_info(&self, idx: NodeId) -> Option<&Node<T>> {
-        match self.nodes.get(idx.0) {
-            Some(node) => Some(node),
-            None => None,
-        }
+        self.nodes.get(idx.0)
     }
 
     /// Returns mutable reference to the node data.
     pub fn get_node_info_mut(&mut self, idx: NodeId) -> Option<&mut Node<T>> {
-        match self.nodes.get_mut(idx.0) {
-            Some(node) => Some(node),
-            None => None,
-        }
+        self.nodes.get_mut(idx.0)
     }
 
     /// Iterates over shared references to each node.

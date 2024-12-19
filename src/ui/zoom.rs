@@ -186,7 +186,7 @@ where
     #[inline(always)]
     fn zoom(&mut self, zoom: f32) {
         if let Some(value) = self {
-            value.zoom(zoom)
+            value.zoom(zoom);
         }
     }
 }

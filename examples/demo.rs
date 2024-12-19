@@ -1,3 +1,5 @@
+#![allow(clippy::use_self)]
+
 use std::collections::HashMap;
 
 use eframe::{App, CreationContext};
@@ -34,7 +36,7 @@ enum DemoNode {
 }
 
 impl DemoNode {
-    fn name(&self) -> &str {
+    const fn name(&self) -> &str {
         match self {
             DemoNode::Sink => "Sink",
             DemoNode::Number(_) => "Number",
@@ -96,6 +98,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     #[inline]
     fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<DemoNode>) {
         // Validate connection
+        #[allow(clippy::match_same_arms)] // For match clarity
         match (&snarl[from.id.node], &snarl[to.id.node]) {
             (DemoNode::Sink, _) => {
                 unreachable!("Sink node has no outputs")
@@ -153,10 +156,8 @@ impl SnarlViewer<DemoNode> for DemoViewer {
 
     fn inputs(&mut self, node: &DemoNode) -> usize {
         match node {
-            DemoNode::Sink => 1,
-            DemoNode::Number(_) => 0,
-            DemoNode::String(_) => 0,
-            DemoNode::ShowImage(_) => 1,
+            DemoNode::Sink | DemoNode::ShowImage(_) => 1,
+            DemoNode::Number(_) | DemoNode::String(_) => 0,
             DemoNode::ExprNode(expr_node) => 1 + expr_node.bindings.len(),
         }
     }
@@ -164,13 +165,14 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     fn outputs(&mut self, node: &DemoNode) -> usize {
         match node {
             DemoNode::Sink => 0,
-            DemoNode::Number(_) => 1,
-            DemoNode::String(_) => 1,
-            DemoNode::ShowImage(_) => 1,
-            DemoNode::ExprNode(_) => 1,
+            DemoNode::Number(_)
+            | DemoNode::String(_)
+            | DemoNode::ShowImage(_)
+            | DemoNode::ExprNode(_) => 1,
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn show_input(
         &mut self,
         pin: &InPin,
@@ -196,7 +198,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         }
                         DemoNode::String(ref value) => {
                             assert_eq!(remote.output, 0, "String node has only one output");
-                            ui.label(format!("{:?}", value));
+                            ui.label(format!("{value:?}"));
 
                             PinInfo::circle().with_fill(STRING_COLOR).with_wire_style(
                                 WireStyle::AxisAligned {
@@ -286,11 +288,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                             .show(ui);
 
                         let input = snarl[pin.id.node].string_in();
-                        if new_string != *input {
+                        if new_string == *input {
+                            false
+                        } else {
                             *input = new_string;
                             true
-                        } else {
-                            false
                         }
                     }
                     _ => unreachable!("Expr pins has only one wire"),
@@ -449,11 +451,11 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             ui.close_menu();
         }
         if ui.button("String").clicked() {
-            snarl.insert_node(pos, DemoNode::String("".to_owned()));
+            snarl.insert_node(pos, DemoNode::String(String::new()));
             ui.close_menu();
         }
         if ui.button("Show image").clicked() {
-            snarl.insert_node(pos, DemoNode::ShowImage("".to_owned()));
+            snarl.insert_node(pos, DemoNode::ShowImage(String::new()));
             ui.close_menu();
         }
         if ui.button("Sink").clicked() {
@@ -480,29 +482,25 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         // In your implementation, you may want to define specifications for each node's
         // pin inputs and outputs and compatibility to make this easier.
 
-        ui.label("Add node");
-
         type PinCompat = usize;
         const PIN_NUM: PinCompat = 1;
         const PIN_STR: PinCompat = 2;
         const PIN_IMG: PinCompat = 4;
         const PIN_SINK: PinCompat = PIN_NUM | PIN_STR | PIN_IMG;
 
-        fn pin_out_compat(node: &DemoNode) -> PinCompat {
+        const fn pin_out_compat(node: &DemoNode) -> PinCompat {
             match node {
                 DemoNode::Sink => 0,
-                DemoNode::Number(_) => PIN_NUM,
                 DemoNode::String(_) => PIN_STR,
                 DemoNode::ShowImage(_) => PIN_IMG,
-                DemoNode::ExprNode(_) => PIN_NUM,
+                DemoNode::Number(_) | DemoNode::ExprNode(_) => PIN_NUM,
             }
         }
 
-        fn pin_in_compat(node: &DemoNode, pin: usize) -> PinCompat {
+        const fn pin_in_compat(node: &DemoNode, pin: usize) -> PinCompat {
             match node {
                 DemoNode::Sink => PIN_SINK,
-                DemoNode::Number(_) => 0,
-                DemoNode::String(_) => 0,
+                DemoNode::Number(_) | DemoNode::String(_) => 0,
                 DemoNode::ShowImage(_) => PIN_STR,
                 DemoNode::ExprNode(_) => {
                     if pin == 0 {
@@ -513,6 +511,8 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 }
             }
         }
+
+        ui.label("Add node");
 
         match src_pins {
             AnyPins::Out(src_pins) => {
@@ -525,7 +525,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 let src_out_ty = pin_out_compat(snarl.get_node(src_pin.node).unwrap());
                 let dst_in_candidates = [
                     ("Sink", (|| DemoNode::Sink) as fn() -> DemoNode, PIN_SINK),
-                    ("Show Image", || DemoNode::ShowImage("".to_owned()), PIN_STR),
+                    ("Show Image", || DemoNode::ShowImage(String::new()), PIN_STR),
                     ("Expr", || DemoNode::ExprNode(ExprNode::new()), PIN_STR),
                 ];
 
@@ -555,9 +555,9 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         (|| DemoNode::Number(0.)) as fn() -> DemoNode,
                         PIN_NUM,
                     ),
-                    ("String", || DemoNode::String("".to_owned()), PIN_STR),
+                    ("String", || DemoNode::String(String::new()), PIN_STR),
                     ("Expr", || DemoNode::ExprNode(ExprNode::new()), PIN_NUM),
-                    ("Show Image", || DemoNode::ShowImage("".to_owned()), PIN_IMG),
+                    ("Show Image", || DemoNode::ShowImage(String::new()), PIN_IMG),
                 ];
 
                 for (name, ctor, out_ty) in dst_out_candidates {
@@ -934,19 +934,16 @@ impl Expr {
 
         let next_op = input.parse::<BinOp>()?;
 
-        match (op, next_op) {
-            (BinOp::Add | BinOp::Sub, BinOp::Mul | BinOp::Div) => {
-                let rhs = Self::parse_binop(rhs, next_op, input)?;
-                Ok(Expr::BinOp {
-                    lhs,
-                    op,
-                    rhs: Box::new(rhs),
-                })
-            }
-            _ => {
-                let lhs = Expr::BinOp { lhs, op, rhs };
-                Self::parse_binop(Box::new(lhs), next_op, input)
-            }
+        if let (BinOp::Add | BinOp::Sub, BinOp::Mul | BinOp::Div) = (op, next_op) {
+            let rhs = Self::parse_binop(rhs, next_op, input)?;
+            Ok(Self::BinOp {
+                lhs,
+                op,
+                rhs: Box::new(rhs),
+            })
+        } else {
+            let lhs = Self::BinOp { lhs, op, rhs };
+            Self::parse_binop(Box::new(lhs), next_op, input)
         }
     }
 }
@@ -957,7 +954,7 @@ pub struct DemoApp {
     snarl_ui_id: Option<Id>,
 }
 
-fn default_style() -> SnarlStyle {
+const fn default_style() -> SnarlStyle {
     SnarlStyle {
         node_layout: Some(NodeLayout::FlippedSandwich),
         pin_placement: Some(PinPlacement::Edge),
@@ -993,22 +990,20 @@ impl DemoApp {
 
         cx.egui_ctx.style_mut(|style| style.animation_time *= 10.0);
 
-        let snarl = match cx.storage {
-            None => Snarl::new(),
-            Some(storage) => storage
+        let snarl = cx.storage.map_or_else(Snarl::new, |storage| {
+            storage
                 .get_string("snarl")
                 .and_then(|snarl| serde_json::from_str(&snarl).ok())
-                .unwrap_or_else(Snarl::new),
-        };
+                .unwrap_or_default()
+        });
         // let snarl = Snarl::new();
 
-        let style = match cx.storage {
-            None => default_style(),
-            Some(storage) => storage
+        let style = cx.storage.map_or_else(default_style, |storage| {
+            storage
                 .get_string("style")
                 .and_then(|style| serde_json::from_str(&style).ok())
-                .unwrap_or_else(default_style),
-        };
+                .unwrap_or_else(default_style)
+        });
         // let style = SnarlStyle::new();
 
         DemoApp {
@@ -1029,7 +1024,7 @@ impl App for DemoApp {
                 {
                     ui.menu_button("File", |ui| {
                         if ui.button("Quit").clicked() {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close)
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                         }
                     });
                     ui.add_space(16.0);
@@ -1038,7 +1033,7 @@ impl App for DemoApp {
                 egui::widgets::global_theme_preference_switch(ui);
 
                 if ui.button("Clear All").clicked() {
-                    self.snarl = Default::default();
+                    self.snarl = Snarl::default();
                 }
             });
         });
@@ -1067,7 +1062,7 @@ impl App for DemoApp {
 
                     for (id, node) in selected {
                         ui.horizontal(|ui| {
-                            ui.label(format!("{:?}", id));
+                            ui.label(format!("{id:?}"));
                             ui.label(node.name());
                             ui.add_space(ui.spacing().item_spacing.x);
                             if ui.button("Remove").clicked() {
@@ -1146,5 +1141,5 @@ fn main() {
 
 fn format_float(v: f64) -> String {
     let v = (v * 1000.0).round() / 1000.0;
-    format!("{}", v)
+    format!("{v}")
 }
