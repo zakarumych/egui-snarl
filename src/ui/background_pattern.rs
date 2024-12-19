@@ -88,7 +88,7 @@ macro_rules! default_grid_angle {
 
 impl Default for Grid {
     fn default() -> Self {
-        Grid {
+        Self {
             spacing: DEFAULT_GRID_SPACING,
             angle: DEFAULT_GRID_ANGLE,
         }
