@@ -28,7 +28,7 @@ impl NodeState {
     pub fn load(cx: &Context, id: Id, spacing: &Spacing, scale: f32) -> Self {
         cx.data_mut(|d| d.get_temp::<NodeData>(id)).map_or_else(
             || Self::initial(id, spacing, scale),
-            |data| Self {
+            |data| NodeState {
                 size: data.unscaled_size * scale,
                 header_height: data.unscaled_header_height * scale,
                 id,
@@ -302,7 +302,7 @@ impl SnarlState {
             offset = bb.center().to_vec2() * scale;
         }
 
-        Self {
+        SnarlState {
             offset,
             scale,
             target_scale: scale,

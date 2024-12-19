@@ -540,7 +540,7 @@ impl SnarlStyle {
     /// Creates new [`SnarlStyle`] filled with default values.
     #[must_use]
     pub const fn new() -> Self {
-        Self {
+        SnarlStyle {
             node_layout: None,
             pin_size: None,
             pin_fill: None,

@@ -136,13 +136,13 @@ impl<'de> serde::Deserialize<'de> for Wires {
         }
 
         let wires = deserializer.deserialize_seq(Visitor)?;
-        Ok(Self { wires })
+        Ok(Wires { wires })
     }
 }
 
 impl Wires {
     fn new() -> Self {
-        Self {
+        Wires {
             wires: HashSet::with_hasher(egui::ahash::RandomState::new()),
         }
     }
@@ -216,7 +216,7 @@ impl<T> Snarl<T> {
     /// ```
     #[must_use]
     pub fn new() -> Self {
-        Self {
+        Snarl {
             nodes: Slab::new(),
             wires: Wires::new(),
         }
@@ -812,7 +812,7 @@ pub struct InPin {
 
 impl OutPin {
     fn new<T>(snarl: &Snarl<T>, pin: OutPinId) -> Self {
-        Self {
+        OutPin {
             id: pin,
             remotes: snarl.wires.wired_inputs(pin).collect(),
         }
@@ -821,7 +821,7 @@ impl OutPin {
 
 impl InPin {
     fn new<T>(snarl: &Snarl<T>, pin: InPinId) -> Self {
-        Self {
+        InPin {
             id: pin,
             remotes: snarl.wires.wired_outputs(pin).collect(),
         }
