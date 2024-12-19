@@ -1118,6 +1118,8 @@ fn main() -> eframe::Result<()> {
 
 #[cfg(target_arch = "wasm32")]
 fn get_canvas_element() -> Option<web_sys::HtmlCanvasElement> {
+    use eframe::wasm_bindgen::JsCast;
+
     let document = web_sys::window()?.document()?;
     let canvas = document.get_element_by_id("egui_snarl_demo")?;
     canvas.dyn_into::<web_sys::HtmlCanvasElement>().ok()

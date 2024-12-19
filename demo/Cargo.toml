@@ -20,3 +20,4 @@ egui-snarl = { path = "..", features = ["egui-probe", "serde"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4"
+web-sys = "0.3.70"
