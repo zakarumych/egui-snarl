@@ -19,7 +19,7 @@ use slab::Slab;
 
 impl<T> Default for Snarl<T> {
     fn default() -> Self {
-        Self::new()
+        Snarl::new()
     }
 }
 

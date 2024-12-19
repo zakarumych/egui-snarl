@@ -38,55 +38,55 @@ enum DemoNode {
 impl DemoNode {
     const fn name(&self) -> &str {
         match self {
-            Self::Sink => "Sink",
-            Self::Number(_) => "Number",
-            Self::String(_) => "String",
-            Self::ShowImage(_) => "ShowImage",
-            Self::ExprNode(_) => "ExprNode",
+            DemoNode::Sink => "Sink",
+            DemoNode::Number(_) => "Number",
+            DemoNode::String(_) => "String",
+            DemoNode::ShowImage(_) => "ShowImage",
+            DemoNode::ExprNode(_) => "ExprNode",
         }
     }
 
     fn number_out(&self) -> f64 {
         match self {
-            Self::Number(value) => *value,
-            Self::ExprNode(expr_node) => expr_node.eval(),
+            DemoNode::Number(value) => *value,
+            DemoNode::ExprNode(expr_node) => expr_node.eval(),
             _ => unreachable!(),
         }
     }
 
     fn number_in(&mut self, idx: usize) -> &mut f64 {
         match self {
-            Self::ExprNode(expr_node) => &mut expr_node.values[idx - 1],
+            DemoNode::ExprNode(expr_node) => &mut expr_node.values[idx - 1],
             _ => unreachable!(),
         }
     }
 
     fn label_in(&mut self, idx: usize) -> &str {
         match self {
-            Self::ShowImage(_) if idx == 0 => "URL",
-            Self::ExprNode(expr_node) => &expr_node.bindings[idx - 1],
+            DemoNode::ShowImage(_) if idx == 0 => "URL",
+            DemoNode::ExprNode(expr_node) => &expr_node.bindings[idx - 1],
             _ => unreachable!(),
         }
     }
 
     fn string_out(&self) -> &str {
         match self {
-            Self::String(value) => value,
+            DemoNode::String(value) => value,
             _ => unreachable!(),
         }
     }
 
     fn string_in(&mut self) -> &mut String {
         match self {
-            Self::ShowImage(uri) => uri,
-            Self::ExprNode(expr_node) => &mut expr_node.text,
+            DemoNode::ShowImage(uri) => uri,
+            DemoNode::ExprNode(expr_node) => &mut expr_node.text,
             _ => unreachable!(),
         }
     }
 
     fn expr_node(&mut self) -> &mut ExprNode {
         match self {
-            Self::ExprNode(expr_node) => expr_node,
+            DemoNode::ExprNode(expr_node) => expr_node,
             _ => unreachable!(),
         }
     }
@@ -718,13 +718,13 @@ impl Expr {
             |name: &str| bindings.iter().position(|binding| binding == name).unwrap();
 
         match self {
-            Self::Var(ref name) => args[binding_index(name)],
-            Self::Val(value) => *value,
-            Self::UnOp { op, ref expr } => match op {
+            Expr::Var(ref name) => args[binding_index(name)],
+            Expr::Val(value) => *value,
+            Expr::UnOp { op, ref expr } => match op {
                 UnOp::Pos => expr.eval(bindings, args),
                 UnOp::Neg => -expr.eval(bindings, args),
             },
-            Self::BinOp {
+            Expr::BinOp {
                 ref lhs,
                 op,
                 ref rhs,
@@ -739,16 +739,16 @@ impl Expr {
 
     fn extend_bindings(&self, bindings: &mut Vec<String>) {
         match self {
-            Self::Var(name) => {
+            Expr::Var(name) => {
                 if !bindings.contains(name) {
                     bindings.push(name.clone());
                 }
             }
-            Self::Val(_) => {}
-            Self::UnOp { expr, .. } => {
+            Expr::Val(_) => {}
+            Expr::UnOp { expr, .. } => {
                 expr.extend_bindings(bindings);
             }
-            Self::BinOp { lhs, rhs, .. } => {
+            Expr::BinOp { lhs, rhs, .. } => {
                 lhs.extend_bindings(bindings);
                 rhs.extend_bindings(bindings);
             }
@@ -761,10 +761,10 @@ impl syn::parse::Parse for UnOp {
         let lookahead = input.lookahead1();
         if lookahead.peek(syn::Token![+]) {
             input.parse::<syn::Token![+]>()?;
-            Ok(Self::Pos)
+            Ok(UnOp::Pos)
         } else if lookahead.peek(syn::Token![-]) {
             input.parse::<syn::Token![-]>()?;
-            Ok(Self::Neg)
+            Ok(UnOp::Neg)
         } else {
             Err(lookahead.error())
         }
@@ -776,16 +776,16 @@ impl syn::parse::Parse for BinOp {
         let lookahead = input.lookahead1();
         if lookahead.peek(syn::Token![+]) {
             input.parse::<syn::Token![+]>()?;
-            Ok(Self::Add)
+            Ok(BinOp::Add)
         } else if lookahead.peek(syn::Token![-]) {
             input.parse::<syn::Token![-]>()?;
-            Ok(Self::Sub)
+            Ok(BinOp::Sub)
         } else if lookahead.peek(syn::Token![*]) {
             input.parse::<syn::Token![*]>()?;
-            Ok(Self::Mul)
+            Ok(BinOp::Mul)
         } else if lookahead.peek(syn::Token![/]) {
             input.parse::<syn::Token![/]>()?;
-            Ok(Self::Div)
+            Ok(BinOp::Div)
         } else {
             Err(lookahead.error())
         }
@@ -800,7 +800,7 @@ impl syn::parse::Parse for Expr {
         if lookahead.peek(syn::token::Paren) {
             let content;
             syn::parenthesized!(content in input);
-            let expr = content.parse::<Self>()?;
+            let expr = content.parse::<Expr>()?;
             if input.is_empty() {
                 return Ok(expr);
             }
@@ -816,14 +816,14 @@ impl syn::parse::Parse for Expr {
         } else if lookahead.peek(syn::LitInt) {
             let lit = input.parse::<syn::LitInt>()?;
             let value = lit.base10_parse::<f64>()?;
-            let expr = Self::Val(value);
+            let expr = Expr::Val(value);
             if input.is_empty() {
                 return Ok(expr);
             }
             lhs = expr;
         } else if lookahead.peek(syn::Ident) {
             let ident = input.parse::<syn::Ident>()?;
-            let expr = Self::Var(ident.to_string());
+            let expr = Expr::Var(ident.to_string());
             if input.is_empty() {
                 return Ok(expr);
             }
@@ -848,9 +848,9 @@ impl Expr {
         if lookahead.peek(syn::token::Paren) {
             let content;
             syn::parenthesized!(content in input);
-            let expr = Self::UnOp {
+            let expr = Expr::UnOp {
                 op,
-                expr: Box::new(content.parse::<Self>()?),
+                expr: Box::new(content.parse::<Expr>()?),
             };
             if input.is_empty() {
                 return Ok(expr);
@@ -859,9 +859,9 @@ impl Expr {
         } else if lookahead.peek(syn::LitFloat) {
             let lit = input.parse::<syn::LitFloat>()?;
             let value = lit.base10_parse::<f64>()?;
-            let expr = Self::UnOp {
+            let expr = Expr::UnOp {
                 op,
-                expr: Box::new(Self::Val(value)),
+                expr: Box::new(Expr::Val(value)),
             };
             if input.is_empty() {
                 return Ok(expr);
@@ -870,9 +870,9 @@ impl Expr {
         } else if lookahead.peek(syn::LitInt) {
             let lit = input.parse::<syn::LitInt>()?;
             let value = lit.base10_parse::<f64>()?;
-            let expr = Self::UnOp {
+            let expr = Expr::UnOp {
                 op,
-                expr: Box::new(Self::Val(value)),
+                expr: Box::new(Expr::Val(value)),
             };
             if input.is_empty() {
                 return Ok(expr);
@@ -880,9 +880,9 @@ impl Expr {
             lhs = expr;
         } else if lookahead.peek(syn::Ident) {
             let ident = input.parse::<syn::Ident>()?;
-            let expr = Self::UnOp {
+            let expr = Expr::UnOp {
                 op,
-                expr: Box::new(Self::Var(ident.to_string())),
+                expr: Box::new(Expr::Var(ident.to_string())),
             };
             if input.is_empty() {
                 return Ok(expr);
@@ -897,36 +897,36 @@ impl Expr {
         Self::parse_binop(Box::new(lhs), op, input)
     }
 
-    fn parse_binop(lhs: Box<Self>, op: BinOp, input: syn::parse::ParseStream) -> syn::Result<Self> {
+    fn parse_binop(lhs: Box<Expr>, op: BinOp, input: syn::parse::ParseStream) -> syn::Result<Self> {
         let lookahead = input.lookahead1();
 
         let rhs;
         if lookahead.peek(syn::token::Paren) {
             let content;
             syn::parenthesized!(content in input);
-            rhs = Box::new(content.parse::<Self>()?);
+            rhs = Box::new(content.parse::<Expr>()?);
             if input.is_empty() {
-                return Ok(Self::BinOp { lhs, op, rhs });
+                return Ok(Expr::BinOp { lhs, op, rhs });
             }
         } else if lookahead.peek(syn::LitFloat) {
             let lit = input.parse::<syn::LitFloat>()?;
             let value = lit.base10_parse::<f64>()?;
-            rhs = Box::new(Self::Val(value));
+            rhs = Box::new(Expr::Val(value));
             if input.is_empty() {
-                return Ok(Self::BinOp { lhs, op, rhs });
+                return Ok(Expr::BinOp { lhs, op, rhs });
             }
         } else if lookahead.peek(syn::LitInt) {
             let lit = input.parse::<syn::LitInt>()?;
             let value = lit.base10_parse::<f64>()?;
-            rhs = Box::new(Self::Val(value));
+            rhs = Box::new(Expr::Val(value));
             if input.is_empty() {
-                return Ok(Self::BinOp { lhs, op, rhs });
+                return Ok(Expr::BinOp { lhs, op, rhs });
             }
         } else if lookahead.peek(syn::Ident) {
             let ident = input.parse::<syn::Ident>()?;
-            rhs = Box::new(Self::Var(ident.to_string()));
+            rhs = Box::new(Expr::Var(ident.to_string()));
             if input.is_empty() {
-                return Ok(Self::BinOp { lhs, op, rhs });
+                return Ok(Expr::BinOp { lhs, op, rhs });
             }
         } else {
             return Err(lookahead.error());

@@ -99,7 +99,7 @@ impl Grid {
     /// Create new grid with given spacing and angle.
     #[must_use]
     pub const fn new(spacing: Vec2, angle: f32) -> Self {
-        Grid { spacing, angle }
+        Self { spacing, angle }
     }
 
     fn draw(
@@ -172,7 +172,7 @@ pub enum BackgroundPattern {
 
 impl Default for BackgroundPattern {
     fn default() -> Self {
-        Self::new()
+        BackgroundPattern::new()
     }
 }
 
@@ -204,8 +204,8 @@ impl BackgroundPattern {
         painter: &Painter,
     ) {
         match self {
-            Self::Grid(g) => g.draw(viewport, snarl_style, style, painter),
-            Self::NoPattern => {}
+            BackgroundPattern::Grid(g) => g.draw(viewport, snarl_style, style, painter),
+            BackgroundPattern::NoPattern => {}
         }
     }
 }
