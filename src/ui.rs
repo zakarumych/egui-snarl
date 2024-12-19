@@ -918,7 +918,7 @@ impl<T> Snarl<T> {
                 snarl_state.deselect_all_nodes();
             }
 
-            // Wire end position will be overrided when link graph menu is opened.
+            // Wire end position will be overridden when link graph menu is opened.
             let mut wire_end_pos = input.hover_pos.unwrap_or_default();
 
             if drag_released {
