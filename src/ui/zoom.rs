@@ -186,7 +186,7 @@ where
     #[inline(always)]
     fn zoom(&mut self, zoom: f32) {
         if let Some(value) = self {
-            value.zoom(zoom)
+            value.zoom(zoom);
         }
     }
 }
@@ -206,8 +206,8 @@ impl Zoom for WireStyle {
     #[inline(always)]
     fn zoom(&mut self, zoom: f32) {
         match self {
-            WireStyle::Bezier3 | WireStyle::Bezier5 => {}
-            WireStyle::AxisAligned { corner_radius } => {
+            Self::Bezier3 | Self::Bezier5 => {}
+            Self::AxisAligned { corner_radius } => {
                 corner_radius.zoom(zoom);
             }
         }

@@ -38,7 +38,7 @@ pub enum WireStyle {
     },
 }
 
-pub(crate) fn pick_wire_style(
+pub const fn pick_wire_style(
     default: WireStyle,
     left: Option<WireStyle>,
     right: Option<WireStyle>,
@@ -46,10 +46,9 @@ pub(crate) fn pick_wire_style(
     match (left, right) {
         (None, None) => default,
         (Some(one), None) | (None, Some(one)) => one,
-        (Some(WireStyle::Bezier3), Some(WireStyle::Bezier3)) => WireStyle::Bezier3,
         (Some(WireStyle::Bezier5), Some(WireStyle::Bezier5)) => WireStyle::Bezier5,
-        (Some(WireStyle::Bezier3), Some(WireStyle::Bezier5))
-        | (Some(WireStyle::Bezier5), Some(WireStyle::Bezier3)) => WireStyle::Bezier3,
+        (Some(WireStyle::Bezier3 | WireStyle::Bezier5), Some(WireStyle::Bezier3))
+        | (Some(WireStyle::Bezier3), Some(WireStyle::Bezier5)) => WireStyle::Bezier3,
         (
             Some(WireStyle::AxisAligned { corner_radius: a }),
             Some(WireStyle::AxisAligned { corner_radius: b }),
@@ -95,8 +94,8 @@ fn wire_bezier_5(frame_size: f32, from: Pos2, to: Pos2) -> [Pos2; 6] {
 
         [from, from_2, middle_1, middle_2, to_2, to]
     } else if from_2.x <= to_2.x {
-        let t =
-            (between - (to_2.y - from_2.y).abs()) / (frame_size * 2.0 - (to_2.y - from_2.y).abs());
+        let t = (between - (to_2.y - from_2.y).abs())
+            / frame_size.mul_add(2.0, -(to_2.y - from_2.y).abs());
 
         let mut middle_1 = from_2 + (to_2 - from_2).normalized() * frame_size;
         let mut middle_2 = to_2 + (from_2 - to_2).normalized() * frame_size;
@@ -104,7 +103,10 @@ fn wire_bezier_5(frame_size: f32, from: Pos2, to: Pos2) -> [Pos2; 6] {
         if from_2.y >= to_2.y + frame_size {
             let u = (from_2.y - to_2.y - frame_size) / frame_size;
 
-            let t0_middle_1 = pos2(from_2.x + (1.0 - u) * frame_size, from_2.y - frame_size * u);
+            let t0_middle_1 = pos2(
+                (1.0 - u).mul_add(frame_size, from_2.x),
+                frame_size.mul_add(-u, from_2.y),
+            );
             let t0_middle_2 = pos2(to_2.x, to_2.y + frame_size);
 
             middle_1 = t0_middle_1.lerp(middle_1, t);
@@ -112,7 +114,10 @@ fn wire_bezier_5(frame_size: f32, from: Pos2, to: Pos2) -> [Pos2; 6] {
         } else if from_2.y >= to_2.y {
             let u = (from_2.y - to_2.y) / frame_size;
 
-            let t0_middle_1 = pos2(from_2.x + u * frame_size, from_2.y + frame_size * (1.0 - u));
+            let t0_middle_1 = pos2(
+                u.mul_add(frame_size, from_2.x),
+                frame_size.mul_add(1.0 - u, from_2.y),
+            );
             let t0_middle_2 = pos2(to_2.x, to_2.y + frame_size);
 
             middle_1 = t0_middle_1.lerp(middle_1, t);
@@ -121,7 +126,10 @@ fn wire_bezier_5(frame_size: f32, from: Pos2, to: Pos2) -> [Pos2; 6] {
             let u = (to_2.y - from_2.y - frame_size) / frame_size;
 
             let t0_middle_1 = pos2(from_2.x, from_2.y + frame_size);
-            let t0_middle_2 = pos2(to_2.x - (1.0 - u) * frame_size, to_2.y - frame_size * u);
+            let t0_middle_2 = pos2(
+                (1.0 - u).mul_add(-frame_size, to_2.x),
+                frame_size.mul_add(-u, to_2.y),
+            );
 
             middle_1 = t0_middle_1.lerp(middle_1, t);
             middle_2 = t0_middle_2.lerp(middle_2, t);
@@ -129,7 +137,10 @@ fn wire_bezier_5(frame_size: f32, from: Pos2, to: Pos2) -> [Pos2; 6] {
             let u = (to_2.y - from_2.y) / frame_size;
 
             let t0_middle_1 = pos2(from_2.x, from_2.y + frame_size);
-            let t0_middle_2 = pos2(to_2.x - u * frame_size, to_2.y + frame_size * (1.0 - u));
+            let t0_middle_2 = pos2(
+                u.mul_add(-frame_size, to_2.x),
+                frame_size.mul_add(1.0 - u, to_2.y),
+            );
 
             middle_1 = t0_middle_1.lerp(middle_1, t);
             middle_2 = t0_middle_2.lerp(middle_2, t);
@@ -138,7 +149,7 @@ fn wire_bezier_5(frame_size: f32, from: Pos2, to: Pos2) -> [Pos2; 6] {
         }
 
         [from, from_2, middle_1, middle_2, to_2, to]
-    } else if from_2.y >= to_2.y + frame_size * 2.0 {
+    } else if from_2.y >= frame_size.mul_add(2.0, to_2.y) {
         let middle_1 = pos2(from_2.x, from_2.y - frame_size);
         let middle_2 = pos2(to_2.x, to_2.y + frame_size);
 
@@ -146,18 +157,24 @@ fn wire_bezier_5(frame_size: f32, from: Pos2, to: Pos2) -> [Pos2; 6] {
     } else if from_2.y >= to_2.y + frame_size {
         let t = (from_2.y - to_2.y - frame_size) / frame_size;
 
-        let middle_1 = pos2(from_2.x + (1.0 - t) * frame_size, from_2.y - frame_size * t);
+        let middle_1 = pos2(
+            (1.0 - t).mul_add(frame_size, from_2.x),
+            frame_size.mul_add(-t, from_2.y),
+        );
         let middle_2 = pos2(to_2.x, to_2.y + frame_size);
 
         [from, from_2, middle_1, middle_2, to_2, to]
     } else if from_2.y >= to_2.y {
         let t = (from_2.y - to_2.y) / frame_size;
 
-        let middle_1 = pos2(from_2.x + t * frame_size, from_2.y + frame_size * (1.0 - t));
+        let middle_1 = pos2(
+            t.mul_add(frame_size, from_2.x),
+            frame_size.mul_add(1.0 - t, from_2.y),
+        );
         let middle_2 = pos2(to_2.x, to_2.y + frame_size);
 
         [from, from_2, middle_1, middle_2, to_2, to]
-    } else if to_2.y >= from_2.y + frame_size * 2.0 {
+    } else if to_2.y >= frame_size.mul_add(2.0, from_2.y) {
         let middle_1 = pos2(from_2.x, from_2.y + frame_size);
         let middle_2 = pos2(to_2.x, to_2.y - frame_size);
 
@@ -166,14 +183,20 @@ fn wire_bezier_5(frame_size: f32, from: Pos2, to: Pos2) -> [Pos2; 6] {
         let t = (to_2.y - from_2.y - frame_size) / frame_size;
 
         let middle_1 = pos2(from_2.x, from_2.y + frame_size);
-        let middle_2 = pos2(to_2.x - (1.0 - t) * frame_size, to_2.y - frame_size * t);
+        let middle_2 = pos2(
+            (1.0 - t).mul_add(-frame_size, to_2.x),
+            frame_size.mul_add(-t, to_2.y),
+        );
 
         [from, from_2, middle_1, middle_2, to_2, to]
     } else if to_2.y >= from_2.y {
         let t = (to_2.y - from_2.y) / frame_size;
 
         let middle_1 = pos2(from_2.x, from_2.y + frame_size);
-        let middle_2 = pos2(to_2.x - t * frame_size, to_2.y + frame_size * (1.0 - t));
+        let middle_2 = pos2(
+            t.mul_add(-frame_size, to_2.x),
+            frame_size.mul_add(1.0 - t, to_2.y),
+        );
 
         [from, from_2, middle_1, middle_2, to_2, to]
     } else {
@@ -183,7 +206,7 @@ fn wire_bezier_5(frame_size: f32, from: Pos2, to: Pos2) -> [Pos2; 6] {
 
 #[allow(clippy::too_many_arguments)]
 pub fn draw_wire(
-    ui: &mut Ui,
+    ui: &Ui,
     shapes: &mut Vec<Shape>,
     frame_size: f32,
     upscale: bool,
@@ -493,6 +516,7 @@ struct AxisAlignedWire {
     turns: [(Pos2, f32); 4],
 }
 
+#[allow(clippy::too_many_lines)]
 fn wire_axis_aligned(corner_radius: f32, frame_size: f32, from: Pos2, to: Pos2) -> AxisAlignedWire {
     if from.x + frame_size <= to.x - frame_size {
         let mid = pos2((from.x + to.x) / 2.0, (from.y + to.y) / 2.0);
@@ -715,19 +739,20 @@ fn draw_axis_aligned(
         let samples = turn_samples_number(radius, stroke.width);
 
         for j in 1..samples {
+            #[allow(clippy::cast_precision_loss)]
             let a = std::f32::consts::FRAC_PI_2 * (j as f32 / samples as f32);
 
             let (sin_a, cos_a) = a.sin_cos();
 
             if i % 2 == 0 {
                 path.push(pos2(
-                    turn.x * (1.0 - sin_a) + wire.points[i + 1].x * sin_a,
-                    wire.points[i].y * cos_a + turn.y * (1.0 - cos_a),
+                    turn.x.mul_add(1.0 - sin_a, wire.points[i + 1].x * sin_a),
+                    wire.points[i].y.mul_add(cos_a, turn.y * (1.0 - cos_a)),
                 ));
             } else {
                 path.push(pos2(
-                    wire.points[i].x * cos_a + turn.x * (1.0 - cos_a),
-                    turn.y * (1.0 - sin_a) + wire.points[i + 1].y * sin_a,
+                    wire.points[i].x.mul_add(cos_a, turn.x * (1.0 - cos_a)),
+                    turn.y.mul_add(1.0 - sin_a, wire.points[i + 1].y * sin_a),
                 ));
             }
         }

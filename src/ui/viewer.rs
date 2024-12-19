@@ -4,7 +4,7 @@ use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
 use super::{pin::AnyPins, BackgroundPattern, NodeLayout, PinInfo, SnarlStyle, Viewport};
 
-/// SnarlViewer is a trait for viewing a Snarl.
+/// `SnarlViewer` is a trait for viewing a Snarl.
 ///
 /// It can extract necessary data from the nodes and controls their
 /// response to certain events.
@@ -294,6 +294,7 @@ pub trait SnarlViewer<T> {
     /// By default it draws a pin with the shape and style returned by [`SnarlViewer::show_input`].
     ///
     /// If you want to draw the pin yourself, you can override this method.
+    #[allow(clippy::too_many_arguments)]
     fn draw_input_pin(
         &mut self,
         pin: &InPin,
@@ -317,6 +318,7 @@ pub trait SnarlViewer<T> {
     /// By default it draws a pin with the shape and style returned by [`SnarlViewer::show_output`].
     ///
     /// If you want to draw the pin yourself, you can override this method.
+    #[allow(clippy::too_many_arguments)]
     fn draw_output_pin(
         &mut self,
         pin: &OutPin,
@@ -350,9 +352,8 @@ pub trait SnarlViewer<T> {
     ) {
         let _ = snarl;
 
-        match background {
-            Some(background) => background.draw(viewport, snarl_style, style, painter),
-            None => {}
+        if let Some(background) = background {
+            background.draw(viewport, snarl_style, style, painter);
         }
     }
 }
