@@ -17,36 +17,42 @@ pub struct Viewport {
 impl Viewport {
     /// Converts screen-space position to graph-space position.
     #[inline(always)]
+    #[must_use]
     pub fn screen_pos_to_graph(&self, pos: Pos2) -> Pos2 {
         (pos + self.offset - self.rect.center().to_vec2()) / self.scale
     }
 
     /// Converts graph-space position to screen-space position.
     #[inline(always)]
+    #[must_use]
     pub fn graph_pos_to_screen(&self, pos: Pos2) -> Pos2 {
         pos * self.scale - self.offset + self.rect.center().to_vec2()
     }
 
     /// Converts screen-space vector to graph-space vector.
     #[inline(always)]
+    #[must_use]
     pub fn graph_vec_to_screen(&self, size: Vec2) -> Vec2 {
         size * self.scale
     }
 
     /// Converts graph-space vector to screen-space vector.
     #[inline(always)]
+    #[must_use]
     pub fn screen_vec_to_graph(&self, size: Vec2) -> Vec2 {
         size / self.scale
     }
 
     /// Converts screen-space size to graph-space size.
     #[inline(always)]
+    #[must_use]
     pub fn graph_size_to_screen(&self, size: f32) -> f32 {
         size * self.scale
     }
 
     /// Converts graph-space size to screen-space size.
     #[inline(always)]
+    #[must_use]
     pub fn screen_size_to_graph(&self, size: f32) -> f32 {
         size / self.scale
     }
@@ -91,6 +97,7 @@ impl Default for Grid {
 
 impl Grid {
     /// Create new grid with given spacing and angle.
+    #[must_use]
     pub const fn new(spacing: Vec2, angle: f32) -> Self {
         Self { spacing, angle }
     }
@@ -120,7 +127,7 @@ impl Grid {
         let max_x = (pattern_bounds.max.x / spacing.x).floor();
 
         for x in 0..=(max_x - min_x) as i64 {
-            #[allow(clippy::cast_possible_truncation)]
+            #[allow(clippy::cast_precision_loss)]
             let x = (x as f32 + min_x) * spacing.x;
 
             let top = (rot * vec2(x, pattern_bounds.min.y)).to_pos2();
@@ -136,7 +143,7 @@ impl Grid {
         let max_y = (pattern_bounds.max.y / spacing.y).floor();
 
         for y in 0..=(max_y - min_y) as i64 {
-            #[allow(clippy::cast_possible_truncation)]
+            #[allow(clippy::cast_precision_loss)]
             let y = (y as f32 + min_y) * spacing.y;
 
             let top = (rot * vec2(pattern_bounds.min.x, y)).to_pos2();
@@ -177,11 +184,13 @@ impl BackgroundPattern {
     /// ` and angle - `
     #[doc = default_grid_angle!()]
     /// ` radian.
+    #[must_use]
     pub const fn new() -> Self {
         Self::Grid(Grid::new(DEFAULT_GRID_SPACING, DEFAULT_GRID_ANGLE))
     }
 
     /// Create new grid background pattern with given spacing and angle.
+    #[must_use]
     pub const fn grid(spacing: Vec2, angle: f32) -> Self {
         Self::Grid(Grid::new(spacing, angle))
     }

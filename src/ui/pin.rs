@@ -63,36 +63,42 @@ pub struct PinInfo {
 
 impl PinInfo {
     /// Sets the shape of the pin.
-    pub fn with_shape(mut self, shape: PinShape) -> Self {
+    #[must_use]
+    pub const fn with_shape(mut self, shape: PinShape) -> Self {
         self.shape = Some(shape);
         self
     }
 
     /// Sets the size of the pin.
-    pub fn with_size(mut self, size: f32) -> Self {
+    #[must_use]
+    pub const fn with_size(mut self, size: f32) -> Self {
         self.size = Some(size);
         self
     }
 
     /// Sets the fill color of the pin.
-    pub fn with_fill(mut self, fill: Color32) -> Self {
+    #[must_use]
+    pub const fn with_fill(mut self, fill: Color32) -> Self {
         self.fill = Some(fill);
         self
     }
 
     /// Sets the outline stroke of the pin.
-    pub fn with_stroke(mut self, stroke: Stroke) -> Self {
+    #[must_use]
+    pub const fn with_stroke(mut self, stroke: Stroke) -> Self {
         self.stroke = Some(stroke);
         self
     }
 
     /// Sets the style of the wire connected to the pin.
-    pub fn with_wire_style(mut self, wire_style: WireStyle) -> Self {
+    #[must_use]
+    pub const fn with_wire_style(mut self, wire_style: WireStyle) -> Self {
         self.wire_style = Some(wire_style);
         self
     }
 
     /// Creates a circle pin.
+    #[must_use]
     pub fn circle() -> Self {
         PinInfo {
             shape: Some(PinShape::Circle),
@@ -101,6 +107,7 @@ impl PinInfo {
     }
 
     /// Creates a triangle pin.
+    #[must_use]
     pub fn triangle() -> Self {
         PinInfo {
             shape: Some(PinShape::Triangle),
@@ -109,6 +116,7 @@ impl PinInfo {
     }
 
     /// Creates a square pin.
+    #[must_use]
     pub fn square() -> Self {
         PinInfo {
             shape: Some(PinShape::Square),
@@ -117,6 +125,7 @@ impl PinInfo {
     }
 
     /// Creates a star pin.
+    #[must_use]
     pub fn star() -> Self {
         PinInfo {
             shape: Some(PinShape::Star),
@@ -125,25 +134,29 @@ impl PinInfo {
     }
 
     /// Returns the shape of the pin.
+    #[must_use]
     pub fn get_shape(&self, snarl_style: &SnarlStyle) -> PinShape {
-        self.shape.unwrap_or(snarl_style.get_pin_shape())
+        self.shape.unwrap_or_else(|| snarl_style.get_pin_shape())
     }
 
     /// Returns fill color of the pin.
+    #[must_use]
     pub fn get_fill(&self, snarl_style: &SnarlStyle, style: &Style) -> Color32 {
-        self.fill.unwrap_or(snarl_style.get_pin_fill(style))
+        self.fill.unwrap_or_else(|| snarl_style.get_pin_fill(style))
     }
 
     /// Returns outline stroke of the pin.
+    #[must_use]
     pub fn get_stroke(&self, snarl_style: &SnarlStyle, style: &Style, scale: f32) -> Stroke {
         self.stroke
             .zoomed(scale)
-            .unwrap_or(snarl_style.get_pin_stroke(scale, style))
+            .unwrap_or_else(|| snarl_style.get_pin_stroke(scale, style))
     }
 
     /// Draws the pin and returns color.
     ///
     /// Wires are drawn with returned color by default.
+    #[must_use]
     pub fn draw(
         &self,
         pos: Pos2,
@@ -207,16 +220,16 @@ pub fn draw_pin(
 
         PinShape::Star => {
             let points = vec![
-                pos + size * 0.700000 * vec2(0.0, -1.0),
-                pos + size * 0.267376 * vec2(-0.587785, -0.809017),
-                pos + size * 0.700000 * vec2(-0.951057, -0.309017),
-                pos + size * 0.267376 * vec2(-0.951057, 0.309017),
-                pos + size * 0.700000 * vec2(-0.587785, 0.809017),
-                pos + size * 0.267376 * vec2(0.0, 1.0),
-                pos + size * 0.700000 * vec2(0.587785, 0.809017),
-                pos + size * 0.267376 * vec2(0.951057, 0.309017),
-                pos + size * 0.700000 * vec2(0.951057, -0.309017),
-                pos + size * 0.267376 * vec2(0.587785, -0.809017),
+                pos + size * 0.700_000 * vec2(0.0, -1.0),
+                pos + size * 0.267_376 * vec2(-0.587_785, -0.809_017),
+                pos + size * 0.700_000 * vec2(-0.951_057, -0.309_017),
+                pos + size * 0.267_376 * vec2(-0.951_057, 0.309_017),
+                pos + size * 0.700_000 * vec2(-0.587_785, 0.809_017),
+                pos + size * 0.267_376 * vec2(0.0, 1.0),
+                pos + size * 0.700_000 * vec2(0.587_785, 0.809_017),
+                pos + size * 0.267_376 * vec2(0.951_057, 0.309_017),
+                pos + size * 0.700_000 * vec2(0.951_057, -0.309_017),
+                pos + size * 0.267_376 * vec2(0.587_785, -0.809_017),
             ];
 
             painter.add(Shape::Path(PathShape {
