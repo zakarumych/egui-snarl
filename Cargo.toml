@@ -1,4 +1,5 @@
 workspace = { members = ["demo"] }
+
 [package]
 name = "egui-snarl"
 version = "0.6.0"
@@ -10,6 +11,7 @@ repository = "https://github.com/zakarumych/egui-snarl"
 readme = "README.md"
 keywords = ["egui", "node", "graph", "ui", "node-graph"]
 categories = ["gui", "visualization"]
+rust-version = "1.81"
 
 [features]
 serde = ["dep:serde", "egui/serde", "slab/serde"]
