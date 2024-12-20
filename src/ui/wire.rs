@@ -38,7 +38,7 @@ pub enum WireStyle {
     },
 }
 
-pub const fn pick_wire_style(
+pub fn pick_wire_style(
     default: WireStyle,
     left: Option<WireStyle>,
     right: Option<WireStyle>,
