@@ -438,7 +438,7 @@ impl SnarlStyle {
     }
 
     fn get_scale_velocity(&self) -> f32 {
-        self.scale_velocity.unwrap_or(0.005)
+        self.scale_velocity.unwrap_or(1.0)
     }
 
     fn get_node_frame(&self, scale: f32, style: &Style) -> Frame {
@@ -586,7 +586,7 @@ impl Default for SnarlStyle {
 struct Input {
     hover_pos: Option<Pos2>,
     interact_pos: Option<Pos2>,
-    scroll_delta: f32,
+    zoom_delta: f32,
     // primary_pressed: bool,
     secondary_pressed: bool,
     modifiers: Modifiers,
@@ -656,7 +656,7 @@ impl<T> Snarl<T> {
         let bg_frame = style.get_bg_frame(ui.style());
 
         let input = ui.ctx().input(|i| Input {
-            scroll_delta: i.raw_scroll_delta.y,
+            zoom_delta: i.zoom_delta(),
             hover_pos: i.pointer.hover_pos(),
             interact_pos: i.pointer.interact_pos(),
             modifiers: i.modifiers,
@@ -698,9 +698,9 @@ impl<T> Snarl<T> {
                 Some(hover_pos)
                     if viewport.contains(hover_pos) && ui.rect_contains_pointer(viewport) =>
                 {
-                    if input.scroll_delta != 0.0 {
+                    if input.zoom_delta != 1.0 {
                         let new_scale = (snarl_state.scale()
-                            * input.scroll_delta.mul_add(style.get_scale_velocity(), 1.0))
+                            * input.zoom_delta.powf(style.get_scale_velocity()))
                         .clamp(style.get_min_scale(), style.get_max_scale());
 
                         snarl_state.set_scale(new_scale);
