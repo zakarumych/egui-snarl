@@ -5,13 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] - 20.12.2024
 
 ### Changed
 
 - Zooming now uses egui's zoom_delta from Input.
   This means that zooming is now performed by ctrl+scroll (cmd+scroll on mac) or pinching.
-  Previously it was performed by scrolling alone, which collided with scrolling through content in the node's widgets and didn't work for tough controls.
+  Previously it was performed by scrolling alone, which collided with scrolling through content in the node's widgets and didn't work for touch controls.
 
 ### Added
 
