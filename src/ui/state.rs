@@ -27,7 +27,10 @@ struct NodeData {
 impl NodeState {
     pub fn load(cx: &Context, id: Id, spacing: &Spacing, scale: f32) -> Self {
         cx.data_mut(|d| d.get_temp::<NodeData>(id)).map_or_else(
-            || Self::initial(id, spacing, scale),
+            || {
+                cx.request_discard("NodeState initialization");
+                Self::initial(id, spacing, scale)
+            },
             |data| NodeState {
                 size: data.unscaled_size * scale,
                 header_height: data.unscaled_header_height * scale,
