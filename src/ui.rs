@@ -26,7 +26,7 @@ use self::{
 
 pub use self::{
     background_pattern::{BackgroundPattern, Grid, Viewport},
-    pin::{AnyPins, PinInfo, PinShape},
+    pin::{AnyPins, CustomPinDrawer, PinInfo, PinShape},
     viewer::SnarlViewer,
     wire::{WireLayer, WireStyle},
 };

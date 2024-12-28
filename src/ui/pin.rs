@@ -59,6 +59,33 @@ pub struct PinInfo {
 
     /// Style of the wire connected to the pin.
     pub wire_style: Option<WireStyle>,
+
+    /// Custom pin information.
+    pub custom: Option<Box<dyn CustomPinDrawer>>,
+}
+
+mod tests {
+    /// This test checks if the PinInfo struct is Sync and Send.
+    #[test]
+    fn test_pin_info_sync_send() {
+        fn assert_sync_send<T: Sync + Send>() {}
+        assert_sync_send::<super::PinInfo>();
+    }
+}
+
+/// Customization for the pin.
+/// This trait is used to customize the appearance of the pin.
+pub trait CustomPinDrawer: Sync + Send {
+    /// Draws the pin.
+    fn draw(
+        &self,
+        painter: &Painter,
+        shape: PinShape,
+        fill: Color32,
+        stroke: Stroke,
+        pos: Pos2,
+        size: f32,
+    );
 }
 
 impl PinInfo {
@@ -133,6 +160,19 @@ impl PinInfo {
         }
     }
 
+    /// Sets the custom pin information.
+    /// This will override all other pin information.
+    /// The custom pin information will be used to draw the pin.
+    /// The custom pin information must implement the `CustomPinDrawer` trait.
+    /// The custom pin information must be `Sync` and `Send`.
+    #[must_use]
+    pub fn custom(custom: impl CustomPinDrawer + 'static) -> Self {
+        PinInfo {
+            custom: Some(Box::new(custom)),
+            ..Default::default()
+        }
+    }
+
     /// Returns the shape of the pin.
     #[must_use]
     pub fn get_shape(&self, snarl_style: &SnarlStyle) -> PinShape {
@@ -170,7 +210,12 @@ impl PinInfo {
         let fill = self.get_fill(snarl_style, style);
         let stroke = self.get_stroke(snarl_style, style, scale);
         let size = self.size.zoomed(scale).unwrap_or(size);
-        draw_pin(painter, shape, fill, stroke, pos, size);
+
+        if let Some(custom) = &self.custom {
+            custom.draw(painter, shape, fill, stroke, pos, size);
+        } else {
+            draw_pin(painter, shape, fill, stroke, pos, size);
+        }
 
         fill
     }
