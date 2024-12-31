@@ -95,6 +95,8 @@ impl DemoNode {
 struct DemoViewer;
 
 impl SnarlViewer<DemoNode> for DemoViewer {
+    type Drawer = egui_snarl::ui::PinShape;
+
     #[inline]
     fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<DemoNode>) {
         // Validate connection
@@ -179,7 +181,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         ui: &mut Ui,
         scale: f32,
         snarl: &mut Snarl<DemoNode>,
-    ) -> PinInfo {
+    ) -> PinInfo<Self::Drawer> {
         match snarl[pin.id.node] {
             DemoNode::Sink => {
                 assert_eq!(pin.id.input, 0, "Sink node has only one input");
@@ -394,7 +396,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         ui: &mut Ui,
         _scale: f32,
         snarl: &mut Snarl<DemoNode>,
-    ) -> PinInfo {
+    ) -> PinInfo<Self::Drawer> {
         match snarl[pin.id.node] {
             DemoNode::Sink => {
                 unreachable!("Sink node has no outputs")

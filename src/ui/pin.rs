@@ -44,9 +44,9 @@ pub enum PinShape {
 /// All fields are optional.
 /// If a field is `None`, the default value is used derived from the graph style.
 #[derive(Default)]
-pub struct PinInfo {
+pub struct PinInfo<T: PinDrawer> {
     /// Shape of the pin.
-    pub shape: Option<PinShape>,
+    pub shape: Option<T>,
 
     /// Size of the pin.
     pub size: Option<f32>,
@@ -61,10 +61,17 @@ pub struct PinInfo {
     pub wire_style: Option<WireStyle>,
 }
 
-impl PinInfo {
+/// Customization for the pin.
+/// This trait is used to customize the appearance of the pin.
+pub trait PinDrawer: Sync + Send + From<PinShape> + Clone {
+    /// Draws the pin.
+    fn draw(&self, painter: &Painter, fill: Color32, stroke: Stroke, pos: Pos2, size: f32);
+}
+
+impl<T: PinDrawer> PinInfo<T> {
     /// Sets the shape of the pin.
     #[must_use]
-    pub const fn with_shape(mut self, shape: PinShape) -> Self {
+    pub fn with_shape(mut self, shape: T) -> Self {
         self.shape = Some(shape);
         self
     }
@@ -101,8 +108,11 @@ impl PinInfo {
     #[must_use]
     pub fn circle() -> Self {
         PinInfo {
-            shape: Some(PinShape::Circle),
-            ..Default::default()
+            shape: Some(PinShape::Circle.into()),
+            size: Default::default(),
+            fill: Default::default(),
+            stroke: Default::default(),
+            wire_style: Default::default(),
         }
     }
 
@@ -110,8 +120,11 @@ impl PinInfo {
     #[must_use]
     pub fn triangle() -> Self {
         PinInfo {
-            shape: Some(PinShape::Triangle),
-            ..Default::default()
+            shape: Some(PinShape::Triangle.into()),
+            size: Default::default(),
+            fill: Default::default(),
+            stroke: Default::default(),
+            wire_style: Default::default(),
         }
     }
 
@@ -119,8 +132,11 @@ impl PinInfo {
     #[must_use]
     pub fn square() -> Self {
         PinInfo {
-            shape: Some(PinShape::Square),
-            ..Default::default()
+            shape: Some(PinShape::Square.into()),
+            size: Default::default(),
+            fill: Default::default(),
+            stroke: Default::default(),
+            wire_style: Default::default(),
         }
     }
 
@@ -128,15 +144,30 @@ impl PinInfo {
     #[must_use]
     pub fn star() -> Self {
         PinInfo {
-            shape: Some(PinShape::Star),
-            ..Default::default()
+            shape: Some(PinShape::Star.into()),
+            size: Default::default(),
+            fill: Default::default(),
+            stroke: Default::default(),
+            wire_style: Default::default(),
+        }
+    }
+
+    /// Creates a pin with the custom drawer.
+    #[must_use]
+    pub fn shape(drawer: T) -> PinInfo<T> {
+        PinInfo {
+            shape: Some(drawer),
+            size: Default::default(),
+            fill: Default::default(),
+            stroke: Default::default(),
+            wire_style: Default::default(),
         }
     }
 
     /// Returns the shape of the pin.
     #[must_use]
-    pub fn get_shape(&self, snarl_style: &SnarlStyle) -> PinShape {
-        self.shape.unwrap_or_else(|| snarl_style.get_pin_shape())
+    pub fn get_shape(&self, snarl_style: &SnarlStyle) -> T {
+        self.shape.clone().unwrap_or_else(|| Into::<T>::into(snarl_style.get_pin_shape()))
     }
 
     /// Returns fill color of the pin.
@@ -170,9 +201,16 @@ impl PinInfo {
         let fill = self.get_fill(snarl_style, style);
         let stroke = self.get_stroke(snarl_style, style, scale);
         let size = self.size.zoomed(scale).unwrap_or(size);
-        draw_pin(painter, shape, fill, stroke, pos, size);
+
+        shape.draw(painter, fill, stroke, pos, size);
 
         fill
+    }
+}
+
+impl PinDrawer for PinShape {
+    fn draw(&self, painter: &Painter, fill: Color32, stroke: Stroke, pos: Pos2, size: f32) {
+        draw_pin(painter, *self, fill, stroke, pos, size);
     }
 }
 

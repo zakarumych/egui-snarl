@@ -2,13 +2,19 @@ use egui::{Color32, Painter, Pos2, Rect, Style, Ui};
 
 use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
-use super::{pin::AnyPins, BackgroundPattern, NodeLayout, PinInfo, SnarlStyle, Viewport};
+use super::{
+    pin::AnyPins, BackgroundPattern, NodeLayout, PinDrawer, PinInfo, SnarlStyle, Viewport,
+};
 
 /// `SnarlViewer` is a trait for viewing a Snarl.
 ///
 /// It can extract necessary data from the nodes and controls their
 /// response to certain events.
 pub trait SnarlViewer<T> {
+    /// The drawer type for the pins.
+    /// If you use the default pin drawer, you can use `PinShape` as the drawer type.
+    type Drawer: PinDrawer;
+
     /// Returns title of the node.
     fn title(&mut self, node: &T) -> String;
 
@@ -76,8 +82,13 @@ pub trait SnarlViewer<T> {
     fn inputs(&mut self, node: &T) -> usize;
 
     /// Renders the node's input.
-    fn show_input(&mut self, pin: &InPin, ui: &mut Ui, scale: f32, snarl: &mut Snarl<T>)
-        -> PinInfo;
+    fn show_input(
+        &mut self,
+        pin: &InPin,
+        ui: &mut Ui,
+        scale: f32,
+        snarl: &mut Snarl<T>,
+    ) -> PinInfo<Self::Drawer>;
 
     /// Returns number of output pins of the node.
     ///
@@ -91,7 +102,7 @@ pub trait SnarlViewer<T> {
         ui: &mut Ui,
         scale: f32,
         snarl: &mut Snarl<T>,
-    ) -> PinInfo;
+    ) -> PinInfo<Self::Drawer>;
 
     /// Checks if node has something to show in body - between input and output pins.
     #[inline]
@@ -298,7 +309,7 @@ pub trait SnarlViewer<T> {
     fn draw_input_pin(
         &mut self,
         pin: &InPin,
-        pin_info: &PinInfo,
+        pin_info: &PinInfo<Self::Drawer>,
         pos: Pos2,
         size: f32,
         snarl_style: &SnarlStyle,
@@ -322,7 +333,7 @@ pub trait SnarlViewer<T> {
     fn draw_output_pin(
         &mut self,
         pin: &OutPin,
-        pin_info: &PinInfo,
+        pin_info: &PinInfo<Self::Drawer>,
         pos: Pos2,
         size: f32,
         snarl_style: &SnarlStyle,
