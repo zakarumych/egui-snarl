@@ -38,6 +38,18 @@ pub trait SnarlViewer<T> {
         default
     }
 
+    /// Modifies the node's egui style
+    fn node_style(
+        &mut self,
+        ui: &mut Ui,
+        node: NodeId,
+        inputs: &[InPin],
+        outputs: &[OutPin],
+        snarl: &Snarl<T>,
+    ) {
+        let _ = (ui, node, inputs, outputs, snarl);
+    }
+
     /// Returns layout override for the node.
     ///
     /// This method can be used to override the default layout of the node.
