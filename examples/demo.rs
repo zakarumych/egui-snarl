@@ -173,6 +173,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     }
 
     #[allow(clippy::too_many_lines)]
+    #[allow(refining_impl_trait)]
     fn show_input(
         &mut self,
         pin: &InPin,
@@ -388,6 +389,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         }
     }
 
+    #[allow(refining_impl_trait)]
     fn show_output(
         &mut self,
         pin: &OutPin,
@@ -411,6 +413,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                     .desired_width(0.0)
                     .margin(ui.spacing().item_spacing);
                 ui.add(edit);
+                ui.label("AAAAA");
                 PinInfo::circle()
                     .with_fill(STRING_COLOR)
                     .with_wire_style(WireStyle::AxisAligned {

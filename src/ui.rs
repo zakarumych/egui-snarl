@@ -26,12 +26,12 @@ use self::{
 
 pub use self::{
     background_pattern::{BackgroundPattern, Grid, Viewport},
-    pin::{AnyPins, PinInfo, PinShape},
+    pin::{AnyPins, PinInfo, PinShape, SnarlPin},
     viewer::SnarlViewer,
     wire::{WireLayer, WireStyle},
 };
 
-/// Controls how header, pins, body and footer are laid out in the node.
+/// Controls how header, pins, body and footer are placed in the node.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
@@ -42,7 +42,10 @@ pub enum NodeLayout {
     /// +---------------------+
     /// |       Header        |
     /// +----+-----------+----+
+    /// | In |           | Out|
     /// | In |   Body    | Out|
+    /// | In |           | Out|
+    /// | In |           |    |
     /// +----+-----------+----+
     /// |       Footer        |
     /// +---------------------+
@@ -57,9 +60,14 @@ pub enum NodeLayout {
     /// |       Header        |
     /// +---------------------+
     /// | In                  |
+    /// | In                  |
+    /// | In                  |
+    /// | In                  |
     /// +---------------------+
     /// |       Body          |
     /// +---------------------+
+    /// |                 Out |
+    /// |                 Out |
     /// |                 Out |
     /// +---------------------+
     /// |       Footer        |
@@ -73,14 +81,20 @@ pub enum NodeLayout {
     /// |       Header        |
     /// +---------------------+
     /// |                 Out |
+    /// |                 Out |
+    /// |                 Out |
     /// +---------------------+
     /// |       Body          |
     /// +---------------------+
+    /// | In                  |
+    /// | In                  |
+    /// | In                  |
     /// | In                  |
     /// +---------------------+
     /// |       Footer        |
     /// +---------------------+
     FlippedSandwich,
+    // TODO: Add vertical layouts.
 }
 
 /// Controls style of node selection rect.
@@ -612,8 +626,8 @@ struct DrawBodyResponse {
 
 struct PinResponse {
     pos: Pos2,
-    pin_color: Color32,
-    wire_style: Option<WireStyle>,
+    wire_color: Color32,
+    wire_style: WireStyle,
 }
 
 impl<T> Snarl<T> {
@@ -775,7 +789,7 @@ impl<T> Snarl<T> {
 
                 if !wire_hit && !snarl_state.has_new_wires() && bg_r.hovered() && !bg_r.dragged() {
                     // Try to find hovered wire
-                    // If not draggin new wire
+                    // If not dragging new wire
                     // And not hovering over item above.
 
                     if let Some(interact_pos) = input.interact_pos {
@@ -787,12 +801,7 @@ impl<T> Snarl<T> {
                             from_r.pos,
                             to_r.pos,
                             wire_width.max(1.5),
-                            pick_wire_style(
-                                style.get_wire_style(snarl_state.scale()),
-                                from_r.wire_style,
-                                to_r.wire_style,
-                            )
-                            .zoomed(snarl_state.scale()),
+                            pick_wire_style(from_r.wire_style, to_r.wire_style),
                         );
 
                         if wire_hit {
@@ -808,7 +817,7 @@ impl<T> Snarl<T> {
                     }
                 }
 
-                let color = mix_colors(from_r.pin_color, to_r.pin_color);
+                let color = mix_colors(from_r.wire_color, to_r.wire_color);
 
                 let mut draw_width = wire_width;
                 if hovered_wire == Some(wire) {
@@ -824,11 +833,7 @@ impl<T> Snarl<T> {
                     from_r.pos,
                     to_r.pos,
                     Stroke::new(draw_width, color),
-                    pick_wire_style(
-                        style.get_wire_style(snarl_state.scale()),
-                        from_r.wire_style.zoomed(snarl_state.scale()),
-                        to_r.wire_style.zoomed(snarl_state.scale()),
-                    ),
+                    pick_wire_style(from_r.wire_style, to_r.wire_style),
                 );
             }
 
@@ -1032,10 +1037,8 @@ impl<T> Snarl<T> {
                             style.get_downscale_wire_frame(),
                             from_pos,
                             to_r.pos,
-                            Stroke::new(wire_width, to_r.pin_color),
-                            to_r.wire_style
-                                .zoomed(snarl_state.scale())
-                                .unwrap_or_else(|| style.get_wire_style(snarl_state.scale())),
+                            Stroke::new(wire_width, to_r.wire_color),
+                            to_r.wire_style.zoomed(snarl_state.scale()),
                         );
                     }
                 }
@@ -1052,11 +1055,8 @@ impl<T> Snarl<T> {
                             style.get_downscale_wire_frame(),
                             from_r.pos,
                             to_pos,
-                            Stroke::new(wire_width, from_r.pin_color),
-                            from_r
-                                .wire_style
-                                .zoomed(snarl_state.scale())
-                                .unwrap_or_else(|| style.get_wire_style(snarl_state.scale())),
+                            Stroke::new(wire_width, from_r.wire_color),
+                            from_r.wire_style.zoomed(snarl_state.scale()),
                         );
                     }
                 }
@@ -1144,7 +1144,7 @@ impl<T> Snarl<T> {
                 let y0 = ui.cursor().min.y;
 
                 // Show input content
-                let pin_info = viewer.show_input(in_pin, ui, snarl_state.scale(), self);
+                let snarl_pin = viewer.show_input(in_pin, ui, snarl_state.scale(), self);
                 if !self.nodes.contains(node.0) {
                     // If removed
                     return;
@@ -1199,7 +1199,7 @@ impl<T> Snarl<T> {
                     drag_released = true;
                 }
 
-                let mut visual_pin_size = pin_size;
+                let mut visual_pin_rect = r.rect;
 
                 match input.hover_pos {
                     Some(hover_pos) if r.rect.contains(hover_pos) => {
@@ -1209,7 +1209,7 @@ impl<T> Snarl<T> {
                             snarl_state.remove_new_wire_in(in_pin.id);
                         }
                         pin_hovered = Some(AnyPin::In(in_pin.id));
-                        visual_pin_size *= 1.2;
+                        visual_pin_rect = visual_pin_rect.scale_from_center(1.2);
                     }
                     _ => {}
                 }
@@ -1217,24 +1217,20 @@ impl<T> Snarl<T> {
                 let mut pin_painter = ui.painter().clone();
                 pin_painter.set_clip_rect(viewport);
 
-                let pin_color = viewer.draw_input_pin(
-                    in_pin,
-                    &pin_info,
-                    r.rect.center(),
-                    visual_pin_size,
+                let wire_info = snarl_pin.draw(
+                    snarl_state.scale(),
                     style,
                     ui.style(),
+                    visual_pin_rect,
                     &pin_painter,
-                    snarl_state.scale(),
-                    self,
                 );
 
                 input_positions.insert(
                     in_pin.id,
                     PinResponse {
                         pos: r.rect.center(),
-                        pin_color,
-                        wire_style: pin_info.wire_style,
+                        wire_color: wire_info.color,
+                        wire_style: wire_info.style,
                     },
                 );
             });
@@ -1296,7 +1292,7 @@ impl<T> Snarl<T> {
                 let y0 = ui.cursor().min.y;
 
                 // Show output content
-                let pin_info = viewer.show_output(out_pin, ui, snarl_state.scale(), self);
+                let snarl_pin = viewer.show_output(out_pin, ui, snarl_state.scale(), self);
                 if !self.nodes.contains(node.0) {
                     // If removed
                     return;
@@ -1351,7 +1347,7 @@ impl<T> Snarl<T> {
                     drag_released = true;
                 }
 
-                let mut visual_pin_size = pin_size;
+                let mut visual_pin_rect = r.rect;
                 match input.hover_pos {
                     Some(hover_pos) if r.rect.contains(hover_pos) => {
                         if input.modifiers.shift {
@@ -1360,7 +1356,7 @@ impl<T> Snarl<T> {
                             snarl_state.remove_new_wire_out(out_pin.id);
                         }
                         pin_hovered = Some(AnyPin::Out(out_pin.id));
-                        visual_pin_size *= 1.2;
+                        visual_pin_rect = visual_pin_rect.scale_from_center(1.2);
                     }
                     _ => {}
                 }
@@ -1368,24 +1364,20 @@ impl<T> Snarl<T> {
                 let mut pin_painter = ui.painter().clone();
                 pin_painter.set_clip_rect(viewport);
 
-                let pin_color = viewer.draw_output_pin(
-                    out_pin,
-                    &pin_info,
-                    r.rect.center(),
-                    visual_pin_size,
+                let wire_info = snarl_pin.draw(
+                    snarl_state.scale(),
                     style,
                     ui.style(),
+                    visual_pin_rect,
                     &pin_painter,
-                    snarl_state.scale(),
-                    self,
                 );
 
                 output_positions.insert(
                     out_pin.id,
                     PinResponse {
                         pos: r.rect.center(),
-                        pin_color,
-                        wire_style: pin_info.wire_style,
+                        wire_color: wire_info.color,
+                        wire_style: wire_info.style,
                     },
                 );
             });
