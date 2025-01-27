@@ -684,7 +684,7 @@ impl<T> Snarl<T> {
 
             let mut bg_r = ui.allocate_rect(ui.max_rect(), Sense::click_and_drag());
             let viewport = bg_r.rect;
-            ui.set_clip_rect(viewport);
+            ui.set_clip_rect(rect_round(viewport));
 
             let pivot = input.hover_pos.unwrap_or_else(|| viewport.center());
 
@@ -713,11 +713,12 @@ impl<T> Snarl<T> {
                     if viewport.contains(hover_pos) && ui.rect_contains_pointer(viewport) =>
                 {
                     if input.zoom_delta != 1.0 {
-                        let new_scale = (snarl_state.scale()
-                            * input.zoom_delta.powf(style.get_scale_velocity()))
-                        .clamp(style.get_min_scale(), style.get_max_scale());
-
-                        snarl_state.set_scale(new_scale);
+                        snarl_state.zoom_delta(
+                            input.zoom_delta,
+                            style.get_scale_velocity(),
+                            style.get_min_scale(),
+                            style.get_max_scale(),
+                        );
                     }
                 }
                 _ => {}
@@ -1127,12 +1128,12 @@ impl<T> Snarl<T> {
         // Input pins on the left.
         let inputs_ui = &mut ui.new_child(
             UiBuilder::new()
-                .max_rect(inputs_rect)
+                .max_rect(rect_round(inputs_rect))
                 .layout(Layout::top_down(Align::Min))
                 .id_salt("inputs"),
         );
 
-        inputs_ui.set_clip_rect(clip_rect.intersect(viewport));
+        inputs_ui.set_clip_rect(rect_round(clip_rect.intersect(viewport)));
 
         for in_pin in inputs {
             // Show input pin.
@@ -1160,7 +1161,7 @@ impl<T> Snarl<T> {
                 let pin_pos = pos2(input_x, y);
 
                 // Interact with pin shape.
-                ui.set_clip_rect(viewport);
+                ui.set_clip_rect(rect_round(viewport));
 
                 let r = ui.interact(
                     Rect::from_center_size(pin_pos, vec2(pin_size, pin_size)),
@@ -1215,7 +1216,7 @@ impl<T> Snarl<T> {
                 }
 
                 let mut pin_painter = ui.painter().clone();
-                pin_painter.set_clip_rect(viewport);
+                pin_painter.set_clip_rect(rect_round(viewport));
 
                 let wire_info = snarl_pin.draw(
                     snarl_state.scale(),
@@ -1273,12 +1274,12 @@ impl<T> Snarl<T> {
 
         let outputs_ui = &mut ui.new_child(
             UiBuilder::new()
-                .max_rect(outputs_rect)
+                .max_rect(rect_round(outputs_rect))
                 .layout(Layout::top_down(Align::Max))
                 .id_salt("outputs"),
         );
 
-        outputs_ui.set_clip_rect(clip_rect.intersect(viewport));
+        outputs_ui.set_clip_rect(rect_round(clip_rect.intersect(viewport)));
 
         // Output pins on the right.
         for out_pin in outputs {
@@ -1307,7 +1308,7 @@ impl<T> Snarl<T> {
 
                 let pin_pos = pos2(output_x, y);
 
-                ui.set_clip_rect(viewport);
+                ui.set_clip_rect(rect_round(viewport));
 
                 let r = ui.interact(
                     Rect::from_center_size(pin_pos, vec2(pin_size, pin_size)),
@@ -1362,7 +1363,7 @@ impl<T> Snarl<T> {
                 }
 
                 let mut pin_painter = ui.painter().clone();
-                pin_painter.set_clip_rect(viewport);
+                pin_painter.set_clip_rect(rect_round(viewport));
 
                 let wire_info = snarl_pin.draw(
                     snarl_state.scale(),
@@ -1410,11 +1411,11 @@ impl<T> Snarl<T> {
     {
         let mut body_ui = ui.new_child(
             UiBuilder::new()
-                .max_rect(body_rect)
+                .max_rect(rect_round(body_rect))
                 .layout(Layout::left_to_right(Align::Min))
                 .id_salt("body"),
         );
-        body_ui.set_clip_rect(clip_rect.intersect(viewport));
+        body_ui.set_clip_rect(rect_round(clip_rect.intersect(viewport)));
 
         viewer.show_body(
             node,
@@ -1472,7 +1473,7 @@ impl<T> Snarl<T> {
             .map(|idx| OutPin::new(self, OutPinId { node, output: idx }))
             .collect::<Vec<_>>();
 
-        let node_pos = snarl_state.graph_pos_to_screen(pos, viewport);
+        let node_pos = snarl_state.graph_pos_to_screen(pos, viewport).round();
 
         // Generate persistent id for the node.
         let node_id = snarl_id.with(("snarl-node", node));
@@ -1581,7 +1582,7 @@ impl<T> Snarl<T> {
 
         let node_ui = &mut ui.new_child(
             UiBuilder::new()
-                .max_rect(node_frame_rect)
+                .max_rect(rect_round(node_frame_rect))
                 .layout(Layout::top_down(Align::Center))
                 .id_salt(node_id),
         );
@@ -1741,14 +1742,15 @@ impl<T> Snarl<T> {
 
                     // Show body if there's one.
                     if viewer.has_body(&self.nodes.get(node.0).unwrap().value) {
-                        let body_left = inputs_rect.right() + ui.spacing().item_spacing.x;
-                        let body_right = outputs_rect.left() - ui.spacing().item_spacing.x;
-                        let body_top = payload_rect.top();
-                        let body_bottom = payload_rect.bottom();
-
                         let body_rect = Rect::from_min_max(
-                            pos2(body_left, body_top),
-                            pos2(body_right, body_bottom),
+                            pos2(
+                                inputs_rect.right() + ui.spacing().item_spacing.x,
+                                payload_rect.top(),
+                            ),
+                            pos2(
+                                outputs_rect.left() - ui.spacing().item_spacing.x,
+                                payload_rect.bottom(),
+                            ),
                         );
 
                         let r = self.draw_body(
@@ -1779,7 +1781,6 @@ impl<T> Snarl<T> {
                 NodeLayout::Sandwich => {
                     // Show input pins.
 
-                    let inputs_rect = payload_rect;
                     let r = self.draw_inputs(
                         viewer,
                         node,
@@ -1787,7 +1788,7 @@ impl<T> Snarl<T> {
                         pin_size,
                         style,
                         ui,
-                        inputs_rect,
+                        payload_rect,
                         payload_clip_rect,
                         viewport,
                         input_x,
@@ -2005,19 +2006,17 @@ impl<T> Snarl<T> {
             };
 
             if viewer.has_footer(&self.nodes[node.0].value) {
-                let footer_left = node_rect.left();
-                let footer_right = node_rect.right();
-                let footer_top = pins_rect.bottom() + ui.spacing().item_spacing.y;
-                let footer_bottom = node_rect.bottom();
-
                 let footer_rect = Rect::from_min_max(
-                    pos2(footer_left, footer_top),
-                    pos2(footer_right, footer_bottom),
+                    pos2(
+                        node_rect.left(),
+                        pins_rect.bottom() + ui.spacing().item_spacing.y,
+                    ),
+                    pos2(node_rect.right(), node_rect.bottom()),
                 );
 
                 let mut footer_ui = ui.new_child(
                     UiBuilder::new()
-                        .max_rect(footer_rect)
+                        .max_rect(rect_round(footer_rect))
                         .layout(Layout::left_to_right(Align::Min))
                         .id_salt("footer"),
                 );
@@ -2053,7 +2052,7 @@ impl<T> Snarl<T> {
             // Show node's header
             let header_ui: &mut Ui = &mut ui.new_child(
                 UiBuilder::new()
-                    .max_rect(node_rect + header_frame.total_margin())
+                    .max_rect(rect_round(node_rect + header_frame.total_margin()))
                     .layout(Layout::top_down(Align::Center))
                     .id_salt("header"),
             );
@@ -2213,4 +2212,9 @@ const fn mix_colors(a: Color32, b: Color32) -> Color32 {
 const fn snarl_style_is_send_sync() {
     const fn is_send_sync<T: Send + Sync>() {}
     is_send_sync::<SnarlStyle>();
+}
+
+fn rect_round(r: Rect) -> Rect {
+    // return r;
+    Rect::from_min_max(r.min.round(), r.max.round())
 }

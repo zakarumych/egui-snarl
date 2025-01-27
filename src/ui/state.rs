@@ -290,15 +290,15 @@ impl SnarlState {
         let mut offset = Vec2::ZERO;
         let mut scale = 1.0f32.clamp(style.get_min_scale(), style.get_max_scale());
 
-        if bb.is_positive() {
+        if bb.is_finite() {
             bb = bb.expand(100.0);
 
             let bb_size = bb.size();
             let viewport_size = viewport.size();
 
-            scale = (viewport_size.x / bb_size.x)
+            scale = (viewport_size.x / bb_size.x.min(1.0))
                 .min(1.0)
-                .min(viewport_size.y / bb_size.y)
+                .min(viewport_size.y / bb_size.y.min(1.0))
                 .min(style.get_max_scale())
                 .max(style.get_min_scale());
 
@@ -338,36 +338,48 @@ impl SnarlState {
         }
     }
 
+    pub fn set_offset(&mut self, offset: Vec2) {
+        if self.offset != offset {
+            self.offset = offset;
+            self.dirty = true;
+        }
+    }
+
     #[inline(always)]
     pub fn pan(&mut self, delta: Vec2) {
-        self.offset += delta;
-        self.dirty = true;
+        if delta != Vec2::ZERO {
+            self.offset += delta;
+            self.dirty = true;
+        }
     }
 
     #[inline(always)]
-    pub const fn scale(&self) -> f32 {
-        self.scale
+    pub fn scale(&self) -> f32 {
+        (self.scale * 1024.0).round() / 1024.0
     }
 
     #[inline(always)]
-    pub const fn offset(&self) -> Vec2 {
+    pub fn offset(&self) -> Vec2 {
         self.offset
     }
 
     #[inline(always)]
-    pub fn set_scale(&mut self, scale: f32) {
-        self.target_scale = scale;
+    pub fn zoom_delta(&mut self, zoom_delta: f32, velocity: f32, min: f32, max: f32) {
+        if zoom_delta == 1.0 {
+            return;
+        }
+        self.target_scale = (self.target_scale * zoom_delta.powf(velocity)).clamp(min, max);
         self.dirty = true;
     }
 
     #[inline(always)]
     pub fn screen_pos_to_graph(&self, pos: Pos2, viewport: Rect) -> Pos2 {
-        (pos + self.offset - viewport.center().to_vec2()) / self.scale
+        (pos + self.offset() - viewport.center().to_vec2()) / self.scale()
     }
 
     #[inline(always)]
     pub fn graph_pos_to_screen(&self, pos: Pos2, viewport: Rect) -> Pos2 {
-        pos * self.scale - self.offset + viewport.center().to_vec2()
+        pos * self.scale() - self.offset() + viewport.center().to_vec2()
     }
 
     #[inline(always)]
@@ -393,7 +405,7 @@ impl SnarlState {
 
     #[inline(always)]
     pub fn screen_vec_to_graph(&self, size: Vec2) -> Vec2 {
-        size / self.scale
+        size / self.scale()
     }
 
     // #[inline(always)]
@@ -521,11 +533,6 @@ impl SnarlState {
             self.draw_order.remove(order);
             self.draw_order.push(node);
         }
-        self.dirty = true;
-    }
-
-    pub fn set_offset(&mut self, offset: Vec2) {
-        self.offset = offset;
         self.dirty = true;
     }
 
