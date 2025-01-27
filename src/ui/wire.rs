@@ -50,7 +50,7 @@ pub fn pick_wire_style(left: WireStyle, right: WireStyle) -> WireStyle {
             WireStyle::AxisAligned { corner_radius: a },
             WireStyle::AxisAligned { corner_radius: b },
         ) => WireStyle::AxisAligned {
-            corner_radius: a.max(b),
+            corner_radius: f32::max(a, b),
         },
         (WireStyle::AxisAligned { corner_radius }, _)
         | (_, WireStyle::AxisAligned { corner_radius }) => WireStyle::AxisAligned { corner_radius },
@@ -295,7 +295,7 @@ pub fn hit_wire(
 }
 
 #[inline]
-fn bezier_reference_size(points: &[Pos2]) -> f32 {
+fn curve_reference_size(points: &[Pos2]) -> f32 {
     let mut size = 0.0;
     for i in 1..points.len() {
         size += (points[i] - points[i - 1]).length();
@@ -306,7 +306,7 @@ fn bezier_reference_size(points: &[Pos2]) -> f32 {
 const MAX_CURVE_SAMPLES: usize = 100;
 
 fn bezier_samples_number(points: &[Pos2], threshold: f32) -> usize {
-    let reference_size = bezier_reference_size(points);
+    let reference_size = curve_reference_size(points);
 
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_possible_truncation)]
