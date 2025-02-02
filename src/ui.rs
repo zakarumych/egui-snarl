@@ -4,8 +4,8 @@ use std::{collections::HashMap, hash::Hash};
 
 use egui::{
     collapsing_header::paint_default_icon, epaint::Shadow, pos2, vec2, Align, Color32, Frame, Id,
-    Layout, Margin, Modifiers, PointerButton, Pos2, Rect, Rounding, Sense, Shape, Stroke, Style,
-    Ui, UiBuilder, Vec2,
+    Key, Layout, Margin, Modifiers, PointerButton, Pos2, Rect, Rounding, Sense, Shape, Stroke,
+    Style, Ui, UiBuilder, Vec2,
 };
 
 use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl};
@@ -590,6 +590,7 @@ struct Input {
     // primary_pressed: bool,
     secondary_pressed: bool,
     modifiers: Modifiers,
+    escape_pressed: bool,
 }
 
 struct DrawNodeResponse {
@@ -662,6 +663,7 @@ impl<T> Snarl<T> {
             modifiers: i.modifiers,
             // primary_pressed: i.pointer.primary_pressed(),
             secondary_pressed: i.pointer.secondary_pressed(),
+            escape_pressed: i.key_pressed(Key::Escape),
         });
 
         bg_frame.show(ui, |ui| {
@@ -914,7 +916,9 @@ impl<T> Snarl<T> {
                 snarl_state.set_offset(centers_sum * snarl_state.scale());
             }
 
-            if input.modifiers.command && bg_r.clicked_by(PointerButton::Primary) {
+            if input.modifiers.command && bg_r.clicked_by(PointerButton::Primary)
+                || input.escape_pressed
+            {
                 snarl_state.deselect_all_nodes();
             }
 
