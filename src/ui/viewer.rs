@@ -39,8 +39,14 @@ pub trait SnarlViewer<T> {
     }
     /// Checks if node has a custom egui style.
     #[inline]
-    fn has_node_style(&mut self, node: &T) -> bool {
-        let _ = node;
+    fn has_node_style(
+        &mut self,
+        node: NodeId,
+        inputs: &[InPin],
+        outputs: &[OutPin],
+        snarl: &Snarl<T>,
+    ) -> bool {
+        let _ = (node, inputs, outputs, snarl);
         false
     }
 
