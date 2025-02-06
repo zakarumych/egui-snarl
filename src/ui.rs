@@ -1597,6 +1597,10 @@ impl<T> Snarl<T> {
         let mut new_pins_size = Vec2::ZERO;
 
         let r = node_frame.show(node_ui, |ui| {
+            if viewer.has_node_style(node, &inputs, &outputs, self) {
+                viewer.apply_node_style(ui.style_mut(), node, &inputs, &outputs, self);
+            }
+
             let min_pin_y = node_state.header_height().mul_add(0.5, node_rect.min.y);
 
             // Input pins' center side by X axis.
