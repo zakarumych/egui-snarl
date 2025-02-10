@@ -17,7 +17,7 @@ rust-version = "1.81"
 serde = ["dep:serde", "egui/serde", "slab/serde"]
 
 [dependencies]
-egui = { version = "0.30" }
+egui = { version = "0.31" }
 slab = { version = "0.4" }
 serde = { version = "1.0", features = ["derive"], optional = true }
 
