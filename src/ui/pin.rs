@@ -1,4 +1,4 @@
-use egui::{epaint::PathShape, vec2, Color32, Painter, Pos2, Shape, Stroke, Style, Vec2};
+use egui::{epaint::PathShape, vec2, Align, Color32, Painter, Pos2, Shape, Stroke, Style, Vec2};
 
 use crate::{InPinId, OutPinId};
 
@@ -59,6 +59,13 @@ pub struct PinInfo {
 
     /// Style of the wire connected to the pin.
     pub wire_style: Option<WireStyle>,
+
+    /// Color of the wire connected to the pin.
+    /// Default is the same as the fill color.
+    pub wire_color: Option<Color32>,
+
+    /// Custom vertical position of a pin
+    pub position: Option<f32>
 }
 
 impl PinInfo {

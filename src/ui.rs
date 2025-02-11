@@ -612,8 +612,9 @@ struct DrawBodyResponse {
 
 struct PinResponse {
     pos: Pos2,
-    pin_color: Color32,
+    // pin_color: Color32,
     wire_style: Option<WireStyle>,
+    wire_color: Color32,
 }
 
 impl<T> Snarl<T> {
@@ -808,7 +809,7 @@ impl<T> Snarl<T> {
                     }
                 }
 
-                let color = mix_colors(from_r.pin_color, to_r.pin_color);
+                let color = mix_colors(from_r.wire_color, to_r.wire_color);
 
                 let mut draw_width = wire_width;
                 if hovered_wire == Some(wire) {
@@ -1032,7 +1033,7 @@ impl<T> Snarl<T> {
                             style.get_downscale_wire_frame(),
                             from_pos,
                             to_r.pos,
-                            Stroke::new(wire_width, to_r.pin_color),
+                            Stroke::new(wire_width, to_r.wire_color),
                             to_r.wire_style
                                 .zoomed(snarl_state.scale())
                                 .unwrap_or_else(|| style.get_wire_style(snarl_state.scale())),
@@ -1052,7 +1053,7 @@ impl<T> Snarl<T> {
                             style.get_downscale_wire_frame(),
                             from_r.pos,
                             to_pos,
-                            Stroke::new(wire_width, from_r.pin_color),
+                            Stroke::new(wire_width, from_r.wire_color),
                             from_r
                                 .wire_style
                                 .zoomed(snarl_state.scale())
@@ -1154,8 +1155,8 @@ impl<T> Snarl<T> {
 
                 // ui.end_row();
 
-                // Centered vertically.
-                let y = min_pin_y.max((y0 + y1) * 0.5);
+                // Centered vertically by default.
+                let y = pin_info.position.unwrap_or(min_pin_y.max((y0 + y1) * 0.5));
 
                 let pin_pos = pos2(input_x, y);
 
@@ -1233,8 +1234,9 @@ impl<T> Snarl<T> {
                     in_pin.id,
                     PinResponse {
                         pos: r.rect.center(),
-                        pin_color,
+                        // pin_color,
                         wire_style: pin_info.wire_style,
+                        wire_color: pin_info.wire_color.unwrap_or(pin_color),
                     },
                 );
             });
@@ -1306,8 +1308,8 @@ impl<T> Snarl<T> {
 
                 // ui.end_row();
 
-                // Centered vertically.
-                let y = min_pin_y.max((y0 + y1) * 0.5);
+                // Centered vertically by default.
+                let y = pin_info.position.unwrap_or(min_pin_y.max((y0 + y1) * 0.5));
 
                 let pin_pos = pos2(output_x, y);
 
@@ -1384,8 +1386,9 @@ impl<T> Snarl<T> {
                     out_pin.id,
                     PinResponse {
                         pos: r.rect.center(),
-                        pin_color,
+                        // pin_color,
                         wire_style: pin_info.wire_style,
+                        wire_color: pin_info.wire_color.unwrap_or(pin_color),
                     },
                 );
             });
