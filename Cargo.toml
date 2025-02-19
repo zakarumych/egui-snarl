@@ -35,3 +35,8 @@ wasm-bindgen-futures = "0.4"
 [[example]]
 name = "demo"
 required-features = ["serde", "egui-probe"]
+
+# [patch.crates-io]
+# egui = { path = "../egui/crates/egui" }
+# eframe = { path = "../egui/crates/eframe" }
+# egui_extras = { path = "../egui/crates/egui_extras" }

@@ -1,8 +1,11 @@
-use egui::{Color32, Painter, Pos2, Rect, Style, Ui};
+use egui::{Painter, Pos2, Rect, Style, Ui};
 
 use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
-use super::{pin::AnyPins, BackgroundPattern, NodeLayout, PinInfo, SnarlStyle, Viewport};
+use super::{
+    pin::{AnyPins, SnarlPin},
+    BackgroundPattern, NodeLayout, SnarlStyle, Viewport,
+};
 
 /// `SnarlViewer` is a trait for viewing a Snarl.
 ///
@@ -13,6 +16,13 @@ pub trait SnarlViewer<T> {
     fn title(&mut self, node: &T) -> String;
 
     /// Returns the node's frame.
+    /// All node's elements will be rendered inside this frame.
+    /// Except for pins if they are configured to be rendered outside of the frame.
+    ///
+    /// Returns `default` by default.
+    /// `default` frame is taken from the [`SnarlStyle::node_frame`] or constructed if it's `None`.
+    ///
+    /// Override this method to customize the frame for specific nodes.
     fn node_frame(
         &mut self,
         default: egui::Frame,
@@ -26,6 +36,14 @@ pub trait SnarlViewer<T> {
     }
 
     /// Returns the node's header frame.
+    ///
+    /// This frame would be placed on top of the node's frame.
+    /// And header UI (see [`show_header`]) will be placed inside this frame.
+    ///
+    /// Returns `default` by default.
+    /// `default` frame is taken from the [`SnarlStyle::header_frame`],
+    /// or [`SnarlStyle::node_frame`] with removed shadow if `None`,
+    /// or constructed if both are `None`.
     fn header_frame(
         &mut self,
         default: egui::Frame,
@@ -62,10 +80,14 @@ pub trait SnarlViewer<T> {
         let _ = (style, node, inputs, outputs, snarl);
     }
 
-    /// Returns layout override for the node.
+    /// Returns elements layout for the node.
     ///
-    /// This method can be used to override the default layout of the node.
-    /// By default it returns `None` and layout from the style is used.
+    /// Node consists of 5 parts: header, body, footer, input pins and output pins.
+    /// See [`NodeLayout`] for available placements.
+    ///
+    /// Returns `default` by default.
+    /// `default` layout is taken from the [`SnarlStyle::node_layout`] or constructed if it's `None`.
+    /// Override this method to customize the layout for specific nodes.
     #[inline]
     fn node_layout(
         &mut self,
@@ -79,7 +101,11 @@ pub trait SnarlViewer<T> {
         default
     }
 
-    /// Renders the node's header.
+    /// Renders elements inside the node's header frame.
+    ///
+    /// This is the good place to show the node's title and controls related to the whole node.
+    ///
+    /// By default it shows the node's title.
     #[inline]
     fn show_header(
         &mut self,
@@ -99,9 +125,14 @@ pub trait SnarlViewer<T> {
     /// [`SnarlViewer::show_input`] and [`SnarlViewer::draw_input_pin`] will be called for each input in range `0..inputs()`.
     fn inputs(&mut self, node: &T) -> usize;
 
-    /// Renders the node's input.
-    fn show_input(&mut self, pin: &InPin, ui: &mut Ui, scale: f32, snarl: &mut Snarl<T>)
-        -> PinInfo;
+    /// Renders one specified node's input element and returns drawer for the corresponding pin.
+    fn show_input(
+        &mut self,
+        pin: &InPin,
+        ui: &mut Ui,
+        scale: f32,
+        snarl: &mut Snarl<T>,
+    ) -> impl SnarlPin + 'static;
 
     /// Returns number of output pins of the node.
     ///
@@ -115,7 +146,7 @@ pub trait SnarlViewer<T> {
         ui: &mut Ui,
         scale: f32,
         snarl: &mut Snarl<T>,
-    ) -> PinInfo;
+    ) -> impl SnarlPin + 'static;
 
     /// Checks if node has something to show in body - between input and output pins.
     #[inline]
@@ -310,54 +341,6 @@ pub trait SnarlViewer<T> {
     #[inline]
     fn drop_inputs(&mut self, pin: &InPin, snarl: &mut Snarl<T>) {
         snarl.drop_inputs(pin.id);
-    }
-
-    /// Draws the node's input pin.
-    ///
-    /// This method is called after [`SnarlViewer::show_input`] and can be used to draw the pin shape.
-    /// By default it draws a pin with the shape and style returned by [`SnarlViewer::show_input`].
-    ///
-    /// If you want to draw the pin yourself, you can override this method.
-    #[allow(clippy::too_many_arguments)]
-    fn draw_input_pin(
-        &mut self,
-        pin: &InPin,
-        pin_info: &PinInfo,
-        pos: Pos2,
-        size: f32,
-        snarl_style: &SnarlStyle,
-        style: &Style,
-        painter: &Painter,
-        scale: f32,
-        snarl: &Snarl<T>,
-    ) -> Color32 {
-        let _ = (pin, snarl);
-
-        pin_info.draw(pos, size, snarl_style, style, painter, scale)
-    }
-
-    /// Draws the node's output pin.
-    ///
-    /// This method is called after [`SnarlViewer::show_output`] and can be used to draw the pin shape.
-    /// By default it draws a pin with the shape and style returned by [`SnarlViewer::show_output`].
-    ///
-    /// If you want to draw the pin yourself, you can override this method.
-    #[allow(clippy::too_many_arguments)]
-    fn draw_output_pin(
-        &mut self,
-        pin: &OutPin,
-        pin_info: &PinInfo,
-        pos: Pos2,
-        size: f32,
-        snarl_style: &SnarlStyle,
-        style: &Style,
-        painter: &Painter,
-        scale: f32,
-        snarl: &Snarl<T>,
-    ) -> Color32 {
-        let _ = (pin, snarl);
-
-        pin_info.draw(pos, size, snarl_style, style, painter, scale)
     }
 
     /// Draws background of the snarl view.

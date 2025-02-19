@@ -229,7 +229,7 @@ impl Zoom for WireStyle {
     #[inline(always)]
     fn zoom(&mut self, zoom: f32) {
         match self {
-            WireStyle::Bezier3 | WireStyle::Bezier5 => {}
+            WireStyle::Line | WireStyle::Bezier3 | WireStyle::Bezier5 => {}
             WireStyle::AxisAligned { corner_radius } => {
                 corner_radius.zoom(zoom);
             }
