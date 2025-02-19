@@ -314,14 +314,6 @@ pub struct SnarlStyle {
     )]
     pub max_scale: Option<f32>,
 
-    /// Velocity of viewport scale when scaling with mouse wheel.
-    #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
-    #[cfg_attr(
-        feature = "serde",
-        serde(skip_serializing_if = "Option::is_none", default)
-    )]
-    pub scale_velocity: Option<f32>,
-
     /// Enable centering by double click on background
     #[cfg_attr(
         feature = "serde",
@@ -354,6 +346,15 @@ pub struct SnarlStyle {
         serde(skip_serializing_if = "Option::is_none", default)
     )]
     pub select_style: Option<SelectionStyle>,
+
+    /// Controls if zooming should be animated.
+    /// If set to positive value, zooming will be animated with given duration in seconds.
+    /// If zero or negative, zooming will be instant.
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    pub animate_zoom: Option<f32>,
 
     #[doc(hidden)]
     #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
@@ -449,10 +450,6 @@ impl SnarlStyle {
 
     fn get_max_scale(&self) -> f32 {
         self.max_scale.unwrap_or(5.0)
-    }
-
-    fn get_scale_velocity(&self) -> f32 {
-        self.scale_velocity.unwrap_or(1.0)
     }
 
     fn get_node_frame(&self, scale: f32, style: &Style) -> Frame {
@@ -576,7 +573,6 @@ impl SnarlStyle {
 
             min_scale: None,
             max_scale: None,
-            scale_velocity: None,
             node_frame: None,
             header_frame: None,
             centering: None,
@@ -584,6 +580,7 @@ impl SnarlStyle {
             select_fill: None,
             select_rect_contained: None,
             select_style: None,
+            animate_zoom: None,
 
             _non_exhaustive: (),
         }
@@ -715,7 +712,6 @@ impl<T> Snarl<T> {
                     if input.zoom_delta != 1.0 {
                         snarl_state.zoom_delta(
                             input.zoom_delta,
-                            style.get_scale_velocity(),
                             style.get_min_scale(),
                             style.get_max_scale(),
                         );

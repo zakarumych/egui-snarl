@@ -62,16 +62,17 @@ impl NodeState {
     /// Finds node rect at specific position (excluding node frame margin).
     pub fn node_rect(&self, pos: Pos2, openness: f32) -> Rect {
         Rect::from_min_size(
-            pos,
+            pos.round(),
             egui::vec2(
                 self.size.x,
                 f32::max(self.header_height, self.size.y * openness),
-            ),
+            )
+            .round(),
         )
     }
 
     pub fn payload_offset(&self, openness: f32) -> f32 {
-        (self.size.y) * (1.0 - openness)
+        ((self.size.y) * (1.0 - openness)).round()
     }
 
     pub fn set_size(&mut self, size: Vec2) {
@@ -81,8 +82,8 @@ impl NodeState {
         }
     }
 
-    pub const fn header_height(&self) -> f32 {
-        self.header_height
+    pub fn header_height(&self) -> f32 {
+        self.header_height.round()
     }
 
     pub fn set_header_height(&mut self, height: f32) {
@@ -248,10 +249,18 @@ impl SnarlState {
         style: &SnarlStyle,
     ) -> Self {
         let Some(mut data) = SnarlStateData::load(cx, id) else {
+            cx.request_discard("Initial placing");
             return Self::initial(id, viewport, snarl, style);
         };
 
-        let new_scale = cx.animate_value_with_time(id.with("zoom-scale"), data.target_scale, 0.1);
+        let animate_zoom = style.animate_zoom.unwrap_or(0.0);
+
+        let new_scale = match animate_zoom {
+            ..=0.0 => data.target_scale,
+            duration => {
+                cx.animate_value_with_time(id.with("zoom-scale"), data.target_scale, duration)
+            }
+        };
 
         #[allow(clippy::float_cmp)]
         let mut dirty = if new_scale == data.scale {
@@ -261,6 +270,8 @@ impl SnarlState {
 
             data.offset += a * new_scale / data.scale - a;
             data.scale = new_scale;
+
+            cx.request_discard("Zooming");
             true
         };
 
@@ -355,20 +366,22 @@ impl SnarlState {
 
     #[inline(always)]
     pub fn scale(&self) -> f32 {
-        (self.scale * 1024.0).round() / 1024.0
+        (self.scale * 100.0).round() / 100.0
     }
 
     #[inline(always)]
     pub fn offset(&self) -> Vec2 {
-        self.offset
+        self.offset.round()
     }
 
-    #[inline(always)]
-    pub fn zoom_delta(&mut self, zoom_delta: f32, velocity: f32, min: f32, max: f32) {
+    #[inline(never)]
+    pub fn zoom_delta(&mut self, zoom_delta: f32, min: f32, max: f32) {
         if zoom_delta == 1.0 {
             return;
         }
-        self.target_scale = (self.target_scale * zoom_delta.powf(velocity)).clamp(min, max);
+
+        self.target_scale = (self.target_scale * zoom_delta).clamp(min, max);
+        self.target_scale = (self.target_scale * 100.0).round() / 100.0;
         self.dirty = true;
     }
 
