@@ -2,7 +2,7 @@ workspace = { members = ["demo"] }
 
 [package]
 name = "egui-snarl"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 description = "Node-graphs for egui"
 license = "MIT OR Apache-2.0"
