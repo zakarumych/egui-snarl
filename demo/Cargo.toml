@@ -10,7 +10,7 @@ path = "../examples/demo.rs"
 
 [dependencies]
 egui = { version = "0.31.0" }
-egui-probe = { git = "https://github.com/shadow3aaa/egui-probe", features = ["derive"] }
+egui-probe = { version = "0.8.0", features = ["derive"] }
 eframe = { version = "0.31.0", features = ["serde", "persistence"] }
 egui_extras = { version = "0.31.0", features = ["all_loaders"] }
 syn = { version = "2.0", features = ["extra-traits"] }
