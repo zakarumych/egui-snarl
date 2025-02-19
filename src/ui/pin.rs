@@ -1,4 +1,4 @@
-use egui::{epaint::PathShape, vec2, Align, Color32, Painter, Pos2, Shape, Stroke, Style, Vec2};
+use egui::{epaint::PathShape, pos2, vec2, Color32, Painter, Rect, Shape, Stroke, Style, Vec2};
 
 use crate::{InPinId, OutPinId};
 
@@ -35,6 +35,14 @@ pub struct PinWireInfo {
 
 /// Uses `Painter` to draw a pin.
 pub trait SnarlPin {
+    /// Calculates pin Rect from the given parameters.
+    fn pin_rect(&self, x: f32, y0: f32, y1: f32, size: f32) -> Rect {
+        // Center vertically by default.
+        let y = (y0 + y1) * 0.5;
+        let pin_pos = pos2(x, y);
+        Rect::from_center_size(pin_pos, vec2(size, size))
+    }
+
     /// Draws the pin.
     ///
     /// `rect` is the interaction rectangle of the pin.
@@ -94,12 +102,8 @@ pub struct PinInfo {
     /// Style of the wire connected to the pin.
     pub wire_style: Option<WireStyle>,
 
-    /// Color of the wire connected to the pin.
-    /// Default is the same as the fill color.
-    pub wire_color: Option<Color32>,
-
     /// Custom vertical position of a pin
-    pub position: Option<f32>
+    pub position: Option<f32>,
 }
 
 impl PinInfo {

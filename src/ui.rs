@@ -1150,21 +1150,13 @@ impl<T> Snarl<T> {
 
                 let y1 = ui.min_rect().max.y;
 
-                // ui.end_row();
-
-                // Centered vertically by default.
-                let y = pin_info.position.unwrap_or(min_pin_y.max((y0 + y1) * 0.5));
-
-                let pin_pos = pos2(input_x, y);
+                let pin_rect =
+                    snarl_pin.pin_rect(input_x, min_pin_y.max(y0), min_pin_y.max(y1), pin_size);
 
                 // Interact with pin shape.
                 ui.set_clip_rect(rect_round(viewport));
 
-                let r = ui.interact(
-                    Rect::from_center_size(pin_pos, vec2(pin_size, pin_size)),
-                    ui.next_auto_id(),
-                    Sense::click_and_drag(),
-                );
+                let r = ui.interact(pin_rect, ui.next_auto_id(), Sense::click_and_drag());
 
                 ui.skip_ahead_auto_ids(1);
 
@@ -1298,20 +1290,12 @@ impl<T> Snarl<T> {
 
                 let y1 = ui.min_rect().max.y;
 
-                // ui.end_row();
-
-                // Centered vertically by default.
-                let y = pin_info.position.unwrap_or(min_pin_y.max((y0 + y1) * 0.5));
-
-                let pin_pos = pos2(output_x, y);
+                let pin_rect =
+                    snarl_pin.pin_rect(output_x, min_pin_y.max(y0), min_pin_y.max(y1), pin_size);
 
                 ui.set_clip_rect(rect_round(viewport));
 
-                let r = ui.interact(
-                    Rect::from_center_size(pin_pos, vec2(pin_size, pin_size)),
-                    ui.next_auto_id(),
-                    Sense::click_and_drag(),
-                );
+                let r = ui.interact(pin_rect, ui.next_auto_id(), Sense::click_and_drag());
 
                 ui.skip_ahead_auto_ids(1);
 
@@ -1375,7 +1359,7 @@ impl<T> Snarl<T> {
                     PinResponse {
                         pos: r.rect.center(),
                         wire_color: wire_info.color,
-                        wire_style: wire_info.style
+                        wire_style: wire_info.style,
                     },
                 );
             });
