@@ -173,6 +173,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     }
 
     #[allow(clippy::too_many_lines)]
+    #[allow(refining_impl_trait)]
     fn show_input(
         &mut self,
         pin: &InPin,
@@ -388,6 +389,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         }
     }
 
+    #[allow(refining_impl_trait)]
     fn show_output(
         &mut self,
         pin: &OutPin,
@@ -411,6 +413,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                     .desired_width(0.0)
                     .margin(ui.spacing().item_spacing);
                 ui.add(edit);
+                ui.label("AAAAA");
                 PinInfo::circle()
                     .with_fill(STRING_COLOR)
                     .with_wire_style(WireStyle::AxisAligned {
@@ -960,22 +963,22 @@ const fn default_style() -> SnarlStyle {
         pin_placement: Some(PinPlacement::Edge),
         pin_size: Some(7.0),
         node_frame: Some(egui::Frame {
-            inner_margin: egui::Margin::same(8.0),
+            inner_margin: egui::Margin::same(8),
             outer_margin: egui::Margin {
-                left: 0.0,
-                right: 0.0,
-                top: 0.0,
-                bottom: 4.0,
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 4,
             },
-            rounding: egui::Rounding::same(8.0),
+            corner_radius: egui::CornerRadius::same(8),
             fill: egui::Color32::from_gray(30),
             stroke: egui::Stroke::NONE,
             shadow: egui::Shadow::NONE,
         }),
         bg_frame: Some(egui::Frame {
-            inner_margin: egui::Margin::same(2.0),
+            inner_margin: egui::Margin::same(2),
             outer_margin: egui::Margin::ZERO,
-            rounding: egui::Rounding::ZERO,
+            corner_radius: egui::CornerRadius::ZERO,
             fill: egui::Color32::from_gray(40),
             stroke: egui::Stroke::NONE,
             shadow: egui::Shadow::NONE,

@@ -2,7 +2,7 @@ workspace = { members = ["demo"] }
 
 [package]
 name = "egui-snarl"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 description = "Node-graphs for egui"
 license = "MIT OR Apache-2.0"
@@ -17,15 +17,15 @@ rust-version = "1.81"
 serde = ["dep:serde", "egui/serde", "slab/serde"]
 
 [dependencies]
-egui = { version = "0.30" }
+egui = { version = "0.31.0" }
 slab = { version = "0.4" }
 serde = { version = "1.0", features = ["derive"], optional = true }
 
-egui-probe = { version = "0.7.0", features = ["derive"], optional = true }
+egui-probe = { version = "0.8.0", features = ["derive"], optional = true }
 
 [dev-dependencies]
-eframe = { version = "0.30", features = ["serde", "persistence"] }
-egui_extras = { version = "0.30", features = ["all_loaders"] }
+eframe = { version = "0.31.0", features = ["serde", "persistence"] }
+egui_extras = { version = "0.31.0", features = ["all_loaders"] }
 syn = { version = "2.0", features = ["extra-traits"] }
 serde_json = { version = "1.0" }
 
@@ -35,3 +35,8 @@ wasm-bindgen-futures = "0.4"
 [[example]]
 name = "demo"
 required-features = ["serde", "egui-probe"]
+
+# [patch.crates-io]
+# egui = { path = "../egui/crates/egui" }
+# eframe = { path = "../egui/crates/eframe" }
+# egui_extras = { path = "../egui/crates/egui_extras" }

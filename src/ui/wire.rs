@@ -1,4 +1,4 @@
-use std::f32;
+use core::f32;
 
 use egui::{epaint::PathShape, pos2, Color32, Pos2, Rect, Shape, Stroke, Ui};
 
@@ -18,17 +18,15 @@ pub enum WireLayer {
 }
 
 /// Controls style in which wire is rendered.
+///
+/// Variants are given in order of precedence when two pins require different styles.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
 #[derive(Default)]
 pub enum WireStyle {
-    /// Draw wire as 3rd degree Bezier curve.
-    Bezier3,
-
-    /// Draw wire as 5th degree Bezier curve.
-    #[default]
-    Bezier5,
+    /// Straight line from one endpoint to another.
+    Line,
 
     /// Draw wire as straight lines with 90 degree turns.
     /// Corners has radius of `corner_radius`.
@@ -36,29 +34,28 @@ pub enum WireStyle {
         /// Radius of corners in wire.
         corner_radius: f32,
     },
+
+    /// Draw wire as 3rd degree Bezier curve.
+    Bezier3,
+
+    /// Draw wire as 5th degree Bezier curve.
+    #[default]
+    Bezier5,
 }
 
-pub fn pick_wire_style(
-    default: WireStyle,
-    left: Option<WireStyle>,
-    right: Option<WireStyle>,
-) -> WireStyle {
+pub fn pick_wire_style(left: WireStyle, right: WireStyle) -> WireStyle {
     match (left, right) {
-        (None, None) => default,
-        (Some(one), None) | (None, Some(one)) => one,
-        (Some(WireStyle::Bezier5), Some(WireStyle::Bezier5)) => WireStyle::Bezier5,
-        (Some(WireStyle::Bezier3 | WireStyle::Bezier5), Some(WireStyle::Bezier3))
-        | (Some(WireStyle::Bezier3), Some(WireStyle::Bezier5)) => WireStyle::Bezier3,
+        (WireStyle::Line, _) | (_, WireStyle::Line) => WireStyle::Line,
         (
-            Some(WireStyle::AxisAligned { corner_radius: a }),
-            Some(WireStyle::AxisAligned { corner_radius: b }),
+            WireStyle::AxisAligned { corner_radius: a },
+            WireStyle::AxisAligned { corner_radius: b },
         ) => WireStyle::AxisAligned {
-            corner_radius: a.max(b),
+            corner_radius: f32::max(a, b),
         },
-        (Some(WireStyle::AxisAligned { corner_radius }), Some(_))
-        | (Some(_), Some(WireStyle::AxisAligned { corner_radius })) => {
-            WireStyle::AxisAligned { corner_radius }
-        }
+        (WireStyle::AxisAligned { corner_radius }, _)
+        | (_, WireStyle::AxisAligned { corner_radius }) => WireStyle::AxisAligned { corner_radius },
+        (WireStyle::Bezier3, _) | (_, WireStyle::Bezier3) => WireStyle::Bezier3,
+        (WireStyle::Bezier5, WireStyle::Bezier5) => WireStyle::Bezier5,
     }
 }
 
@@ -223,6 +220,12 @@ pub fn draw_wire(
 
     let frame_size = adjust_frame_size(frame_size, upscale, downscale, from, to);
     match style {
+        WireStyle::Line => {
+            let bb = Rect::from_two_pos(from, to);
+            if ui.is_rect_visible(bb) {
+                shapes.push(Shape::line_segment([from, to], stroke));
+            }
+        }
         WireStyle::Bezier3 => {
             let [a, _, b, c, _, d] = wire_bezier_5(frame_size, from, to);
             let points = [a, b, c, d];
@@ -261,6 +264,21 @@ pub fn hit_wire(
 ) -> bool {
     let frame_size = adjust_frame_size(frame_size, upscale, downscale, from, to);
     match style {
+        WireStyle::Line => {
+            let aabb = Rect::from_two_pos(from, to);
+            let aabb_e = aabb.expand(threshold);
+            if !aabb_e.contains(pos) {
+                return false;
+            }
+
+            let a = to - from;
+            let b = pos - from;
+
+            let dot = b.dot(a);
+            let dist2 = b.length_sq() - dot * dot / a.length_sq();
+
+            dist2 < threshold * threshold
+        }
         WireStyle::Bezier3 => {
             let [a, _, b, c, _, d] = wire_bezier_5(frame_size, from, to);
             let points = [a, b, c, d];
@@ -277,7 +295,7 @@ pub fn hit_wire(
 }
 
 #[inline]
-fn bezier_reference_size(points: &[Pos2]) -> f32 {
+fn curve_reference_size(points: &[Pos2]) -> f32 {
     let mut size = 0.0;
     for i in 1..points.len() {
         size += (points[i] - points[i - 1]).length();
@@ -288,7 +306,7 @@ fn bezier_reference_size(points: &[Pos2]) -> f32 {
 const MAX_CURVE_SAMPLES: usize = 100;
 
 fn bezier_samples_number(points: &[Pos2], threshold: f32) -> usize {
-    let reference_size = bezier_reference_size(points);
+    let reference_size = curve_reference_size(points);
 
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_possible_truncation)]
@@ -512,135 +530,145 @@ fn hit_bezier_5(pos: Pos2, points: &[Pos2; 6], threshold: f32) -> bool {
 }
 
 struct AxisAlignedWire {
-    points: [Pos2; 5],
-    turns: [(Pos2, f32); 4],
+    aabb: Rect,
+    turns: usize,
+    segments: [(Pos2, Pos2); 5],
+    turn_centers: [Pos2; 4],
+    turn_radii: [f32; 4],
 }
 
 #[allow(clippy::too_many_lines)]
 fn wire_axis_aligned(corner_radius: f32, frame_size: f32, from: Pos2, to: Pos2) -> AxisAlignedWire {
+    let corner_radius = corner_radius.max(0.0);
+
+    let half_height = f32::abs(from.y - to.y) / 2.0;
+    let max_radius = (half_height / 2.0).min(corner_radius);
+
+    let frame_size = frame_size.max(max_radius * 2.0);
+
+    let zero_segment = (Pos2::ZERO, Pos2::ZERO);
+
     if from.x + frame_size <= to.x - frame_size {
-        let mid = pos2((from.x + to.x) / 2.0, (from.y + to.y) / 2.0);
-
-        let from_turn_radius = f32::abs(mid.x - from.x)
-            .min(f32::abs(mid.y - from.y))
-            .min(corner_radius);
-
-        let to_turn_radius = f32::abs(to.x - mid.x)
-            .min(f32::abs(mid.y - to.y))
-            .min(corner_radius);
-
-        let from_turn_x = mid.x - from_turn_radius;
-        let from_turn_y = if from.y < to.y {
-            from.y + from_turn_radius
+        if from.y == to.y {
+            // Single segment case.
+            AxisAlignedWire {
+                aabb: Rect::from_two_pos(from, to),
+                segments: [
+                    (from, to),
+                    zero_segment,
+                    zero_segment,
+                    zero_segment,
+                    zero_segment,
+                ],
+                turns: 0,
+                turn_centers: [Pos2::ZERO; 4],
+                turn_radii: [f32::NAN; 4],
+            }
         } else {
-            from.y - from_turn_radius
-        };
+            // Two turns case.
+            let mid_x = (from.x + to.x) / 2.0;
+            let half_width = (to.x - from.x) / 2.0;
 
-        let to_turn_x = mid.x + to_turn_radius;
-        let to_turn_y = if from.y < to.y {
-            to.y - to_turn_radius
-        } else {
-            to.y + to_turn_radius
-        };
+            let turn_radius = max_radius.min(half_width);
 
-        AxisAlignedWire {
-            points: [from, mid, mid, mid, to],
-            turns: [
-                (pos2(from_turn_x, from_turn_y), from_turn_radius),
-                (mid, 0.0),
-                (mid, 0.0),
-                (pos2(to_turn_x, to_turn_y), to_turn_radius),
-            ],
+            let turn_vert_len = if from.y < to.y {
+                turn_radius
+            } else {
+                -turn_radius
+            };
+
+            let segments = [
+                (from, pos2(mid_x - turn_radius, from.y)),
+                (
+                    pos2(mid_x, from.y + turn_vert_len),
+                    pos2(mid_x, to.y - turn_vert_len),
+                ),
+                (pos2(mid_x + turn_radius, to.y), to),
+                zero_segment,
+                zero_segment,
+            ];
+
+            let turn_centers = [
+                pos2(mid_x - turn_radius, from.y + turn_vert_len),
+                pos2(mid_x + turn_radius, to.y - turn_vert_len),
+                Pos2::ZERO,
+                Pos2::ZERO,
+            ];
+
+            let turn_radii = [turn_radius, turn_radius, f32::NAN, f32::NAN];
+
+            AxisAlignedWire {
+                aabb: Rect::from_two_pos(from, to),
+                turns: 2,
+                segments,
+                turn_centers,
+                turn_radii,
+            }
         }
     } else {
-        let from_2nd = pos2(
-            from.x + frame_size,
-            if from.y + frame_size + corner_radius <= to.y - frame_size - corner_radius {
-                from.y + frame_size
-            } else if from.y <= to.y {
-                from.y + (to.y - from.y) / 4.0
-            } else if from.y - frame_size - corner_radius >= to.y + frame_size + corner_radius {
-                from.y - frame_size
-            } else {
-                from.y - (from.y - to.y) / 4.0
-            },
-        );
+        // Four turns case.
+        let mid = f32::abs(from.y + to.y) / 2.0;
 
-        let to_2nd = pos2(
-            to.x - frame_size,
-            if from.y + frame_size + corner_radius <= to.y - frame_size - corner_radius {
-                to.y - frame_size
-            } else if from.y <= to.y {
-                to.y - (to.y - from.y) / 4.0
-            } else if from.y - frame_size - corner_radius >= to.y + frame_size + corner_radius {
-                to.y + frame_size
-            } else {
-                to.y + (from.y - to.y) / 4.0
-            },
-        );
+        let right = from.x + frame_size;
+        let left = to.x - frame_size;
 
-        let mid = pos2((from_2nd.x + to_2nd.x) / 2.0, (from_2nd.y + to_2nd.y) / 2.0);
+        let half_width = f32::abs(right - left) / 2.0;
 
-        let from_turn_radius = f32::abs(from_2nd.x - from.x)
-            .min(f32::abs(from_2nd.y - from.y))
-            .min(corner_radius);
+        let ends_turn_radius = max_radius;
+        let middle_turn_radius = max_radius.min(half_width);
 
-        let from_turn_x = from_2nd.x - from_turn_radius;
-        let from_turn_y = if from.y < from_2nd.y {
-            from.y + from_turn_radius
+        let ends_turn_vert_len = if from.y < to.y {
+            ends_turn_radius
         } else {
-            from.y - from_turn_radius
+            -ends_turn_radius
         };
 
-        let from_turn = pos2(from_turn_x, from_turn_y);
-
-        let from_2nd_turn_radius = f32::abs(mid.x - from_2nd.x)
-            .min(f32::abs(mid.y - from_2nd.y))
-            .min(corner_radius);
-
-        let from_2nd_turn_x = from_2nd.x - from_2nd_turn_radius;
-        let from_2nd_turn_y = if from_2nd.y < mid.y {
-            mid.y - from_2nd_turn_radius
+        let middle_turn_vert_len = if from.y < to.y {
+            middle_turn_radius
         } else {
-            mid.y + from_2nd_turn_radius
+            -middle_turn_radius
         };
 
-        let from_2nd_turn = pos2(from_2nd_turn_x, from_2nd_turn_y);
+        let segments = [
+            (from, pos2(right - ends_turn_radius, from.y)),
+            (
+                pos2(right, from.y + ends_turn_vert_len),
+                pos2(right, mid - middle_turn_vert_len),
+            ),
+            (
+                pos2(right - middle_turn_radius, mid),
+                pos2(left + middle_turn_radius, mid),
+            ),
+            (
+                pos2(left, mid + middle_turn_vert_len),
+                pos2(left, to.y - ends_turn_vert_len),
+            ),
+            (pos2(left + ends_turn_radius, to.y), to),
+        ];
 
-        let to_turn_radius = f32::abs(to_2nd.x - to.x)
-            .min(f32::abs(to_2nd.y - to.y))
-            .min(corner_radius);
+        let turn_centers = [
+            pos2(right - ends_turn_radius, from.y + ends_turn_vert_len),
+            pos2(right - middle_turn_radius, mid - middle_turn_vert_len),
+            pos2(left + middle_turn_radius, mid + middle_turn_vert_len),
+            pos2(left + ends_turn_radius, to.y - ends_turn_vert_len),
+        ];
 
-        let to_turn_x = to_2nd.x + to_turn_radius;
-        let to_turn_y = if to.y < to_2nd.y {
-            to.y + to_turn_radius
-        } else {
-            to.y - to_turn_radius
-        };
-
-        let to_turn = pos2(to_turn_x, to_turn_y);
-
-        let to_2nd_turn_radius = f32::abs(mid.x - to_2nd.x)
-            .min(f32::abs(mid.y - to_2nd.y))
-            .min(corner_radius);
-
-        let to_2nd_turn_x = to_2nd.x + to_2nd_turn_radius;
-        let to_2nd_turn_y = if to_2nd.y < mid.y {
-            mid.y - to_2nd_turn_radius
-        } else {
-            mid.y + to_2nd_turn_radius
-        };
-
-        let to_2nd_turn = pos2(to_2nd_turn_x, to_2nd_turn_y);
+        let turn_radii = [
+            ends_turn_radius,
+            middle_turn_radius,
+            middle_turn_radius,
+            ends_turn_radius,
+        ];
 
         AxisAlignedWire {
-            points: [from, from_2nd, mid, to_2nd, to],
-            turns: [
-                (from_turn, from_turn_radius),
-                (from_2nd_turn, from_2nd_turn_radius),
-                (to_2nd_turn, to_2nd_turn_radius),
-                (to_turn, to_turn_radius),
-            ],
+            aabb: Rect::from_min_max(
+                pos2(f32::min(left, from.x), f32::min(from.y, to.y)),
+                pos2(f32::max(right, to.x), f32::max(from.y, to.y)),
+            ),
+            turns: 4,
+            segments,
+            turn_centers,
+            turn_radii,
         }
     }
 }
@@ -655,45 +683,43 @@ fn hit_axis_aligned(
 ) -> bool {
     let wire = wire_axis_aligned(corner_radius, frame_size, from, to);
 
-    let aabb = Rect::from_points(&wire.points);
-    let aabb_e = aabb.expand(threshold);
-    if !aabb_e.contains(pos) {
+    // Check AABB first
+    if !wire.aabb.expand(threshold).contains(pos) {
         return false;
     }
 
     // Check all straight segments first
-    for i in 0..5 {
-        let start = if i == 0 {
-            wire.points[0]
-        } else if i % 2 == 0 {
-            pos2(wire.turns[i - 1].0.x, wire.points[i].y)
-        } else {
-            pos2(wire.points[i].x, wire.turns[i - 1].0.y)
-        };
+    // Number of segments is number of turns + 1
+    for i in 0..wire.turns + 1 {
+        let (start, end) = wire.segments[i];
 
-        let end = if i == 4 {
-            wire.points[4]
-        } else if i % 2 == 0 {
-            pos2(wire.turns[i].0.x, wire.points[i].y)
-        } else {
-            pos2(wire.points[i].x, wire.turns[i].0.y)
-        };
-
-        let aabb = Rect::from_two_pos(start, end);
-        let aabb_e = aabb.expand(threshold);
-        if aabb_e.contains(pos) {
+        // Segments are always axis aligned
+        // So we can use AABB for checking
+        if Rect::from_two_pos(start, end)
+            .expand(threshold)
+            .contains(pos)
+        {
             return true;
         }
     }
 
     // Check all turns
-    for i in 0..4 {
-        let (turn, radius) = wire.turns[i];
-        if radius <= 0.0 {
-            continue;
-        }
-        if f32::abs((turn - pos).length() - radius) <= threshold {
-            return true;
+    for i in 0..wire.turns {
+        if wire.turn_radii[i] > 0.0 {
+            let turn = wire.turn_centers[i];
+            let turn_aabb = Rect::from_two_pos(wire.segments[i].1, wire.segments[i + 1].0);
+            if !turn_aabb.contains(pos) {
+                continue;
+            }
+
+            // Avoid sqrt
+            let dist2 = (turn - pos).length_sq();
+            let min = wire.turn_radii[i] - threshold;
+            let max = wire.turn_radii[i] + threshold;
+
+            if dist2 <= max * max && dist2 >= min * min {
+                return true;
+            }
         }
     }
 
@@ -727,38 +753,51 @@ fn draw_axis_aligned(
 
     let mut path = Vec::new();
 
-    path.push(wire.points[0]);
+    for i in 0..wire.turns {
+        // shapes.push(Shape::line_segment(
+        //     [wire.segments[i].0, wire.segments[i].1],
+        //     stroke,
+        // ));
 
-    for i in 0..4 {
-        let (turn, radius) = wire.turns[i];
-        if radius <= 0.0 {
-            path.push(wire.points[i + 1]);
-            continue;
-        }
+        // Draw segment first
+        path.push(wire.segments[i].0);
+        path.push(wire.segments[i].1);
 
-        let samples = turn_samples_number(radius, stroke.width);
+        if wire.turn_radii[i] > 0.0 {
+            let turn = wire.turn_centers[i];
+            let samples = turn_samples_number(wire.turn_radii[i], stroke.width);
 
-        for j in 1..samples {
-            #[allow(clippy::cast_precision_loss)]
-            let a = std::f32::consts::FRAC_PI_2 * (j as f32 / samples as f32);
+            let start = wire.segments[i].1;
+            let end = wire.segments[i + 1].0;
 
-            let (sin_a, cos_a) = a.sin_cos();
+            let sin_x = end.x - turn.x;
+            let cos_x = start.x - turn.x;
 
-            if i % 2 == 0 {
-                path.push(pos2(
-                    turn.x.mul_add(1.0 - sin_a, wire.points[i + 1].x * sin_a),
-                    wire.points[i].y.mul_add(cos_a, turn.y * (1.0 - cos_a)),
-                ));
-            } else {
-                path.push(pos2(
-                    wire.points[i].x.mul_add(cos_a, turn.x * (1.0 - cos_a)),
-                    turn.y.mul_add(1.0 - sin_a, wire.points[i + 1].y * sin_a),
-                ));
+            let sin_y = end.y - turn.y;
+            let cos_y = start.y - turn.y;
+
+            for j in 1..samples {
+                #[allow(clippy::cast_precision_loss)]
+                let a = std::f32::consts::FRAC_PI_2 * (j as f32 / samples as f32);
+
+                let (sin_a, cos_a) = a.sin_cos();
+
+                let point: Pos2 = pos2(
+                    turn.x + sin_x * sin_a + cos_x * cos_a,
+                    turn.y + sin_y * sin_a + cos_y * cos_a,
+                );
+                path.push(point);
             }
         }
-
-        path.push(wire.points[i + 1]);
     }
+
+    // shapes.push(Shape::line_segment(
+    //     [wire.segments[wire.turns].0, wire.segments[wire.turns].1],
+    //     stroke,
+    // ));
+
+    path.push(wire.segments[wire.turns].0);
+    path.push(wire.segments[wire.turns].1);
 
     let shape = Shape::Path(PathShape {
         points: path,

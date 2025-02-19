@@ -62,16 +62,17 @@ impl NodeState {
     /// Finds node rect at specific position (excluding node frame margin).
     pub fn node_rect(&self, pos: Pos2, openness: f32) -> Rect {
         Rect::from_min_size(
-            pos,
+            pos.round(),
             egui::vec2(
                 self.size.x,
                 f32::max(self.header_height, self.size.y * openness),
-            ),
+            )
+            .round(),
         )
     }
 
     pub fn payload_offset(&self, openness: f32) -> f32 {
-        (self.size.y) * (1.0 - openness)
+        ((self.size.y) * (1.0 - openness)).round()
     }
 
     pub fn set_size(&mut self, size: Vec2) {
@@ -81,8 +82,8 @@ impl NodeState {
         }
     }
 
-    pub const fn header_height(&self) -> f32 {
-        self.header_height
+    pub fn header_height(&self) -> f32 {
+        self.header_height.round()
     }
 
     pub fn set_header_height(&mut self, height: f32) {
@@ -248,10 +249,18 @@ impl SnarlState {
         style: &SnarlStyle,
     ) -> Self {
         let Some(mut data) = SnarlStateData::load(cx, id) else {
+            cx.request_discard("Initial placing");
             return Self::initial(id, viewport, snarl, style);
         };
 
-        let new_scale = cx.animate_value_with_time(id.with("zoom-scale"), data.target_scale, 0.1);
+        let animate_zoom = style.animate_zoom.unwrap_or(0.0);
+
+        let new_scale = match animate_zoom {
+            ..=0.0 => data.target_scale,
+            duration => {
+                cx.animate_value_with_time(id.with("zoom-scale"), data.target_scale, duration)
+            }
+        };
 
         #[allow(clippy::float_cmp)]
         let mut dirty = if new_scale == data.scale {
@@ -261,6 +270,8 @@ impl SnarlState {
 
             data.offset += a * new_scale / data.scale - a;
             data.scale = new_scale;
+
+            cx.request_discard("Zooming");
             true
         };
 
@@ -290,15 +301,15 @@ impl SnarlState {
         let mut offset = Vec2::ZERO;
         let mut scale = 1.0f32.clamp(style.get_min_scale(), style.get_max_scale());
 
-        if bb.is_positive() {
+        if bb.is_finite() {
             bb = bb.expand(100.0);
 
             let bb_size = bb.size();
             let viewport_size = viewport.size();
 
-            scale = (viewport_size.x / bb_size.x)
+            scale = (viewport_size.x / bb_size.x.min(1.0))
                 .min(1.0)
-                .min(viewport_size.y / bb_size.y)
+                .min(viewport_size.y / bb_size.y.min(1.0))
                 .min(style.get_max_scale())
                 .max(style.get_min_scale());
 
@@ -338,36 +349,50 @@ impl SnarlState {
         }
     }
 
+    pub fn set_offset(&mut self, offset: Vec2) {
+        if self.offset != offset {
+            self.offset = offset;
+            self.dirty = true;
+        }
+    }
+
     #[inline(always)]
     pub fn pan(&mut self, delta: Vec2) {
-        self.offset += delta;
-        self.dirty = true;
+        if delta != Vec2::ZERO {
+            self.offset += delta;
+            self.dirty = true;
+        }
     }
 
     #[inline(always)]
-    pub const fn scale(&self) -> f32 {
-        self.scale
+    pub fn scale(&self) -> f32 {
+        (self.scale * 100.0).round() / 100.0
     }
 
     #[inline(always)]
-    pub const fn offset(&self) -> Vec2 {
-        self.offset
+    pub fn offset(&self) -> Vec2 {
+        self.offset.round()
     }
 
-    #[inline(always)]
-    pub fn set_scale(&mut self, scale: f32) {
-        self.target_scale = scale;
+    #[inline(never)]
+    pub fn zoom_delta(&mut self, zoom_delta: f32, min: f32, max: f32) {
+        if zoom_delta == 1.0 {
+            return;
+        }
+
+        self.target_scale = (self.target_scale * zoom_delta).clamp(min, max);
+        self.target_scale = (self.target_scale * 100.0).round() / 100.0;
         self.dirty = true;
     }
 
     #[inline(always)]
     pub fn screen_pos_to_graph(&self, pos: Pos2, viewport: Rect) -> Pos2 {
-        (pos + self.offset - viewport.center().to_vec2()) / self.scale
+        (pos + self.offset() - viewport.center().to_vec2()) / self.scale()
     }
 
     #[inline(always)]
     pub fn graph_pos_to_screen(&self, pos: Pos2, viewport: Rect) -> Pos2 {
-        pos * self.scale - self.offset + viewport.center().to_vec2()
+        pos * self.scale() - self.offset() + viewport.center().to_vec2()
     }
 
     #[inline(always)]
@@ -393,7 +418,7 @@ impl SnarlState {
 
     #[inline(always)]
     pub fn screen_vec_to_graph(&self, size: Vec2) -> Vec2 {
-        size / self.scale
+        size / self.scale()
     }
 
     // #[inline(always)]
@@ -521,11 +546,6 @@ impl SnarlState {
             self.draw_order.remove(order);
             self.draw_order.push(node);
         }
-        self.dirty = true;
-    }
-
-    pub fn set_offset(&mut self, offset: Vec2) {
-        self.offset = offset;
         self.dirty = true;
     }
 

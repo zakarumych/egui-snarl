@@ -20,6 +20,39 @@ pub enum AnyPins<'a> {
     In(&'a [InPinId]),
 }
 
+/// Contains information about a pin's wire.
+/// Used to draw the wire.
+/// When two pins are connected, the wire is drawn between them,
+/// using merged `PinWireInfo` from both pins.
+pub struct PinWireInfo {
+    /// Desired color of the wire.
+    pub color: Color32,
+
+    /// Desired style of the wire.
+    /// Zoomed with current scale.
+    pub style: WireStyle,
+}
+
+/// Uses `Painter` to draw a pin.
+pub trait SnarlPin {
+    /// Draws the pin.
+    ///
+    /// `rect` is the interaction rectangle of the pin.
+    /// Pin should fit in it.
+    /// `painter` is used to add pin's shapes to the UI.
+    ///
+    /// Returns the color
+    #[must_use]
+    fn draw(
+        self,
+        scale: f32,
+        snarl_style: &SnarlStyle,
+        style: &Style,
+        rect: Rect,
+        painter: &Painter,
+    ) -> PinWireInfo;
+}
+
 /// Shape of a pin.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -48,14 +81,15 @@ pub struct PinInfo {
     /// Shape of the pin.
     pub shape: Option<PinShape>,
 
-    /// Size of the pin.
-    pub size: Option<f32>,
-
     /// Fill color of the pin.
     pub fill: Option<Color32>,
 
     /// Outline stroke of the pin.
     pub stroke: Option<Stroke>,
+
+    /// Color of the wire connected to the pin.
+    /// If `None`, the pin's fill color is used.
+    pub wire_color: Option<Color32>,
 
     /// Style of the wire connected to the pin.
     pub wire_style: Option<WireStyle>,
@@ -73,13 +107,6 @@ impl PinInfo {
     #[must_use]
     pub const fn with_shape(mut self, shape: PinShape) -> Self {
         self.shape = Some(shape);
-        self
-    }
-
-    /// Sets the size of the pin.
-    #[must_use]
-    pub const fn with_size(mut self, size: f32) -> Self {
-        self.size = Some(size);
         self
     }
 
@@ -101,6 +128,13 @@ impl PinInfo {
     #[must_use]
     pub const fn with_wire_style(mut self, wire_style: WireStyle) -> Self {
         self.wire_style = Some(wire_style);
+        self
+    }
+
+    /// Sets the color of the wire connected to the pin.
+    #[must_use]
+    pub const fn with_wire_color(mut self, wire_color: Color32) -> Self {
+        self.wire_color = Some(wire_color);
         self
     }
 
@@ -166,41 +200,54 @@ impl PinInfo {
     #[must_use]
     pub fn draw(
         &self,
-        pos: Pos2,
-        size: f32,
+        scale: f32,
         snarl_style: &SnarlStyle,
         style: &Style,
+        rect: Rect,
         painter: &Painter,
-        scale: f32,
-    ) -> Color32 {
+    ) -> PinWireInfo {
         let shape = self.get_shape(snarl_style);
         let fill = self.get_fill(snarl_style, style);
         let stroke = self.get_stroke(snarl_style, style, scale);
-        let size = self.size.zoomed(scale).unwrap_or(size);
-        draw_pin(painter, shape, fill, stroke, pos, size);
+        draw_pin(painter, shape, fill, stroke, rect);
 
-        fill
+        PinWireInfo {
+            color: self.wire_color.unwrap_or(fill),
+            style: self
+                .wire_style
+                .zoomed(scale)
+                .unwrap_or(snarl_style.get_wire_style(scale)),
+        }
     }
 }
 
-pub fn draw_pin(
-    painter: &Painter,
-    shape: PinShape,
-    fill: Color32,
-    stroke: Stroke,
-    pos: Pos2,
-    size: f32,
-) {
+impl SnarlPin for PinInfo {
+    fn draw(
+        self,
+        scale: f32,
+        snarl_style: &SnarlStyle,
+        style: &Style,
+        rect: Rect,
+        painter: &Painter,
+    ) -> PinWireInfo {
+        Self::draw(&self, scale, snarl_style, style, rect, painter)
+    }
+}
+
+pub fn draw_pin(painter: &Painter, shape: PinShape, fill: Color32, stroke: Stroke, rect: Rect) {
+    let center = rect.center();
+    let size = f32::min(rect.width(), rect.height());
+
     match shape {
         PinShape::Circle => {
-            painter.circle(pos, size * 2.0 / std::f32::consts::PI, fill, stroke);
+            painter.circle(center, size / 2.0, fill, stroke);
         }
         PinShape::Triangle => {
             const A: Vec2 = vec2(-0.649_519, 0.4875);
             const B: Vec2 = vec2(0.649_519, 0.4875);
             const C: Vec2 = vec2(0.0, -0.6375);
 
-            let points = vec![pos + A * size, pos + B * size, pos + C * size];
+            let points = vec![center + A * size, center + B * size, center + C * size];
 
             painter.add(Shape::Path(PathShape {
                 points,
@@ -211,10 +258,10 @@ pub fn draw_pin(
         }
         PinShape::Square => {
             let points = vec![
-                pos + vec2(-0.5, -0.5) * size,
-                pos + vec2(0.5, -0.5) * size,
-                pos + vec2(0.5, 0.5) * size,
-                pos + vec2(-0.5, 0.5) * size,
+                center + vec2(-0.5, -0.5) * size,
+                center + vec2(0.5, -0.5) * size,
+                center + vec2(0.5, 0.5) * size,
+                center + vec2(-0.5, 0.5) * size,
             ];
 
             painter.add(Shape::Path(PathShape {
@@ -227,16 +274,16 @@ pub fn draw_pin(
 
         PinShape::Star => {
             let points = vec![
-                pos + size * 0.700_000 * vec2(0.0, -1.0),
-                pos + size * 0.267_376 * vec2(-0.587_785, -0.809_017),
-                pos + size * 0.700_000 * vec2(-0.951_057, -0.309_017),
-                pos + size * 0.267_376 * vec2(-0.951_057, 0.309_017),
-                pos + size * 0.700_000 * vec2(-0.587_785, 0.809_017),
-                pos + size * 0.267_376 * vec2(0.0, 1.0),
-                pos + size * 0.700_000 * vec2(0.587_785, 0.809_017),
-                pos + size * 0.267_376 * vec2(0.951_057, 0.309_017),
-                pos + size * 0.700_000 * vec2(0.951_057, -0.309_017),
-                pos + size * 0.267_376 * vec2(0.587_785, -0.809_017),
+                center + size * 0.700_000 * vec2(0.0, -1.0),
+                center + size * 0.267_376 * vec2(-0.587_785, -0.809_017),
+                center + size * 0.700_000 * vec2(-0.951_057, -0.309_017),
+                center + size * 0.267_376 * vec2(-0.951_057, 0.309_017),
+                center + size * 0.700_000 * vec2(-0.587_785, 0.809_017),
+                center + size * 0.267_376 * vec2(0.0, 1.0),
+                center + size * 0.700_000 * vec2(0.587_785, 0.809_017),
+                center + size * 0.267_376 * vec2(0.951_057, 0.309_017),
+                center + size * 0.700_000 * vec2(0.951_057, -0.309_017),
+                center + size * 0.267_376 * vec2(0.587_785, -0.809_017),
             ];
 
             painter.add(Shape::Path(PathShape {

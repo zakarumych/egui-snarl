@@ -3,9 +3,9 @@
 use std::{collections::HashMap, hash::Hash};
 
 use egui::{
-    collapsing_header::paint_default_icon, epaint::Shadow, pos2, vec2, Align, Color32, Frame, Id,
-    Layout, Margin, Modifiers, PointerButton, Pos2, Rect, Rounding, Sense, Shape, Stroke, Style,
-    Ui, UiBuilder, Vec2,
+    collapsing_header::paint_default_icon, epaint::Shadow, pos2, response::Flags, vec2, Align,
+    Color32, CornerRadius, Frame, Id, Layout, Margin, Modifiers, PointerButton, Pos2, Rect, Sense,
+    Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, Vec2,
 };
 
 use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl};
@@ -26,12 +26,12 @@ use self::{
 
 pub use self::{
     background_pattern::{BackgroundPattern, Grid, Viewport},
-    pin::{AnyPins, PinInfo, PinShape},
+    pin::{AnyPins, PinInfo, PinShape, PinWireInfo, SnarlPin},
     viewer::SnarlViewer,
     wire::{WireLayer, WireStyle},
 };
 
-/// Controls how header, pins, body and footer are laid out in the node.
+/// Controls how header, pins, body and footer are placed in the node.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
@@ -42,7 +42,10 @@ pub enum NodeLayout {
     /// +---------------------+
     /// |       Header        |
     /// +----+-----------+----+
+    /// | In |           | Out|
     /// | In |   Body    | Out|
+    /// | In |           | Out|
+    /// | In |           |    |
     /// +----+-----------+----+
     /// |       Footer        |
     /// +---------------------+
@@ -57,9 +60,14 @@ pub enum NodeLayout {
     /// |       Header        |
     /// +---------------------+
     /// | In                  |
+    /// | In                  |
+    /// | In                  |
+    /// | In                  |
     /// +---------------------+
     /// |       Body          |
     /// +---------------------+
+    /// |                 Out |
+    /// |                 Out |
     /// |                 Out |
     /// +---------------------+
     /// |       Footer        |
@@ -73,14 +81,20 @@ pub enum NodeLayout {
     /// |       Header        |
     /// +---------------------+
     /// |                 Out |
+    /// |                 Out |
+    /// |                 Out |
     /// +---------------------+
     /// |       Body          |
     /// +---------------------+
+    /// | In                  |
+    /// | In                  |
+    /// | In                  |
     /// | In                  |
     /// +---------------------+
     /// |       Footer        |
     /// +---------------------+
     FlippedSandwich,
+    // TODO: Add vertical layouts.
 }
 
 /// Controls style of node selection rect.
@@ -92,7 +106,7 @@ pub struct SelectionStyle {
     pub margin: Margin,
 
     /// Rounding of selection rect.
-    pub rounding: Rounding,
+    pub rounding: CornerRadius,
 
     /// Fill color of selection rect.
     pub fill: Color32,
@@ -300,14 +314,6 @@ pub struct SnarlStyle {
     )]
     pub max_scale: Option<f32>,
 
-    /// Velocity of viewport scale when scaling with mouse wheel.
-    #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
-    #[cfg_attr(
-        feature = "serde",
-        serde(skip_serializing_if = "Option::is_none", default)
-    )]
-    pub scale_velocity: Option<f32>,
-
     /// Enable centering by double click on background
     #[cfg_attr(
         feature = "serde",
@@ -340,6 +346,15 @@ pub struct SnarlStyle {
         serde(skip_serializing_if = "Option::is_none", default)
     )]
     pub select_style: Option<SelectionStyle>,
+
+    /// Controls if zooming should be animated.
+    /// If set to positive value, zooming will be animated with given duration in seconds.
+    /// If zero or negative, zooming will be instant.
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    pub animate_zoom: Option<f32>,
 
     #[doc(hidden)]
     #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
@@ -437,10 +452,6 @@ impl SnarlStyle {
         self.max_scale.unwrap_or(5.0)
     }
 
-    fn get_scale_velocity(&self) -> f32 {
-        self.scale_velocity.unwrap_or(1.0)
-    }
-
     fn get_node_frame(&self, scale: f32, style: &Style) -> Frame {
         self.node_frame
             .zoomed(scale)
@@ -480,7 +491,7 @@ impl SnarlStyle {
             .zoomed(scale)
             .unwrap_or_else(|| SelectionStyle {
                 margin: style.spacing.window_margin,
-                rounding: style.visuals.window_rounding,
+                rounding: style.visuals.window_corner_radius,
                 fill: self.get_select_fill(style),
                 stroke: self.get_select_stroke(scale, style),
             })
@@ -495,7 +506,7 @@ mod serde_frame_option {
     pub struct Frame {
         pub inner_margin: egui::Margin,
         pub outer_margin: egui::Margin,
-        pub rounding: egui::Rounding,
+        pub rounding: egui::CornerRadius,
         pub shadow: egui::epaint::Shadow,
         pub fill: egui::Color32,
         pub stroke: egui::Stroke,
@@ -510,7 +521,7 @@ mod serde_frame_option {
             Some(frame) => Frame {
                 inner_margin: frame.inner_margin,
                 outer_margin: frame.outer_margin,
-                rounding: frame.rounding,
+                rounding: frame.corner_radius,
                 shadow: frame.shadow,
                 fill: frame.fill,
                 stroke: frame.stroke,
@@ -528,7 +539,7 @@ mod serde_frame_option {
         Ok(frame_opt.map(|frame| egui::Frame {
             inner_margin: frame.inner_margin,
             outer_margin: frame.outer_margin,
-            rounding: frame.rounding,
+            corner_radius: frame.rounding,
             shadow: frame.shadow,
             fill: frame.fill,
             stroke: frame.stroke,
@@ -562,7 +573,6 @@ impl SnarlStyle {
 
             min_scale: None,
             max_scale: None,
-            scale_velocity: None,
             node_frame: None,
             header_frame: None,
             centering: None,
@@ -570,6 +580,7 @@ impl SnarlStyle {
             select_fill: None,
             select_rect_contained: None,
             select_style: None,
+            animate_zoom: None,
 
             _non_exhaustive: (),
         }
@@ -612,9 +623,8 @@ struct DrawBodyResponse {
 
 struct PinResponse {
     pos: Pos2,
-    // pin_color: Color32,
-    wire_style: Option<WireStyle>,
     wire_color: Color32,
+    wire_style: WireStyle,
 }
 
 impl<T> Snarl<T> {
@@ -671,7 +681,7 @@ impl<T> Snarl<T> {
 
             let mut bg_r = ui.allocate_rect(ui.max_rect(), Sense::click_and_drag());
             let viewport = bg_r.rect;
-            ui.set_clip_rect(viewport);
+            ui.set_clip_rect(rect_round(viewport));
 
             let pivot = input.hover_pos.unwrap_or_else(|| viewport.center());
 
@@ -700,11 +710,11 @@ impl<T> Snarl<T> {
                     if viewport.contains(hover_pos) && ui.rect_contains_pointer(viewport) =>
                 {
                     if input.zoom_delta != 1.0 {
-                        let new_scale = (snarl_state.scale()
-                            * input.zoom_delta.powf(style.get_scale_velocity()))
-                        .clamp(style.get_min_scale(), style.get_max_scale());
-
-                        snarl_state.set_scale(new_scale);
+                        snarl_state.zoom_delta(
+                            input.zoom_delta,
+                            style.get_min_scale(),
+                            style.get_max_scale(),
+                        );
                     }
                 }
                 _ => {}
@@ -776,7 +786,7 @@ impl<T> Snarl<T> {
 
                 if !wire_hit && !snarl_state.has_new_wires() && bg_r.hovered() && !bg_r.dragged() {
                     // Try to find hovered wire
-                    // If not draggin new wire
+                    // If not dragging new wire
                     // And not hovering over item above.
 
                     if let Some(interact_pos) = input.interact_pos {
@@ -788,12 +798,7 @@ impl<T> Snarl<T> {
                             from_r.pos,
                             to_r.pos,
                             wire_width.max(1.5),
-                            pick_wire_style(
-                                style.get_wire_style(snarl_state.scale()),
-                                from_r.wire_style,
-                                to_r.wire_style,
-                            )
-                            .zoomed(snarl_state.scale()),
+                            pick_wire_style(from_r.wire_style, to_r.wire_style),
                         );
 
                         if wire_hit {
@@ -803,8 +808,8 @@ impl<T> Snarl<T> {
                             hovered_wire_disconnect |= bg_r.clicked_by(PointerButton::Secondary);
 
                             // Background is not hovered then.
-                            bg_r.hovered = false;
-                            bg_r.clicked = false;
+                            bg_r.flags.remove(Flags::HOVERED);
+                            bg_r.flags.remove(Flags::CLICKED);
                         }
                     }
                 }
@@ -825,11 +830,7 @@ impl<T> Snarl<T> {
                     from_r.pos,
                     to_r.pos,
                     Stroke::new(draw_width, color),
-                    pick_wire_style(
-                        style.get_wire_style(snarl_state.scale()),
-                        from_r.wire_style.zoomed(snarl_state.scale()),
-                        to_r.wire_style.zoomed(snarl_state.scale()),
-                    ),
+                    pick_wire_style(from_r.wire_style, to_r.wire_style),
                 );
             }
 
@@ -890,6 +891,7 @@ impl<T> Snarl<T> {
                     0.0,
                     style.get_select_fill(ui.style()),
                     style.get_select_stroke(snarl_state.scale(), ui.style()),
+                    StrokeKind::Inside,
                 );
             }
 
@@ -903,7 +905,7 @@ impl<T> Snarl<T> {
                 && ui.input(|x| x.pointer.button_down(PointerButton::Secondary))
             {
                 let _ = snarl_state.take_wires();
-                bg_r.clicked = false;
+                bg_r.flags.remove(Flags::CLICKED);
             }
 
             // Do centering unless no nodes are present.
@@ -952,7 +954,7 @@ impl<T> Snarl<T> {
                         snarl_state.revert_take_wires(new_wires);
 
                         // Force open context menu.
-                        bg_r.long_touched = true;
+                        bg_r.flags.insert(Flags::LONG_TOUCHED);
                     }
                     _ => {}
                 }
@@ -1034,9 +1036,7 @@ impl<T> Snarl<T> {
                             from_pos,
                             to_r.pos,
                             Stroke::new(wire_width, to_r.wire_color),
-                            to_r.wire_style
-                                .zoomed(snarl_state.scale())
-                                .unwrap_or_else(|| style.get_wire_style(snarl_state.scale())),
+                            to_r.wire_style.zoomed(snarl_state.scale()),
                         );
                     }
                 }
@@ -1054,10 +1054,7 @@ impl<T> Snarl<T> {
                             from_r.pos,
                             to_pos,
                             Stroke::new(wire_width, from_r.wire_color),
-                            from_r
-                                .wire_style
-                                .zoomed(snarl_state.scale())
-                                .unwrap_or_else(|| style.get_wire_style(snarl_state.scale())),
+                            from_r.wire_style.zoomed(snarl_state.scale()),
                         );
                     }
                 }
@@ -1128,12 +1125,12 @@ impl<T> Snarl<T> {
         // Input pins on the left.
         let inputs_ui = &mut ui.new_child(
             UiBuilder::new()
-                .max_rect(inputs_rect)
+                .max_rect(rect_round(inputs_rect))
                 .layout(Layout::top_down(Align::Min))
                 .id_salt("inputs"),
         );
 
-        inputs_ui.set_clip_rect(clip_rect.intersect(viewport));
+        inputs_ui.set_clip_rect(rect_round(clip_rect.intersect(viewport)));
 
         for in_pin in inputs {
             // Show input pin.
@@ -1145,7 +1142,7 @@ impl<T> Snarl<T> {
                 let y0 = ui.cursor().min.y;
 
                 // Show input content
-                let pin_info = viewer.show_input(in_pin, ui, snarl_state.scale(), self);
+                let snarl_pin = viewer.show_input(in_pin, ui, snarl_state.scale(), self);
                 if !self.nodes.contains(node.0) {
                     // If removed
                     return;
@@ -1161,7 +1158,7 @@ impl<T> Snarl<T> {
                 let pin_pos = pos2(input_x, y);
 
                 // Interact with pin shape.
-                ui.set_clip_rect(viewport);
+                ui.set_clip_rect(rect_round(viewport));
 
                 let r = ui.interact(
                     Rect::from_center_size(pin_pos, vec2(pin_size, pin_size)),
@@ -1200,7 +1197,7 @@ impl<T> Snarl<T> {
                     drag_released = true;
                 }
 
-                let mut visual_pin_size = pin_size;
+                let mut visual_pin_rect = r.rect;
 
                 match input.hover_pos {
                     Some(hover_pos) if r.rect.contains(hover_pos) => {
@@ -1210,33 +1207,28 @@ impl<T> Snarl<T> {
                             snarl_state.remove_new_wire_in(in_pin.id);
                         }
                         pin_hovered = Some(AnyPin::In(in_pin.id));
-                        visual_pin_size *= 1.2;
+                        visual_pin_rect = visual_pin_rect.scale_from_center(1.2);
                     }
                     _ => {}
                 }
 
                 let mut pin_painter = ui.painter().clone();
-                pin_painter.set_clip_rect(viewport);
+                pin_painter.set_clip_rect(rect_round(viewport));
 
-                let pin_color = viewer.draw_input_pin(
-                    in_pin,
-                    &pin_info,
-                    r.rect.center(),
-                    visual_pin_size,
+                let wire_info = snarl_pin.draw(
+                    snarl_state.scale(),
                     style,
                     ui.style(),
+                    visual_pin_rect,
                     &pin_painter,
-                    snarl_state.scale(),
-                    self,
                 );
 
                 input_positions.insert(
                     in_pin.id,
                     PinResponse {
                         pos: r.rect.center(),
-                        // pin_color,
-                        wire_style: pin_info.wire_style,
-                        wire_color: pin_info.wire_color.unwrap_or(pin_color),
+                        wire_color: wire_info.color,
+                        wire_style: wire_info.style,
                     },
                 );
             });
@@ -1279,12 +1271,12 @@ impl<T> Snarl<T> {
 
         let outputs_ui = &mut ui.new_child(
             UiBuilder::new()
-                .max_rect(outputs_rect)
+                .max_rect(rect_round(outputs_rect))
                 .layout(Layout::top_down(Align::Max))
                 .id_salt("outputs"),
         );
 
-        outputs_ui.set_clip_rect(clip_rect.intersect(viewport));
+        outputs_ui.set_clip_rect(rect_round(clip_rect.intersect(viewport)));
 
         // Output pins on the right.
         for out_pin in outputs {
@@ -1298,7 +1290,7 @@ impl<T> Snarl<T> {
                 let y0 = ui.cursor().min.y;
 
                 // Show output content
-                let pin_info = viewer.show_output(out_pin, ui, snarl_state.scale(), self);
+                let snarl_pin = viewer.show_output(out_pin, ui, snarl_state.scale(), self);
                 if !self.nodes.contains(node.0) {
                     // If removed
                     return;
@@ -1313,7 +1305,7 @@ impl<T> Snarl<T> {
 
                 let pin_pos = pos2(output_x, y);
 
-                ui.set_clip_rect(viewport);
+                ui.set_clip_rect(rect_round(viewport));
 
                 let r = ui.interact(
                     Rect::from_center_size(pin_pos, vec2(pin_size, pin_size)),
@@ -1353,7 +1345,7 @@ impl<T> Snarl<T> {
                     drag_released = true;
                 }
 
-                let mut visual_pin_size = pin_size;
+                let mut visual_pin_rect = r.rect;
                 match input.hover_pos {
                     Some(hover_pos) if r.rect.contains(hover_pos) => {
                         if input.modifiers.shift {
@@ -1362,33 +1354,28 @@ impl<T> Snarl<T> {
                             snarl_state.remove_new_wire_out(out_pin.id);
                         }
                         pin_hovered = Some(AnyPin::Out(out_pin.id));
-                        visual_pin_size *= 1.2;
+                        visual_pin_rect = visual_pin_rect.scale_from_center(1.2);
                     }
                     _ => {}
                 }
 
                 let mut pin_painter = ui.painter().clone();
-                pin_painter.set_clip_rect(viewport);
+                pin_painter.set_clip_rect(rect_round(viewport));
 
-                let pin_color = viewer.draw_output_pin(
-                    out_pin,
-                    &pin_info,
-                    r.rect.center(),
-                    visual_pin_size,
+                let wire_info = snarl_pin.draw(
+                    snarl_state.scale(),
                     style,
                     ui.style(),
+                    visual_pin_rect,
                     &pin_painter,
-                    snarl_state.scale(),
-                    self,
                 );
 
                 output_positions.insert(
                     out_pin.id,
                     PinResponse {
                         pos: r.rect.center(),
-                        // pin_color,
-                        wire_style: pin_info.wire_style,
-                        wire_color: pin_info.wire_color.unwrap_or(pin_color),
+                        wire_color: wire_info.color,
+                        wire_style: wire_info.style
                     },
                 );
             });
@@ -1421,11 +1408,11 @@ impl<T> Snarl<T> {
     {
         let mut body_ui = ui.new_child(
             UiBuilder::new()
-                .max_rect(body_rect)
+                .max_rect(rect_round(body_rect))
                 .layout(Layout::left_to_right(Align::Min))
                 .id_salt("body"),
         );
-        body_ui.set_clip_rect(clip_rect.intersect(viewport));
+        body_ui.set_clip_rect(rect_round(clip_rect.intersect(viewport)));
 
         viewer.show_body(
             node,
@@ -1483,7 +1470,7 @@ impl<T> Snarl<T> {
             .map(|idx| OutPin::new(self, OutPinId { node, output: idx }))
             .collect::<Vec<_>>();
 
-        let node_pos = snarl_state.graph_pos_to_screen(pos, viewport);
+        let node_pos = snarl_state.graph_pos_to_screen(pos, viewport).round();
 
         // Generate persistent id for the node.
         let node_id = snarl_id.with(("snarl-node", node));
@@ -1527,6 +1514,7 @@ impl<T> Snarl<T> {
                 select_style.rounding,
                 select_style.fill,
                 select_style.stroke,
+                StrokeKind::Inside,
             );
         }
 
@@ -1592,7 +1580,7 @@ impl<T> Snarl<T> {
 
         let node_ui = &mut ui.new_child(
             UiBuilder::new()
-                .max_rect(node_frame_rect)
+                .max_rect(rect_round(node_frame_rect))
                 .layout(Layout::top_down(Align::Center))
                 .id_salt(node_id),
         );
@@ -1608,9 +1596,10 @@ impl<T> Snarl<T> {
 
             // Input pins' center side by X axis.
             let input_x = match pin_placement {
-                PinPlacement::Inside => {
-                    pin_size.mul_add(0.5, node_frame_rect.left() + node_frame.inner_margin.left)
-                }
+                PinPlacement::Inside => pin_size.mul_add(
+                    0.5,
+                    node_frame_rect.left() + node_frame.inner_margin.left as f32,
+                ),
                 PinPlacement::Edge => node_frame_rect.left(),
                 PinPlacement::Outside { margin } => pin_size.mul_add(
                     -0.5,
@@ -1623,7 +1612,7 @@ impl<T> Snarl<T> {
                 PinPlacement::Inside => Some(pin_size),
                 PinPlacement::Edge => Some(
                     pin_size
-                        .mul_add(0.5, -node_frame.inner_margin.left)
+                        .mul_add(0.5, -node_frame.inner_margin.left as f32)
                         .max(0.0),
                 ),
                 PinPlacement::Outside { .. } => None,
@@ -1633,7 +1622,7 @@ impl<T> Snarl<T> {
             let output_x = match pin_placement {
                 PinPlacement::Inside => pin_size.mul_add(
                     -0.5,
-                    node_frame_rect.right() - node_frame.inner_margin.right,
+                    node_frame_rect.right() - node_frame.inner_margin.right as f32,
                 ),
                 PinPlacement::Edge => node_frame_rect.right(),
                 PinPlacement::Outside { margin } => pin_size.mul_add(
@@ -1647,7 +1636,7 @@ impl<T> Snarl<T> {
                 PinPlacement::Inside => Some(pin_size),
                 PinPlacement::Edge => Some(
                     pin_size
-                        .mul_add(0.5, -node_frame.inner_margin.right)
+                        .mul_add(0.5, -node_frame.inner_margin.right as f32)
                         .max(0.0),
                 ),
                 PinPlacement::Outside { .. } => None,
@@ -1756,14 +1745,15 @@ impl<T> Snarl<T> {
 
                     // Show body if there's one.
                     if viewer.has_body(&self.nodes.get(node.0).unwrap().value) {
-                        let body_left = inputs_rect.right() + ui.spacing().item_spacing.x;
-                        let body_right = outputs_rect.left() - ui.spacing().item_spacing.x;
-                        let body_top = payload_rect.top();
-                        let body_bottom = payload_rect.bottom();
-
                         let body_rect = Rect::from_min_max(
-                            pos2(body_left, body_top),
-                            pos2(body_right, body_bottom),
+                            pos2(
+                                inputs_rect.right() + ui.spacing().item_spacing.x,
+                                payload_rect.top(),
+                            ),
+                            pos2(
+                                outputs_rect.left() - ui.spacing().item_spacing.x,
+                                payload_rect.bottom(),
+                            ),
                         );
 
                         let r = self.draw_body(
@@ -1794,7 +1784,6 @@ impl<T> Snarl<T> {
                 NodeLayout::Sandwich => {
                     // Show input pins.
 
-                    let inputs_rect = payload_rect;
                     let r = self.draw_inputs(
                         viewer,
                         node,
@@ -1802,7 +1791,7 @@ impl<T> Snarl<T> {
                         pin_size,
                         style,
                         ui,
-                        inputs_rect,
+                        payload_rect,
                         payload_clip_rect,
                         viewport,
                         input_x,
@@ -2020,19 +2009,17 @@ impl<T> Snarl<T> {
             };
 
             if viewer.has_footer(&self.nodes[node.0].value) {
-                let footer_left = node_rect.left();
-                let footer_right = node_rect.right();
-                let footer_top = pins_rect.bottom() + ui.spacing().item_spacing.y;
-                let footer_bottom = node_rect.bottom();
-
                 let footer_rect = Rect::from_min_max(
-                    pos2(footer_left, footer_top),
-                    pos2(footer_right, footer_bottom),
+                    pos2(
+                        node_rect.left(),
+                        pins_rect.bottom() + ui.spacing().item_spacing.y,
+                    ),
+                    pos2(node_rect.right(), node_rect.bottom()),
                 );
 
                 let mut footer_ui = ui.new_child(
                     UiBuilder::new()
-                        .max_rect(footer_rect)
+                        .max_rect(rect_round(footer_rect))
                         .layout(Layout::left_to_right(Align::Min))
                         .id_salt("footer"),
                 );
@@ -2068,7 +2055,7 @@ impl<T> Snarl<T> {
             // Show node's header
             let header_ui: &mut Ui = &mut ui.new_child(
                 UiBuilder::new()
-                    .max_rect(node_rect + header_frame.total_margin())
+                    .max_rect(rect_round(node_rect + header_frame.total_margin()))
                     .layout(Layout::top_down(Align::Center))
                     .id_salt("header"),
             );
@@ -2228,4 +2215,9 @@ const fn mix_colors(a: Color32, b: Color32) -> Color32 {
 const fn snarl_style_is_send_sync() {
     const fn is_send_sync<T: Send + Sync>() {}
     is_send_sync::<SnarlStyle>();
+}
+
+fn rect_round(r: Rect) -> Rect {
+    // return r;
+    Rect::from_min_max(r.min.round(), r.max.round())
 }
