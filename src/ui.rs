@@ -1152,8 +1152,8 @@ impl<T> Snarl<T> {
 
                 // ui.end_row();
 
-                // Centered vertically.
-                let y = min_pin_y.max((y0 + y1) * 0.5);
+                // Centered vertically by default.
+                let y = pin_info.position.unwrap_or(min_pin_y.max((y0 + y1) * 0.5));
 
                 let pin_pos = pos2(input_x, y);
 
@@ -1300,8 +1300,8 @@ impl<T> Snarl<T> {
 
                 // ui.end_row();
 
-                // Centered vertically.
-                let y = min_pin_y.max((y0 + y1) * 0.5);
+                // Centered vertically by default.
+                let y = pin_info.position.unwrap_or(min_pin_y.max((y0 + y1) * 0.5));
 
                 let pin_pos = pos2(output_x, y);
 
@@ -1375,7 +1375,7 @@ impl<T> Snarl<T> {
                     PinResponse {
                         pos: r.rect.center(),
                         wire_color: wire_info.color,
-                        wire_style: wire_info.style,
+                        wire_style: wire_info.style
                     },
                 );
             });
