@@ -174,13 +174,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
 
     #[allow(clippy::too_many_lines)]
     #[allow(refining_impl_trait)]
-    fn show_input(
-        &mut self,
-        pin: &InPin,
-        ui: &mut Ui,
-        scale: f32,
-        snarl: &mut Snarl<DemoNode>,
-    ) -> PinInfo {
+    fn show_input(&mut self, pin: &InPin, ui: &mut Ui, snarl: &mut Snarl<DemoNode>) -> PinInfo {
         match snarl[pin.id.node] {
             DemoNode::Sink => {
                 assert_eq!(pin.id.input, 0, "Sink node has only one input");
@@ -215,9 +209,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         DemoNode::ShowImage(ref uri) => {
                             assert_eq!(remote.output, 0, "ShowImage node has only one output");
 
-                            let image = egui::Image::new(uri)
-                                .fit_to_original_size(scale)
-                                .show_loading_spinner(true);
+                            let image = egui::Image::new(uri).show_loading_spinner(true);
                             ui.add(image);
 
                             PinInfo::circle().with_fill(IMAGE_COLOR)
@@ -390,13 +382,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     }
 
     #[allow(refining_impl_trait)]
-    fn show_output(
-        &mut self,
-        pin: &OutPin,
-        ui: &mut Ui,
-        _scale: f32,
-        snarl: &mut Snarl<DemoNode>,
-    ) -> PinInfo {
+    fn show_output(&mut self, pin: &OutPin, ui: &mut Ui, snarl: &mut Snarl<DemoNode>) -> PinInfo {
         match snarl[pin.id.node] {
             DemoNode::Sink => {
                 unreachable!("Sink node has no outputs")
@@ -437,13 +423,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         true
     }
 
-    fn show_graph_menu(
-        &mut self,
-        pos: egui::Pos2,
-        ui: &mut Ui,
-        _scale: f32,
-        snarl: &mut Snarl<DemoNode>,
-    ) {
+    fn show_graph_menu(&mut self, pos: egui::Pos2, ui: &mut Ui, snarl: &mut Snarl<DemoNode>) {
         ui.label("Add node");
         if ui.button("Number").clicked() {
             snarl.insert_node(pos, DemoNode::Number(0.0));
@@ -475,7 +455,6 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         &mut self,
         pos: egui::Pos2,
         ui: &mut Ui,
-        _scale: f32,
         src_pins: AnyPins,
         snarl: &mut Snarl<DemoNode>,
     ) {
@@ -603,7 +582,6 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         _inputs: &[InPin],
         _outputs: &[OutPin],
         ui: &mut Ui,
-        _scale: f32,
         snarl: &mut Snarl<DemoNode>,
     ) {
         ui.label("Node menu");
@@ -623,7 +601,6 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         _inputs: &[InPin],
         _outputs: &[OutPin],
         ui: &mut Ui,
-        _scale: f32,
         snarl: &mut Snarl<DemoNode>,
     ) {
         match snarl[node] {

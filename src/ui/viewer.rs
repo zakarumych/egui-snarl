@@ -4,7 +4,7 @@ use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
 use super::{
     pin::{AnyPins, SnarlPin},
-    BackgroundPattern, NodeLayout, SnarlStyle, Viewport,
+    BackgroundPattern, NodeLayout, SnarlStyle,
 };
 
 /// `SnarlViewer` is a trait for viewing a Snarl.
@@ -113,10 +113,9 @@ pub trait SnarlViewer<T> {
         inputs: &[InPin],
         outputs: &[OutPin],
         ui: &mut Ui,
-        scale: f32,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (inputs, outputs, scale);
+        let _ = (inputs, outputs);
         ui.label(self.title(&snarl[node]));
     }
 
@@ -130,7 +129,6 @@ pub trait SnarlViewer<T> {
         &mut self,
         pin: &InPin,
         ui: &mut Ui,
-        scale: f32,
         snarl: &mut Snarl<T>,
     ) -> impl SnarlPin + 'static;
 
@@ -144,7 +142,6 @@ pub trait SnarlViewer<T> {
         &mut self,
         pin: &OutPin,
         ui: &mut Ui,
-        scale: f32,
         snarl: &mut Snarl<T>,
     ) -> impl SnarlPin + 'static;
 
@@ -163,10 +160,9 @@ pub trait SnarlViewer<T> {
         inputs: &[InPin],
         outputs: &[OutPin],
         ui: &mut Ui,
-        scale: f32,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (node, inputs, outputs, ui, scale, snarl);
+        let _ = (node, inputs, outputs, ui, snarl);
     }
 
     /// Checks if node has something to show in footer - below pins and body.
@@ -184,10 +180,9 @@ pub trait SnarlViewer<T> {
         inputs: &[InPin],
         outputs: &[OutPin],
         ui: &mut Ui,
-        scale: f32,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (node, inputs, outputs, ui, scale, snarl);
+        let _ = (node, inputs, outputs, ui, snarl);
     }
 
     /// Reports the final node's rect after rendering.
@@ -195,16 +190,8 @@ pub trait SnarlViewer<T> {
     /// It aimed to be used for custom positioning of nodes that requires node dimensions for calculations.
     /// Node's position can be modified directly in this method.
     #[inline]
-    fn final_node_rect(
-        &mut self,
-        node: NodeId,
-        ui_rect: Rect,
-        graph_rect: Rect,
-        ui: &mut Ui,
-        scale: f32,
-        snarl: &mut Snarl<T>,
-    ) {
-        let _ = (node, ui_rect, graph_rect, ui, scale, snarl);
+    fn final_node_rect(&mut self, node: NodeId, rect: Rect, ui: &mut Ui, snarl: &mut Snarl<T>) {
+        let _ = (node, rect, ui, snarl);
     }
 
     /// Checks if node has something to show in on-hover popup.
@@ -222,10 +209,9 @@ pub trait SnarlViewer<T> {
         inputs: &[InPin],
         outputs: &[OutPin],
         ui: &mut Ui,
-        scale: f32,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (node, inputs, outputs, ui, scale, snarl);
+        let _ = (node, inputs, outputs, ui, snarl);
     }
 
     /// Checks if wire has something to show in widget.
@@ -239,15 +225,8 @@ pub trait SnarlViewer<T> {
     /// Renders the wire's widget.
     /// This may not be called if wire is invisible.
     #[inline]
-    fn show_wire_widget(
-        &mut self,
-        from: &OutPin,
-        to: &InPin,
-        ui: &mut Ui,
-        scale: f32,
-        snarl: &mut Snarl<T>,
-    ) {
-        let _ = (from, to, ui, scale, snarl);
+    fn show_wire_widget(&mut self, from: &OutPin, to: &InPin, ui: &mut Ui, snarl: &mut Snarl<T>) {
+        let _ = (from, to, ui, snarl);
     }
 
     /// Checks if the snarl has something to show in context menu if right-clicked or long-touched on empty space at `pos`.
@@ -261,8 +240,8 @@ pub trait SnarlViewer<T> {
     ///
     /// This can be used to implement menu for adding new nodes.
     #[inline]
-    fn show_graph_menu(&mut self, pos: Pos2, ui: &mut Ui, scale: f32, snarl: &mut Snarl<T>) {
-        let _ = (pos, ui, scale, snarl);
+    fn show_graph_menu(&mut self, pos: Pos2, ui: &mut Ui, snarl: &mut Snarl<T>) {
+        let _ = (pos, ui, snarl);
     }
 
     /// Checks if the snarl has something to show in context menu if wire drag is stopped at `pos`.
@@ -280,11 +259,10 @@ pub trait SnarlViewer<T> {
         &mut self,
         pos: Pos2,
         ui: &mut Ui,
-        scale: f32,
         src_pins: AnyPins,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (pos, ui, scale, src_pins, snarl);
+        let _ = (pos, ui, src_pins, snarl);
     }
 
     /// Checks if the node has something to show in context menu if right-clicked or long-touched on the node.
@@ -304,10 +282,9 @@ pub trait SnarlViewer<T> {
         inputs: &[InPin],
         outputs: &[OutPin],
         ui: &mut Ui,
-        scale: f32,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (node, inputs, outputs, ui, scale, snarl);
+        let _ = (node, inputs, outputs, ui, snarl);
     }
 
     /// Asks the viewer to connect two pins.
@@ -351,7 +328,7 @@ pub trait SnarlViewer<T> {
     fn draw_background(
         &mut self,
         background: Option<&BackgroundPattern>,
-        viewport: &Viewport,
+        viewport: &Rect,
         snarl_style: &SnarlStyle,
         style: &Style,
         painter: &Painter,

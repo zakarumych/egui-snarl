@@ -2,7 +2,7 @@ use egui::{epaint::PathShape, pos2, vec2, Color32, Painter, Rect, Shape, Stroke,
 
 use crate::{InPinId, OutPinId};
 
-use super::{zoom::Zoom, SnarlStyle, WireStyle};
+use super::{SnarlStyle, WireStyle};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum AnyPin {
@@ -53,7 +53,6 @@ pub trait SnarlPin {
     #[must_use]
     fn draw(
         self,
-        scale: f32,
         snarl_style: &SnarlStyle,
         style: &Style,
         rect: Rect,
@@ -192,10 +191,9 @@ impl PinInfo {
 
     /// Returns outline stroke of the pin.
     #[must_use]
-    pub fn get_stroke(&self, snarl_style: &SnarlStyle, style: &Style, scale: f32) -> Stroke {
+    pub fn get_stroke(&self, snarl_style: &SnarlStyle, style: &Style) -> Stroke {
         self.stroke
-            .zoomed(scale)
-            .unwrap_or_else(|| snarl_style.get_pin_stroke(scale, style))
+            .unwrap_or_else(|| snarl_style.get_pin_stroke(style))
     }
 
     /// Draws the pin and returns color.
@@ -204,7 +202,6 @@ impl PinInfo {
     #[must_use]
     pub fn draw(
         &self,
-        scale: f32,
         snarl_style: &SnarlStyle,
         style: &Style,
         rect: Rect,
@@ -212,15 +209,12 @@ impl PinInfo {
     ) -> PinWireInfo {
         let shape = self.get_shape(snarl_style);
         let fill = self.get_fill(snarl_style, style);
-        let stroke = self.get_stroke(snarl_style, style, scale);
+        let stroke = self.get_stroke(snarl_style, style);
         draw_pin(painter, shape, fill, stroke, rect);
 
         PinWireInfo {
             color: self.wire_color.unwrap_or(fill),
-            style: self
-                .wire_style
-                .zoomed(scale)
-                .unwrap_or(snarl_style.get_wire_style(scale)),
+            style: self.wire_style.unwrap_or(snarl_style.get_wire_style()),
         }
     }
 }
@@ -228,13 +222,12 @@ impl PinInfo {
 impl SnarlPin for PinInfo {
     fn draw(
         self,
-        scale: f32,
         snarl_style: &SnarlStyle,
         style: &Style,
         rect: Rect,
         painter: &Painter,
     ) -> PinWireInfo {
-        Self::draw(&self, scale, snarl_style, style, rect, painter)
+        Self::draw(&self, snarl_style, style, rect, painter)
     }
 }
 

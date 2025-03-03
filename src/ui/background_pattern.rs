@@ -102,26 +102,15 @@ impl Grid {
         Self { spacing, angle }
     }
 
-    fn draw(
-        &self,
-        viewport: &Viewport,
-        snarl_style: &SnarlStyle,
-        style: &Style,
-        painter: &Painter,
-    ) {
-        let bg_stroke = snarl_style.get_bg_pattern_stroke(viewport.scale, style);
+    fn draw(&self, viewport: &Rect, snarl_style: &SnarlStyle, style: &Style, painter: &Painter) {
+        let bg_stroke = snarl_style.get_bg_pattern_stroke(style);
 
         let spacing = vec2(self.spacing.x.max(1.0), self.spacing.y.max(1.0));
 
         let rot = Rot2::from_angle(self.angle);
         let rot_inv = rot.inverse();
 
-        let graph_viewport = Rect::from_min_max(
-            viewport.screen_pos_to_graph(viewport.rect.min),
-            viewport.screen_pos_to_graph(viewport.rect.max),
-        );
-
-        let pattern_bounds = graph_viewport.rotate_bb(rot_inv);
+        let pattern_bounds = viewport.rotate_bb(rot_inv);
 
         let min_x = (pattern_bounds.min.x / spacing.x).ceil();
         let max_x = (pattern_bounds.max.x / spacing.x).floor();
@@ -132,9 +121,6 @@ impl Grid {
 
             let top = (rot * vec2(x, pattern_bounds.min.y)).to_pos2();
             let bottom = (rot * vec2(x, pattern_bounds.max.y)).to_pos2();
-
-            let top = viewport.graph_pos_to_screen(top);
-            let bottom = viewport.graph_pos_to_screen(bottom);
 
             painter.line_segment([top, bottom], bg_stroke);
         }
@@ -148,9 +134,6 @@ impl Grid {
 
             let top = (rot * vec2(pattern_bounds.min.x, y)).to_pos2();
             let bottom = (rot * vec2(pattern_bounds.max.x, y)).to_pos2();
-
-            let top = viewport.graph_pos_to_screen(top);
-            let bottom = viewport.graph_pos_to_screen(bottom);
 
             painter.line_segment([top, bottom], bg_stroke);
         }
@@ -198,7 +181,7 @@ impl BackgroundPattern {
     /// Draws background pattern.
     pub fn draw(
         &self,
-        viewport: &Viewport,
+        viewport: &Rect,
         snarl_style: &SnarlStyle,
         style: &Style,
         painter: &Painter,

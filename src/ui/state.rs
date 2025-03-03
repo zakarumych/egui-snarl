@@ -1,10 +1,8 @@
 use std::hash::Hash;
 
-use egui::{ahash::HashSet, style::Spacing, Context, Id, Pos2, Rect, Ui, Vec2};
+use egui::{ahash::HashSet, emath::GuiRounding, style::Spacing, Context, Id, Pos2, Rect, Ui, Vec2};
 
 use crate::{InPinId, NodeId, OutPinId, Snarl};
-
-use super::SnarlStyle;
 
 /// Node UI state.
 pub struct NodeState {
@@ -14,28 +12,26 @@ pub struct NodeState {
     header_height: f32,
 
     id: Id,
-    scale: f32,
     dirty: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 struct NodeData {
-    unscaled_size: Vec2,
-    unscaled_header_height: f32,
+    size: Vec2,
+    header_height: f32,
 }
 
 impl NodeState {
-    pub fn load(cx: &Context, id: Id, spacing: &Spacing, scale: f32) -> Self {
+    pub fn load(cx: &Context, id: Id, spacing: &Spacing) -> Self {
         cx.data_mut(|d| d.get_temp::<NodeData>(id)).map_or_else(
             || {
                 cx.request_discard("NodeState initialization");
-                Self::initial(id, spacing, scale)
+                Self::initial(id, spacing)
             },
             |data| NodeState {
-                size: data.unscaled_size * scale,
-                header_height: data.unscaled_header_height * scale,
+                size: data.size,
+                header_height: data.header_height,
                 id,
-                scale,
                 dirty: false,
             },
         )
@@ -51,8 +47,8 @@ impl NodeState {
                 d.insert_temp(
                     self.id,
                     NodeData {
-                        unscaled_size: self.size / self.scale,
-                        unscaled_header_height: self.header_height / self.scale,
+                        size: self.size,
+                        header_height: self.header_height,
                     },
                 );
             });
@@ -62,17 +58,17 @@ impl NodeState {
     /// Finds node rect at specific position (excluding node frame margin).
     pub fn node_rect(&self, pos: Pos2, openness: f32) -> Rect {
         Rect::from_min_size(
-            pos.round(),
+            pos,
             egui::vec2(
                 self.size.x,
                 f32::max(self.header_height, self.size.y * openness),
-            )
-            .round(),
+            ),
         )
+        .round_ui()
     }
 
     pub fn payload_offset(&self, openness: f32) -> f32 {
-        ((self.size.y) * (1.0 - openness)).round()
+        ((self.size.y) * (1.0 - openness)).round_ui()
     }
 
     pub fn set_size(&mut self, size: Vec2) {
@@ -83,7 +79,7 @@ impl NodeState {
     }
 
     pub fn header_height(&self) -> f32 {
-        self.header_height.round()
+        self.header_height.round_ui()
     }
 
     pub fn set_header_height(&mut self, height: f32) {
@@ -94,13 +90,12 @@ impl NodeState {
         }
     }
 
-    const fn initial(id: Id, spacing: &Spacing, scale: f32) -> Self {
+    const fn initial(id: Id, spacing: &Spacing) -> Self {
         NodeState {
             size: spacing.interact_size,
             header_height: spacing.interact_size.y,
             id,
             dirty: true,
-            scale,
         }
     }
 }
@@ -118,13 +113,8 @@ struct RectSelect {
 }
 
 pub struct SnarlState {
-    /// Where viewport's center in graph's space.
-    offset: Vec2,
-
-    /// Scale of the viewport.
-    scale: f32,
-
-    target_scale: f32,
+    /// Where viewport in graph's space.
+    viewport: Rect,
 
     new_wires: Option<NewWires>,
 
@@ -153,9 +143,7 @@ struct DrawOrder(Vec<NodeId>);
 struct SelectedNodes(Vec<NodeId>);
 
 struct SnarlStateData {
-    offset: Vec2,
-    scale: f32,
-    target_scale: f32,
+    viewport: Rect,
     is_link_menu_open: bool,
     draw_order: Vec<NodeId>,
     new_wires: Option<NewWires>,
@@ -165,9 +153,7 @@ struct SnarlStateData {
 
 #[derive(Clone)]
 struct SnarlStateDataHeader {
-    offset: Vec2,
-    scale: f32,
-    target_scale: f32,
+    viewport: Rect,
     is_link_menu_open: bool,
 }
 
@@ -177,9 +163,7 @@ impl SnarlStateData {
             d.insert_temp(
                 id,
                 SnarlStateDataHeader {
-                    offset: self.offset,
-                    scale: self.scale,
-                    target_scale: self.target_scale,
+                    viewport: self.viewport,
                     is_link_menu_open: self.is_link_menu_open,
                 },
             );
@@ -220,9 +204,7 @@ impl SnarlStateData {
             let draw_order = d.get_temp(id).unwrap_or(DrawOrder(Vec::new())).0;
 
             Some(SnarlStateData {
-                offset: small.offset,
-                scale: small.scale,
-                target_scale: small.target_scale,
+                viewport: small.viewport,
                 is_link_menu_open: small.is_link_menu_open,
                 new_wires,
                 rect_selection,
@@ -240,47 +222,16 @@ fn prune_selected_nodes<T>(selected_nodes: &mut Vec<NodeId>, snarl: &Snarl<T>) -
 }
 
 impl SnarlState {
-    pub fn load<T>(
-        cx: &Context,
-        id: Id,
-        pivot: Pos2,
-        viewport: Rect,
-        snarl: &Snarl<T>,
-        style: &SnarlStyle,
-    ) -> Self {
+    pub fn load<T>(cx: &Context, id: Id, snarl: &Snarl<T>) -> Self {
         let Some(mut data) = SnarlStateData::load(cx, id) else {
             cx.request_discard("Initial placing");
-            return Self::initial(id, viewport, snarl, style);
+            return Self::initial(id, snarl);
         };
 
-        let animate_zoom = style.animate_zoom.unwrap_or(0.0);
-
-        let new_scale = match animate_zoom {
-            ..=0.0 => data.target_scale,
-            duration => {
-                cx.animate_value_with_time(id.with("zoom-scale"), data.target_scale, duration)
-            }
-        };
-
-        #[allow(clippy::float_cmp)]
-        let mut dirty = if new_scale == data.scale {
-            false
-        } else {
-            let a = pivot + data.offset - viewport.center().to_vec2();
-
-            data.offset += a * new_scale / data.scale - a;
-            data.scale = new_scale;
-
-            cx.request_discard("Zooming");
-            true
-        };
-
-        dirty |= prune_selected_nodes(&mut data.selected_nodes, snarl);
+        let dirty = prune_selected_nodes(&mut data.selected_nodes, snarl);
 
         SnarlState {
-            offset: data.offset,
-            scale: data.scale,
-            target_scale: data.target_scale,
+            viewport: data.viewport,
             new_wires: data.new_wires,
             is_link_menu_open: data.is_link_menu_open,
             id,
@@ -291,35 +242,17 @@ impl SnarlState {
         }
     }
 
-    fn initial<T>(id: Id, viewport: Rect, snarl: &Snarl<T>, style: &SnarlStyle) -> Self {
+    fn initial<T>(id: Id, snarl: &Snarl<T>) -> Self {
         let mut bb = Rect::NOTHING;
 
         for (_, node) in &snarl.nodes {
             bb.extend_with(node.pos);
         }
 
-        let mut offset = Vec2::ZERO;
-        let mut scale = 1.0f32.clamp(style.get_min_scale(), style.get_max_scale());
-
-        if bb.is_finite() {
-            bb = bb.expand(100.0);
-
-            let bb_size = bb.size();
-            let viewport_size = viewport.size();
-
-            scale = (viewport_size.x / bb_size.x.min(1.0))
-                .min(1.0)
-                .min(viewport_size.y / bb_size.y.min(1.0))
-                .min(style.get_max_scale())
-                .max(style.get_min_scale());
-
-            offset = bb.center().to_vec2() * scale;
-        }
+        bb = bb.expand(100.0);
 
         SnarlState {
-            offset,
-            scale,
-            target_scale: scale,
+            viewport: bb,
             new_wires: None,
             is_link_menu_open: false,
             id,
@@ -336,9 +269,7 @@ impl SnarlState {
 
         if self.dirty {
             let data = SnarlStateData {
-                offset: self.offset,
-                scale: self.scale,
-                target_scale: self.target_scale,
+                viewport: self.viewport,
                 new_wires: self.new_wires,
                 is_link_menu_open: self.is_link_menu_open,
                 draw_order: self.draw_order,
@@ -349,87 +280,23 @@ impl SnarlState {
         }
     }
 
-    pub fn set_offset(&mut self, offset: Vec2) {
-        if self.offset != offset {
-            self.offset = offset;
+    pub fn viewport(&self) -> Rect {
+        self.viewport
+    }
+
+    pub fn set_viewport(&mut self, viewport: Rect) {
+        if self.viewport != viewport {
+            self.viewport = viewport;
             self.dirty = true;
         }
     }
 
     #[inline(always)]
-    pub fn pan(&mut self, delta: Vec2) {
-        if delta != Vec2::ZERO {
-            self.offset += delta;
-            self.dirty = true;
-        }
+    pub fn screen_pos_to_graph(&self, pos: Pos2, ui_rect: Rect) -> Pos2 {
+        let x = egui::emath::remap(pos.x, ui_rect.x_range(), self.viewport.x_range());
+        let y = egui::emath::remap(pos.y, ui_rect.y_range(), self.viewport.y_range());
+        egui::pos2(x, y)
     }
-
-    #[inline(always)]
-    pub fn scale(&self) -> f32 {
-        (self.scale * 100.0).round() / 100.0
-    }
-
-    #[inline(always)]
-    pub fn offset(&self) -> Vec2 {
-        self.offset.round()
-    }
-
-    #[inline(never)]
-    pub fn zoom_delta(&mut self, zoom_delta: f32, min: f32, max: f32) {
-        if zoom_delta == 1.0 {
-            return;
-        }
-
-        self.target_scale = (self.target_scale * zoom_delta).clamp(min, max);
-        self.target_scale = (self.target_scale * 100.0).round() / 100.0;
-        self.dirty = true;
-    }
-
-    #[inline(always)]
-    pub fn screen_pos_to_graph(&self, pos: Pos2, viewport: Rect) -> Pos2 {
-        (pos + self.offset() - viewport.center().to_vec2()) / self.scale()
-    }
-
-    #[inline(always)]
-    pub fn graph_pos_to_screen(&self, pos: Pos2, viewport: Rect) -> Pos2 {
-        pos * self.scale() - self.offset() + viewport.center().to_vec2()
-    }
-
-    #[inline(always)]
-    pub fn screen_rect_to_graph(&self, rect: Rect, viewport: Rect) -> Rect {
-        Rect::from_min_max(
-            self.screen_pos_to_graph(rect.min, viewport),
-            self.screen_pos_to_graph(rect.max, viewport),
-        )
-    }
-
-    #[inline(always)]
-    pub fn graph_rect_to_screen(&self, rect: Rect, viewport: Rect) -> Rect {
-        Rect::from_min_max(
-            self.graph_pos_to_screen(rect.min, viewport),
-            self.graph_pos_to_screen(rect.max, viewport),
-        )
-    }
-
-    // #[inline(always)]
-    // pub fn graph_vec_to_screen(&self, size: Vec2) -> Vec2 {
-    //     size * self.scale
-    // }
-
-    #[inline(always)]
-    pub fn screen_vec_to_graph(&self, size: Vec2) -> Vec2 {
-        size / self.scale()
-    }
-
-    // #[inline(always)]
-    // pub fn graph_value_to_screen(&self, value: f32) -> f32 {
-    //     value * self.scale
-    // }
-
-    // #[inline(always)]
-    // pub fn screen_value_to_graph(&self, value: f32) -> f32 {
-    //     value / self.scale
-    // }
 
     pub fn start_new_wire_in(&mut self, pin: InPinId) {
         self.new_wires = Some(NewWires::In(vec![pin]));
@@ -489,6 +356,14 @@ impl SnarlState {
 
     pub const fn has_new_wires(&self) -> bool {
         self.new_wires.is_some()
+    }
+
+    pub const fn has_new_wires_in(&self) -> bool {
+        matches!(self.new_wires, Some(NewWires::In(_)))
+    }
+
+    pub const fn has_new_wires_out(&self) -> bool {
+        matches!(self.new_wires, Some(NewWires::Out(_)))
     }
 
     pub const fn new_wires(&self) -> Option<&NewWires> {
