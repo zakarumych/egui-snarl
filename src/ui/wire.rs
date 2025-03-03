@@ -607,7 +607,7 @@ fn wire_axis_aligned(corner_radius: f32, frame_size: f32, from: Pos2, to: Pos2) 
         }
     } else {
         // Four turns case.
-        let mid = f32::abs(from.y + to.y) / 2.0;
+        let mid = (from.y + to.y) / 2.0;
 
         let right = from.x + frame_size;
         let left = to.x - frame_size;
