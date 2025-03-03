@@ -11,6 +11,7 @@ use egui::{
     vec2, Align, Color32, CornerRadius, Frame, Id, Layout, Margin, Modifiers, PointerButton, Pos2,
     Rect, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, Vec2,
 };
+use zoom::Zoom;
 
 use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl};
 
@@ -19,6 +20,7 @@ mod pin;
 mod state;
 mod viewer;
 mod wire;
+mod zoom;
 
 use self::{
     pin::AnyPin,
@@ -137,7 +139,7 @@ pub enum PinPlacement {
 }
 
 /// Style for rendering Snarl.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
 pub struct SnarlStyle {
@@ -349,6 +351,14 @@ pub struct SnarlStyle {
     )]
     pub select_style: Option<SelectionStyle>,
 
+    /// Controls whether to show magnified text in crisp mode.
+    /// This zooms UI style to max scale and scales down the scene.
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    pub crisp_magnified_text: Option<bool>,
+
     #[doc(hidden)]
     #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
@@ -436,7 +446,7 @@ impl SnarlStyle {
     }
 
     fn get_max_scale(&self) -> f32 {
-        self.max_scale.unwrap_or(5.0)
+        self.max_scale.unwrap_or(2.0)
     }
 
     fn get_node_frame(&self, style: &Style) -> Frame {
@@ -477,6 +487,10 @@ impl SnarlStyle {
             fill: self.get_select_fill(style),
             stroke: self.get_select_stroke(style),
         })
+    }
+
+    fn crisp_magnified_text(&self) -> bool {
+        self.crisp_magnified_text.unwrap_or(false)
     }
 }
 
@@ -562,6 +576,7 @@ impl SnarlStyle {
             select_fill: None,
             select_rect_contained: None,
             select_style: None,
+            crisp_magnified_text: None,
 
             _non_exhaustive: (),
         }
@@ -625,17 +640,34 @@ impl<T> Snarl<T> {
 
         // Draw background pattern.
         style.get_bg_frame(ui.style()).show(ui, |ui| {
-            let ui_rect = ui.max_rect();
             let (mut latest_pos, modifiers) =
                 ui.ctx().input(|i| (i.pointer.latest_pos(), i.modifiers));
+
+            let mut min_scale = style.get_min_scale();
+            let mut max_scale = style.get_max_scale();
+
+            let mut ui_rect = ui.max_rect();
+            let mut style_copy = *style;
+            if style.crisp_magnified_text() {
+                ui.style_mut().zoom(max_scale);
+                style_copy.zoom(max_scale);
+
+                min_scale /= max_scale;
+                max_scale = 1.0;
+
+                ui_rect = Rect::from_min_max(
+                    (ui_rect.min.to_vec2() / max_scale).to_pos2(),
+                    (ui_rect.max.to_vec2() / max_scale).to_pos2(),
+                );
+            }
+            let style = &style_copy;
 
             let mut snarl_state = SnarlState::load(ui.ctx(), snarl_id, self, ui_rect);
             let mut viewport = snarl_state.viewport();
 
             let mut can_update_viewport = true;
-
             let scene_r = egui::containers::Scene::new()
-                .zoom_range(style.get_min_scale()..=style.get_max_scale())
+                .zoom_range(min_scale..=max_scale)
                 .show(ui, &mut viewport, |ui| {
                     let mut node_moved = None;
                     let mut node_to_top = None;
@@ -1397,6 +1429,7 @@ impl<T> Snarl<T> {
             &outputs,
             self,
         );
+
         let header_frame = viewer.header_frame(
             style.get_header_frame(ui.style()),
             node,
