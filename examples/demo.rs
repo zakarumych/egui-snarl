@@ -399,7 +399,6 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                     .desired_width(0.0)
                     .margin(ui.spacing().item_spacing);
                 ui.add(edit);
-                ui.label("AAAAA");
                 PinInfo::circle()
                     .with_fill(STRING_COLOR)
                     .with_wire_style(WireStyle::AxisAligned {
