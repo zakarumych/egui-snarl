@@ -222,10 +222,10 @@ fn prune_selected_nodes<T>(selected_nodes: &mut Vec<NodeId>, snarl: &Snarl<T>) -
 }
 
 impl SnarlState {
-    pub fn load<T>(cx: &Context, id: Id, snarl: &Snarl<T>) -> Self {
+    pub fn load<T>(cx: &Context, id: Id, snarl: &Snarl<T>, ui_rect: Rect) -> Self {
         let Some(mut data) = SnarlStateData::load(cx, id) else {
             cx.request_discard("Initial placing");
-            return Self::initial(id, snarl);
+            return Self::initial(id, snarl, ui_rect);
         };
 
         let dirty = prune_selected_nodes(&mut data.selected_nodes, snarl);
@@ -242,14 +242,20 @@ impl SnarlState {
         }
     }
 
-    fn initial<T>(id: Id, snarl: &Snarl<T>) -> Self {
+    fn initial<T>(id: Id, snarl: &Snarl<T>, ui_rect: Rect) -> Self {
         let mut bb = Rect::NOTHING;
 
         for (_, node) in &snarl.nodes {
             bb.extend_with(node.pos);
         }
 
-        bb = bb.expand(100.0);
+        if bb.is_finite() {
+            bb = bb.expand(100.0);
+        } else if ui_rect.is_finite() {
+            bb = ui_rect;
+        } else {
+            bb = Rect::from_min_max(Pos2::new(-100.0, -100.0), Pos2::new(100.0, 100.0));
+        }
 
         SnarlState {
             viewport: bb,
@@ -289,13 +295,6 @@ impl SnarlState {
             self.viewport = viewport;
             self.dirty = true;
         }
-    }
-
-    #[inline(always)]
-    pub fn screen_pos_to_graph(&self, pos: Pos2, ui_rect: Rect) -> Pos2 {
-        let x = egui::emath::remap(pos.x, ui_rect.x_range(), self.viewport.x_range());
-        let y = egui::emath::remap(pos.y, ui_rect.y_range(), self.viewport.y_range());
-        egui::pos2(x, y)
     }
 
     pub fn start_new_wire_in(&mut self, pin: InPinId) {

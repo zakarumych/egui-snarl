@@ -3,9 +3,13 @@
 use std::{collections::HashMap, hash::Hash};
 
 use egui::{
-    collapsing_header::paint_default_icon, emath::GuiRounding, epaint::Shadow, pos2,
-    response::Flags, vec2, Align, Color32, CornerRadius, Frame, Id, Layout, Margin, Modifiers,
-    PointerButton, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, Vec2,
+    collapsing_header::paint_default_icon,
+    emath::{GuiRounding, TSTransform},
+    epaint::Shadow,
+    pos2,
+    response::Flags,
+    vec2, Align, Color32, CornerRadius, Frame, Id, Layout, Margin, Modifiers, PointerButton, Pos2,
+    Rect, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, Vec2,
 };
 
 use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl};
@@ -23,7 +27,7 @@ use self::{
 };
 
 pub use self::{
-    background_pattern::{BackgroundPattern, Grid, Viewport},
+    background_pattern::{BackgroundPattern, Grid},
     pin::{AnyPins, PinInfo, PinShape, PinWireInfo, SnarlPin},
     viewer::SnarlViewer,
     wire::{WireLayer, WireStyle},
@@ -622,11 +626,12 @@ impl<T> Snarl<T> {
         // Draw background pattern.
         style.get_bg_frame(ui.style()).show(ui, |ui| {
             let ui_rect = ui.max_rect();
-            let (latest_pos, modifiers) = ui.ctx().input(|i| (i.pointer.latest_pos(), i.modifiers));
+            let (mut latest_pos, modifiers) =
+                ui.ctx().input(|i| (i.pointer.latest_pos(), i.modifiers));
 
-            let mut snarl_state = SnarlState::load(ui.ctx(), snarl_id, self);
+            let mut snarl_state = SnarlState::load(ui.ctx(), snarl_id, self, ui_rect);
             let mut viewport = snarl_state.viewport();
-            let latest_pos = latest_pos.map(|pos| snarl_state.screen_pos_to_graph(pos, ui_rect));
+
             let mut can_update_viewport = true;
 
             let scene_r = egui::containers::Scene::new()
@@ -637,6 +642,11 @@ impl<T> Snarl<T> {
 
                     // Read response on the snarl background.
                     let mut bg_r = ui.response();
+                    let transform = ui
+                        .ctx()
+                        .layer_transform_from_global(bg_r.layer_id)
+                        .unwrap_or(TSTransform::IDENTITY);
+                    latest_pos = latest_pos.map(|pos| transform * pos);
 
                     if bg_r.rect.is_finite() {
                         //Draw background
@@ -919,8 +929,7 @@ impl<T> Snarl<T> {
                                         NewWires::Out(x) => AnyPins::Out(x),
                                     };
 
-                                    let menu_pos =
-                                        snarl_state.screen_pos_to_graph(ui.cursor().min, ui_rect);
+                                    let menu_pos = transform * ui.cursor().min;
 
                                     // Override wire end position when the wire-drop context menu is opened.
                                     wire_end_pos = menu_pos;
@@ -939,8 +948,7 @@ impl<T> Snarl<T> {
                                     snarl_state.open_link_menu();
                                 }
 
-                                let menu_pos =
-                                    snarl_state.screen_pos_to_graph(ui.cursor().min, ui_rect);
+                                let menu_pos = transform * ui.cursor().min;
 
                                 viewer.show_graph_menu(menu_pos, ui, self);
                             });

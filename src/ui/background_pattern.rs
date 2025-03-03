@@ -1,62 +1,6 @@
-use egui::{emath::Rot2, vec2, Painter, Pos2, Rect, Style, Vec2};
+use egui::{emath::Rot2, vec2, Painter, Rect, Style, Vec2};
 
 use super::SnarlStyle;
-
-/// Viewport is a rectangle in graph space that is visible on screen.
-pub struct Viewport {
-    /// Screen-space rectangle.
-    pub rect: Rect,
-
-    /// Scale of the viewport.
-    pub scale: f32,
-
-    /// Offset of the viewport.
-    pub offset: Vec2,
-}
-
-impl Viewport {
-    /// Converts screen-space position to graph-space position.
-    #[inline(always)]
-    #[must_use]
-    pub fn screen_pos_to_graph(&self, pos: Pos2) -> Pos2 {
-        (pos + self.offset - self.rect.center().to_vec2()) / self.scale
-    }
-
-    /// Converts graph-space position to screen-space position.
-    #[inline(always)]
-    #[must_use]
-    pub fn graph_pos_to_screen(&self, pos: Pos2) -> Pos2 {
-        pos * self.scale - self.offset + self.rect.center().to_vec2()
-    }
-
-    /// Converts screen-space vector to graph-space vector.
-    #[inline(always)]
-    #[must_use]
-    pub fn graph_vec_to_screen(&self, size: Vec2) -> Vec2 {
-        size * self.scale
-    }
-
-    /// Converts graph-space vector to screen-space vector.
-    #[inline(always)]
-    #[must_use]
-    pub fn screen_vec_to_graph(&self, size: Vec2) -> Vec2 {
-        size / self.scale
-    }
-
-    /// Converts screen-space size to graph-space size.
-    #[inline(always)]
-    #[must_use]
-    pub fn graph_size_to_screen(&self, size: f32) -> f32 {
-        size * self.scale
-    }
-
-    /// Converts graph-space size to screen-space size.
-    #[inline(always)]
-    #[must_use]
-    pub fn screen_size_to_graph(&self, size: f32) -> f32 {
-        size / self.scale
-    }
-}
 
 ///Grid background pattern.
 ///Use `SnarlStyle::background_pattern_stroke` for change stroke options
