@@ -20,14 +20,19 @@ impl Zoom for f32 {
 impl Zoom for u8 {
     #[inline(always)]
     fn zoom(&mut self, zoom: f32) {
-        *self = (*self as f32 * zoom) as u8;
+        #![allow(clippy::cast_possible_truncation)]
+        #![allow(clippy::cast_sign_loss)]
+
+        *self = (f32::from(*self) * zoom) as u8;
     }
 }
 
 impl Zoom for i8 {
     #[inline(always)]
     fn zoom(&mut self, zoom: f32) {
-        *self = (*self as f32 * zoom) as i8;
+        #![allow(clippy::cast_possible_truncation)]
+
+        *self = (f32::from(*self) * zoom) as i8;
     }
 }
 
@@ -239,22 +244,16 @@ impl Zoom for SelectionStyle {
 
 impl Zoom for PinPlacement {
     fn zoom(&mut self, zoom: f32) {
-        match self {
-            PinPlacement::Outside { margin } => {
-                margin.zoom(zoom);
-            }
-            _ => {}
+        if let PinPlacement::Outside { margin } = self {
+            margin.zoom(zoom);
         }
     }
 }
 
 impl Zoom for BackgroundPattern {
     fn zoom(&mut self, zoom: f32) {
-        match self {
-            BackgroundPattern::Grid(grid) => {
-                grid.spacing.zoom(zoom);
-            }
-            _ => {}
+        if let BackgroundPattern::Grid(grid) = self {
+            grid.spacing.zoom(zoom);
         }
     }
 }

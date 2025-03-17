@@ -5,7 +5,10 @@ use std::collections::HashMap;
 use eframe::{App, CreationContext};
 use egui::{Color32, Id, Ui};
 use egui_snarl::{
-    ui::{AnyPins, NodeLayout, PinInfo, PinPlacement, SnarlStyle, SnarlViewer, WireStyle},
+    ui::{
+        get_selected_nodes, AnyPins, NodeLayout, PinInfo, PinPlacement, SnarlStyle, SnarlViewer,
+        SnarlWidget, WireStyle,
+    },
     InPin, InPinId, NodeId, OutPin, OutPinId, Snarl,
 };
 
@@ -930,7 +933,6 @@ impl Expr {
 pub struct DemoApp {
     snarl: Snarl<DemoNode>,
     style: SnarlStyle,
-    snarl_ui_id: Option<Id>,
 }
 
 const fn default_style() -> SnarlStyle {
@@ -952,8 +954,8 @@ const fn default_style() -> SnarlStyle {
             shadow: egui::Shadow::NONE,
         }),
         bg_frame: Some(egui::Frame {
-            inner_margin: egui::Margin::same(2),
-            outer_margin: egui::Margin::ZERO,
+            inner_margin: egui::Margin::ZERO,
+            outer_margin: egui::Margin::same(2),
             corner_radius: egui::CornerRadius::ZERO,
             fill: egui::Color32::from_gray(40),
             stroke: egui::Stroke::NONE,
@@ -985,11 +987,7 @@ impl DemoApp {
         });
         // let style = SnarlStyle::new();
 
-        DemoApp {
-            snarl,
-            style,
-            snarl_ui_id: None,
-        }
+        DemoApp { snarl, style }
     }
 }
 
@@ -1023,44 +1021,43 @@ impl App for DemoApp {
             });
         });
 
-        if let Some(snarl_ui_id) = self.snarl_ui_id {
-            egui::SidePanel::right("selected-list").show(ctx, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.strong("Selected nodes");
+        egui::SidePanel::right("selected-list").show(ctx, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.strong("Selected nodes");
 
-                    let selected =
-                        Snarl::<DemoNode>::get_selected_nodes_at("snarl", snarl_ui_id, ui.ctx());
-                    let mut selected = selected
-                        .into_iter()
-                        .map(|id| (id, &self.snarl[id]))
-                        .collect::<Vec<_>>();
+                let selected = get_selected_nodes(Id::new("snarl-demo"), ui.ctx());
 
-                    selected.sort_by_key(|(id, _)| *id);
+                let mut selected = selected
+                    .into_iter()
+                    .map(|id| (id, &self.snarl[id]))
+                    .collect::<Vec<_>>();
 
-                    let mut remove = None;
+                selected.sort_by_key(|(id, _)| *id);
 
-                    for (id, node) in selected {
-                        ui.horizontal(|ui| {
-                            ui.label(format!("{id:?}"));
-                            ui.label(node.name());
-                            ui.add_space(ui.spacing().item_spacing.x);
-                            if ui.button("Remove").clicked() {
-                                remove = Some(id);
-                            }
-                        });
-                    }
+                let mut remove = None;
 
-                    if let Some(id) = remove {
-                        self.snarl.remove_node(id);
-                    }
-                });
+                for (id, node) in selected {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("{id:?}"));
+                        ui.label(node.name());
+                        ui.add_space(ui.spacing().item_spacing.x);
+                        if ui.button("Remove").clicked() {
+                            remove = Some(id);
+                        }
+                    });
+                }
+
+                if let Some(id) = remove {
+                    self.snarl.remove_node(id);
+                }
             });
-        }
+        });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.snarl_ui_id = Some(ui.id());
-
-            self.snarl.show(&mut DemoViewer, &self.style, "snarl", ui);
+            SnarlWidget::new()
+                .id(Id::new("snarl-demo"))
+                .style(self.style)
+                .show(&mut self.snarl, &mut DemoViewer, ui);
         });
     }
 

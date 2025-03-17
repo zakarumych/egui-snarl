@@ -2,7 +2,7 @@ workspace = { members = ["demo"] }
 
 [package]
 name = "egui-snarl"
-version = "0.7.1"
+version = "0.8.0"
 edition = "2021"
 description = "Node-graphs for egui"
 license = "MIT OR Apache-2.0"
@@ -17,17 +17,17 @@ rust-version = "1.81"
 serde = ["dep:serde", "egui/serde", "slab/serde"]
 
 [dependencies]
-egui = { version = "0.31.0" }
+egui = { version = "0.31" }
 slab = { version = "0.4" }
-serde = { version = "1.0", features = ["derive"], optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
 
 egui-probe = { version = "0.8.0", features = ["derive"], optional = true }
 
 [dev-dependencies]
-eframe = { version = "0.31.0", features = ["serde", "persistence"] }
-egui_extras = { version = "0.31.0", features = ["all_loaders"] }
-syn = { version = "2.0", features = ["extra-traits"] }
-serde_json = { version = "1.0" }
+eframe = { version = "0.31", features = ["serde", "persistence"] }
+egui_extras = { version = "0.31", features = ["all_loaders"] }
+syn = { version = "2", features = ["extra-traits"] }
+serde_json = { version = "1" }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-futures = "0.4"

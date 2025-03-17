@@ -211,6 +211,7 @@ pub fn draw_wire(
     from: Pos2,
     to: Pos2,
     mut stroke: Stroke,
+    threshold: f32,
     style: WireStyle,
 ) {
     if stroke.width < 1.0 {
@@ -232,7 +233,7 @@ pub fn draw_wire(
 
             let bb = Rect::from_points(&points);
             if ui.is_rect_visible(bb) {
-                draw_bezier_3(shapes, &points, stroke);
+                draw_bezier_3(shapes, &points, stroke, threshold);
             }
         }
 
@@ -241,12 +242,21 @@ pub fn draw_wire(
 
             let bb = Rect::from_points(&points);
             if ui.is_rect_visible(bb) {
-                draw_bezier_5(shapes, &points, stroke);
+                draw_bezier_5(shapes, &points, stroke, threshold);
             }
         }
 
         WireStyle::AxisAligned { corner_radius } => {
-            draw_axis_aligned(ui, shapes, corner_radius, frame_size, from, to, stroke);
+            draw_axis_aligned(
+                ui,
+                shapes,
+                corner_radius,
+                frame_size,
+                from,
+                to,
+                stroke,
+                threshold,
+            );
         }
     }
 }
@@ -313,8 +323,8 @@ fn bezier_samples_number(points: &[Pos2], threshold: f32) -> usize {
     ((reference_size / threshold).ceil().max(0.0) as usize).min(MAX_CURVE_SAMPLES)
 }
 
-fn draw_bezier_5(shapes: &mut Vec<Shape>, points: &[Pos2; 6], stroke: Stroke) {
-    let samples = bezier_samples_number(points, stroke.width);
+fn draw_bezier_5(shapes: &mut Vec<Shape>, points: &[Pos2; 6], stroke: Stroke, threshold: f32) {
+    let samples = bezier_samples_number(points, threshold);
 
     let mut path = Vec::new();
 
@@ -334,8 +344,8 @@ fn draw_bezier_5(shapes: &mut Vec<Shape>, points: &[Pos2; 6], stroke: Stroke) {
     shapes.push(shape);
 }
 
-fn draw_bezier_3(shapes: &mut Vec<Shape>, points: &[Pos2; 4], stroke: Stroke) {
-    let samples = bezier_samples_number(points, stroke.width);
+fn draw_bezier_3(shapes: &mut Vec<Shape>, points: &[Pos2; 4], stroke: Stroke, threshold: f32) {
+    let samples = bezier_samples_number(points, threshold);
 
     let mut path = Vec::new();
 
@@ -538,7 +548,13 @@ struct AxisAlignedWire {
 }
 
 #[allow(clippy::too_many_lines)]
-fn wire_axis_aligned(corner_radius: f32, frame_size: f32, from: Pos2, to: Pos2) -> AxisAlignedWire {
+fn wire_axis_aligned(
+    corner_radius: f32,
+    frame_size: f32,
+    from: Pos2,
+    to: Pos2,
+    threshold: f32,
+) -> AxisAlignedWire {
     let corner_radius = corner_radius.max(0.0);
 
     let half_height = f32::abs(from.y - to.y) / 2.0;
@@ -549,7 +565,7 @@ fn wire_axis_aligned(corner_radius: f32, frame_size: f32, from: Pos2, to: Pos2) 
     let zero_segment = (Pos2::ZERO, Pos2::ZERO);
 
     if from.x + frame_size <= to.x - frame_size {
-        if from.y == to.y {
+        if f32::abs(from.y - to.y) < threshold {
             // Single segment case.
             AxisAlignedWire {
                 aabb: Rect::from_two_pos(from, to),
@@ -681,7 +697,7 @@ fn hit_axis_aligned(
     to: Pos2,
     threshold: f32,
 ) -> bool {
-    let wire = wire_axis_aligned(corner_radius, frame_size, from, to);
+    let wire = wire_axis_aligned(corner_radius, frame_size, from, to, threshold);
 
     // Check AABB first
     if !wire.aabb.expand(threshold).contains(pos) {
@@ -734,6 +750,7 @@ fn turn_samples_number(radius: f32, threshold: f32) -> usize {
     ((reference_size / threshold).ceil().max(0.0) as usize).min(MAX_CURVE_SAMPLES / 4)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_axis_aligned(
     ui: &Ui,
     shapes: &mut Vec<Shape>,
@@ -742,6 +759,7 @@ fn draw_axis_aligned(
     from: Pos2,
     to: Pos2,
     stroke: Stroke,
+    threshold: f32,
 ) {
     let aabb = Rect::from_two_pos(from, to);
 
@@ -749,7 +767,7 @@ fn draw_axis_aligned(
         return;
     }
 
-    let wire = wire_axis_aligned(corner_radius, frame_size, from, to);
+    let wire = wire_axis_aligned(corner_radius, frame_size, from, to, threshold);
 
     let mut path = Vec::new();
 

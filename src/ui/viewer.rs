@@ -1,4 +1,4 @@
-use egui::{Painter, Pos2, Rect, Style, Ui};
+use egui::{emath::TSTransform, Painter, Pos2, Rect, Style, Ui};
 
 use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
@@ -121,7 +121,7 @@ pub trait SnarlViewer<T> {
 
     /// Returns number of input pins of the node.
     ///
-    /// [`SnarlViewer::show_input`] and [`SnarlViewer::draw_input_pin`] will be called for each input in range `0..inputs()`.
+    /// [`SnarlViewer::show_input`] will be called for each input in range `0..inputs()`.
     fn inputs(&mut self, node: &T) -> usize;
 
     /// Renders one specified node's input element and returns drawer for the corresponding pin.
@@ -134,7 +134,7 @@ pub trait SnarlViewer<T> {
 
     /// Returns number of output pins of the node.
     ///
-    /// [`SnarlViewer::show_output`] and [`SnarlViewer::show_output_ping`] will be called for each output in range `0..outputs()`.
+    /// [`SnarlViewer::show_output`] will be called for each output in range `0..outputs()`.
     fn outputs(&mut self, node: &T) -> usize;
 
     /// Renders the node's output.
@@ -325,6 +325,7 @@ pub trait SnarlViewer<T> {
     /// By default it draws the background pattern using [`BackgroundPattern::draw`].
     ///
     /// If you want to draw the background yourself, you can override this method.
+    #[inline]
     fn draw_background(
         &mut self,
         background: Option<&BackgroundPattern>,
@@ -339,5 +340,16 @@ pub trait SnarlViewer<T> {
         if let Some(background) = background {
             background.draw(viewport, snarl_style, style, painter);
         }
+    }
+
+    /// Informs the viewer what is the current transform of the snarl view
+    /// and allows viewer to override it.
+    ///
+    /// This method is called in the beginning of the graph rendering.
+    ///
+    /// By default it does nothing.
+    #[inline]
+    fn current_transform(&mut self, to_global: &mut TSTransform, snarl: &mut Snarl<T>) {
+        let _ = (to_global, snarl);
     }
 }

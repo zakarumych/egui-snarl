@@ -5,10 +5,16 @@
 //!
 //!
 
-#![deny(missing_docs)]
-#![deny(clippy::correctness, clippy::complexity, clippy::perf, clippy::style)]
-// #![warn(clippy::pedantic)]
-#![allow(clippy::inline_always, clippy::use_self)]
+#![deny(missing_docs, non_ascii_idents, unsafe_code)]
+#![deny(
+    clippy::correctness,
+    clippy::complexity,
+    clippy::perf,
+    clippy::style,
+    clippy::suspicious
+)]
+#![warn(clippy::pedantic, clippy::dbg_macro, clippy::must_use_candidate)]
+#![allow(clippy::range_plus_one, clippy::inline_always)]
 
 pub mod ui;
 

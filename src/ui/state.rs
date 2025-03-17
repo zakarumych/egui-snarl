@@ -1,8 +1,13 @@
-use std::hash::Hash;
-
-use egui::{ahash::HashSet, emath::GuiRounding, style::Spacing, Context, Id, Pos2, Rect, Ui, Vec2};
+use egui::{
+    ahash::HashSet,
+    emath::{GuiRounding, TSTransform},
+    style::Spacing,
+    Context, Id, Pos2, Rect, Ui, Vec2,
+};
 
 use crate::{InPinId, NodeId, OutPinId, Snarl};
+
+use super::{transform_matching_points, SnarlWidget};
 
 /// Node UI state.
 pub struct NodeState {
@@ -113,8 +118,8 @@ struct RectSelect {
 }
 
 pub struct SnarlState {
-    /// Where viewport in graph's space.
-    viewport: Rect,
+    /// Snarl viewport transform to global space.
+    to_global: TSTransform,
 
     new_wires: Option<NewWires>,
 
@@ -126,92 +131,71 @@ pub struct SnarlState {
     /// Flag indicating that the link menu is open.
     is_link_menu_open: bool,
 
-    /// Order of nodes to draw.
-    draw_order: Vec<NodeId>,
-
     /// Active rect selection.
     rect_selection: Option<RectSelect>,
+
+    /// Order of nodes to draw.
+    draw_order: Vec<NodeId>,
 
     /// List of currently selected nodes.
     selected_nodes: Vec<NodeId>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct DrawOrder(Vec<NodeId>);
 
-#[derive(Clone)]
+impl DrawOrder {
+    fn save(self, cx: &Context, id: Id) {
+        cx.data_mut(|d| {
+            if self.0.is_empty() {
+                d.remove_temp::<Self>(id);
+            } else {
+                d.insert_temp::<Self>(id, self);
+            }
+        });
+    }
+
+    fn load(cx: &Context, id: Id) -> Self {
+        cx.data(|d| d.get_temp::<Self>(id)).unwrap_or_default()
+    }
+}
+
+#[derive(Clone, Default)]
 struct SelectedNodes(Vec<NodeId>);
 
-struct SnarlStateData {
-    viewport: Rect,
-    is_link_menu_open: bool,
-    draw_order: Vec<NodeId>,
-    new_wires: Option<NewWires>,
-    rect_selection: Option<RectSelect>,
-    selected_nodes: Vec<NodeId>,
+impl SelectedNodes {
+    fn save(self, cx: &Context, id: Id) {
+        cx.data_mut(|d| {
+            if self.0.is_empty() {
+                d.remove_temp::<Self>(id);
+            } else {
+                d.insert_temp::<Self>(id, self);
+            }
+        });
+    }
+
+    fn load(cx: &Context, id: Id) -> Self {
+        cx.data(|d| d.get_temp::<Self>(id)).unwrap_or_default()
+    }
 }
 
 #[derive(Clone)]
-struct SnarlStateDataHeader {
-    viewport: Rect,
+struct SnarlStateData {
+    to_global: TSTransform,
     is_link_menu_open: bool,
+    new_wires: Option<NewWires>,
+    rect_selection: Option<RectSelect>,
 }
 
 impl SnarlStateData {
     fn save(self, cx: &Context, id: Id) {
         cx.data_mut(|d| {
-            d.insert_temp(
-                id,
-                SnarlStateDataHeader {
-                    viewport: self.viewport,
-                    is_link_menu_open: self.is_link_menu_open,
-                },
-            );
-
-            if let Some(new_wires) = self.new_wires {
-                d.insert_temp::<NewWires>(id, new_wires);
-            } else {
-                d.remove::<NewWires>(id);
-            }
-
-            if let Some(rect_selection) = self.rect_selection {
-                d.insert_temp::<RectSelect>(id, rect_selection);
-            } else {
-                d.remove::<RectSelect>(id);
-            }
-
-            if self.selected_nodes.is_empty() {
-                d.remove::<SelectedNodes>(id);
-            } else {
-                d.insert_temp::<SelectedNodes>(id, SelectedNodes(self.selected_nodes));
-            }
-
-            if self.draw_order.is_empty() {
-                d.remove::<DrawOrder>(id);
-            } else {
-                d.insert_temp::<DrawOrder>(id, DrawOrder(self.draw_order));
-            }
+            d.insert_temp(id, self);
         });
     }
 
     fn load(cx: &Context, id: Id) -> Option<Self> {
-        cx.data(|d| {
-            let small = d.get_temp::<SnarlStateDataHeader>(id)?;
-            let new_wires = d.get_temp(id);
-            let rect_selection = d.get_temp(id);
-
-            let selected_nodes = d.get_temp(id).unwrap_or(SelectedNodes(Vec::new())).0;
-            let draw_order = d.get_temp(id).unwrap_or(DrawOrder(Vec::new())).0;
-
-            Some(SnarlStateData {
-                viewport: small.viewport,
-                is_link_menu_open: small.is_link_menu_open,
-                new_wires,
-                rect_selection,
-                selected_nodes,
-                draw_order,
-            })
-        })
+        cx.data(|d| d.get_temp(id))
     }
 }
 
@@ -222,27 +206,37 @@ fn prune_selected_nodes<T>(selected_nodes: &mut Vec<NodeId>, snarl: &Snarl<T>) -
 }
 
 impl SnarlState {
-    pub fn load<T>(cx: &Context, id: Id, snarl: &Snarl<T>, ui_rect: Rect) -> Self {
-        let Some(mut data) = SnarlStateData::load(cx, id) else {
+    pub fn load<T>(
+        cx: &Context,
+        id: Id,
+        snarl: &Snarl<T>,
+        ui_rect: Rect,
+        min_scale: f32,
+        max_scale: f32,
+    ) -> Self {
+        let Some(data) = SnarlStateData::load(cx, id) else {
             cx.request_discard("Initial placing");
-            return Self::initial(id, snarl, ui_rect);
+            return Self::initial(id, snarl, ui_rect, min_scale, max_scale);
         };
 
-        let dirty = prune_selected_nodes(&mut data.selected_nodes, snarl);
+        let mut selected_nodes = SelectedNodes::load(cx, id).0;
+        let dirty = prune_selected_nodes(&mut selected_nodes, snarl);
+
+        let draw_order = DrawOrder::load(cx, id).0;
 
         SnarlState {
-            viewport: data.viewport,
+            to_global: data.to_global,
             new_wires: data.new_wires,
             is_link_menu_open: data.is_link_menu_open,
             id,
             dirty,
-            draw_order: data.draw_order,
             rect_selection: data.rect_selection,
-            selected_nodes: data.selected_nodes,
+            draw_order,
+            selected_nodes,
         }
     }
 
-    fn initial<T>(id: Id, snarl: &Snarl<T>, ui_rect: Rect) -> Self {
+    fn initial<T>(id: Id, snarl: &Snarl<T>, ui_rect: Rect, min_scale: f32, max_scale: f32) -> Self {
         let mut bb = Rect::NOTHING;
 
         for (_, node) in &snarl.nodes {
@@ -257,8 +251,13 @@ impl SnarlState {
             bb = Rect::from_min_max(Pos2::new(-100.0, -100.0), Pos2::new(100.0, 100.0));
         }
 
+        let scaling2 = ui_rect.size() / bb.size();
+        let scaling = scaling2.min_elem().clamp(min_scale, max_scale);
+
+        let to_global = transform_matching_points(bb.center(), ui_rect.center(), scaling);
+
         SnarlState {
-            viewport: bb,
+            to_global,
             new_wires: None,
             is_link_menu_open: false,
             id,
@@ -275,24 +274,37 @@ impl SnarlState {
 
         if self.dirty {
             let data = SnarlStateData {
-                viewport: self.viewport,
+                to_global: self.to_global,
                 new_wires: self.new_wires,
                 is_link_menu_open: self.is_link_menu_open,
-                draw_order: self.draw_order,
                 rect_selection: self.rect_selection,
-                selected_nodes: self.selected_nodes,
             };
             data.save(cx, self.id);
+
+            DrawOrder(self.draw_order).save(cx, self.id);
+            SelectedNodes(self.selected_nodes).save(cx, self.id);
         }
     }
 
-    pub fn viewport(&self) -> Rect {
-        self.viewport
+    pub fn to_global(&self) -> TSTransform {
+        self.to_global
     }
 
-    pub fn set_viewport(&mut self, viewport: Rect) {
-        if self.viewport != viewport {
-            self.viewport = viewport;
+    pub fn set_to_global(&mut self, to_global: TSTransform) {
+        if self.to_global != to_global {
+            self.to_global = to_global;
+            self.dirty = true;
+        }
+    }
+
+    pub fn look_at(&mut self, view: Rect, ui_rect: Rect, min_scale: f32, max_scale: f32) {
+        let scaling2 = ui_rect.size() / view.size();
+        let scaling = scaling2.min_elem().clamp(min_scale, max_scale);
+
+        let to_global = transform_matching_points(view.center(), ui_rect.center(), scaling);
+
+        if self.to_global != to_global {
+            self.to_global = to_global;
             self.dirty = true;
         }
     }
@@ -505,26 +517,34 @@ impl SnarlState {
     }
 }
 
-impl<T> Snarl<T> {
-    /// Returns nodes selected in the UI.
+impl SnarlWidget {
+    /// Returns list of nodes selected in the UI for the `SnarlWidget` with same id.
     ///
-    /// Use `id_salt` and [`Ui`] that were used in [`Snarl::show`] method.
-    ///
-    /// If same [`Ui`] is not available, use [`Snarl::get_selected_nodes_at`] and provide `id` of the [`Ui`] used in [`Snarl::show`] method.
-    pub fn get_selected_nodes(id_salt: impl Hash, ui: &mut Ui) -> Vec<NodeId> {
-        Self::get_selected_nodes_at(id_salt, ui.id(), ui.ctx())
+    /// Use same `Ui` instance that was used in [`SnarlWidget::show`].
+    #[must_use]
+    #[inline]
+    pub fn get_selected_nodes(self, ui: &Ui) -> Vec<NodeId> {
+        self.get_selected_nodes_at(ui.id(), ui.ctx())
     }
 
-    /// Returns nodes selected in the UI.
+    /// Returns list of nodes selected in the UI for the `SnarlWidget` with same id.
     ///
-    /// Use `id_salt` as well as [`Id`] and [`Context`] of the [`Ui`] that were used in [`Snarl::show`] method.
-    pub fn get_selected_nodes_at(id_salt: impl Hash, id: Id, cx: &Context) -> Vec<NodeId> {
-        let snarl_id = id.with(id_salt);
+    /// `ui_id` must be the Id of the `Ui` instance that was used in [`SnarlWidget::show`].
+    #[must_use]
+    #[inline]
+    pub fn get_selected_nodes_at(self, ui_id: Id, ctx: &Context) -> Vec<NodeId> {
+        let snarl_id = self.get_id(ui_id);
 
-        cx.data(|d| {
-            d.get_temp::<SelectedNodes>(snarl_id)
-                .unwrap_or(SelectedNodes(Vec::new()))
-                .0
-        })
+        ctx.data(|d| d.get_temp::<SelectedNodes>(snarl_id).unwrap_or_default().0)
     }
+}
+
+/// Returns nodes selected in the UI for the `SnarlWidget` with same ID.
+///
+/// Only works if [`SnarlWidget::id`] was used.
+/// For other cases construct [`SnarlWidget`] and use [`SnarlWidget::get_selected_nodes`] or [`SnarlWidget::get_selected_nodes_at`].
+#[must_use]
+#[inline]
+pub fn get_selected_nodes(id: Id, ctx: &Context) -> Vec<NodeId> {
+    ctx.data(|d| d.get_temp::<SelectedNodes>(id).unwrap_or_default().0)
 }

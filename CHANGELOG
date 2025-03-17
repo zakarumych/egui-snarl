@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - Unreleased
+
+### Added
+
+- `SnarlViewer::current_transform` method to receive and possibly modify the current transform of the snarl's UI layer.
+
+### Changed
+
+- Snarl is now scaled using egui's layer scaling mechanism.
+  Removes layout twitching when zooming in and out.
+  Simplifies interface of `SnarlViewer`.
+
+## [0.7.1] - 19.02.2025
+
+### Added
+
+- `SnarlPin::pin_rect` method allows custom type to override default pin position and size.
+
+## [0.7.0] - 19.02.2025
+
+### Changed
+
+- `SnarlViewer::show_input` and `SnarlViewer::show_output` now returns `impl SnarlPin`
+  that allows fully custom pin drawing.
+  This replaces `SnarlViewer::draw_input_pin` and `SnarlViewer::draw_output_pin`.
+
+### Removed
+
+- `SnarlViewer::draw_input_pin` and `SnarlViewer::draw_output_pin` are removed.
+  Return custom type from `SnarlViewer::show_input` and `SnarlViewer::show_output` instead.
+
 ## [0.6.0] - 20.12.2024
 
 ### Changed

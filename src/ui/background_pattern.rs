@@ -59,7 +59,8 @@ impl Grid {
         let min_x = (pattern_bounds.min.x / spacing.x).ceil();
         let max_x = (pattern_bounds.max.x / spacing.x).floor();
 
-        for x in 0..=(max_x - min_x) as i64 {
+        #[allow(clippy::cast_possible_truncation)]
+        for x in 0..=f32::ceil(max_x - min_x) as i64 {
             #[allow(clippy::cast_precision_loss)]
             let x = (x as f32 + min_x) * spacing.x;
 
@@ -72,7 +73,8 @@ impl Grid {
         let min_y = (pattern_bounds.min.y / spacing.y).ceil();
         let max_y = (pattern_bounds.max.y / spacing.y).floor();
 
-        for y in 0..=(max_y - min_y) as i64 {
+        #[allow(clippy::cast_possible_truncation)]
+        for y in 0..=f32::ceil(max_y - min_y) as i64 {
             #[allow(clippy::cast_precision_loss)]
             let y = (y as f32 + min_y) * spacing.y;
 
