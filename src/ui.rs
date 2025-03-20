@@ -361,6 +361,13 @@ pub struct SnarlStyle {
     )]
     pub crisp_magnified_text: Option<bool>,
 
+    /// Controls smoothness of wire curves.
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    pub wire_smoothness: Option<f32>,
+
     #[doc(hidden)]
     #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
@@ -491,8 +498,12 @@ impl SnarlStyle {
         })
     }
 
-    fn crisp_magnified_text(&self) -> bool {
+    fn get_crisp_magnified_text(&self) -> bool {
         self.crisp_magnified_text.unwrap_or(false)
+    }
+
+    fn get_wire_smoothness(&self) -> f32 {
+        self.wire_smoothness.unwrap_or(1.0)
     }
 }
 
@@ -579,6 +590,7 @@ impl SnarlStyle {
             select_rect_contained: None,
             select_style: None,
             crisp_magnified_text: None,
+            wire_smoothness: None,
 
             _non_exhaustive: (),
         }
@@ -775,7 +787,7 @@ where
             .sense(Sense::click_and_drag()),
     );
 
-    if style.crisp_magnified_text() {
+    if style.get_crisp_magnified_text() {
         style.zoom(max_scale);
         ui.style_mut().zoom(max_scale);
 
@@ -848,7 +860,7 @@ where
 
     let wire_frame_size = style.get_wire_frame_size(ui.style());
     let wire_width = style.get_wire_width(ui.style());
-    let wire_threshold = wire_width.max(1.5);
+    let wire_threshold = style.get_wire_smoothness();
 
     let wire_shape_idx = match style.get_wire_layer() {
         WireLayer::BehindNodes => Some(ui.painter().add(Shape::Noop)),
@@ -930,7 +942,7 @@ where
                     style.get_downscale_wire_frame(),
                     from_r.pos,
                     to_r.pos,
-                    wire_threshold,
+                    wire_width.max(2.0),
                     pick_wire_style(from_r.wire_style, to_r.wire_style),
                 );
 
@@ -955,6 +967,8 @@ where
 
         draw_wire(
             &ui,
+            snarl_id,
+            Some(wire),
             &mut wire_shapes,
             wire_frame_size,
             style.get_upscale_wire_frame(),
@@ -1130,6 +1144,8 @@ where
 
                 draw_wire(
                     &ui,
+                    snarl_id,
+                    None,
                     &mut wire_shapes,
                     wire_frame_size,
                     style.get_upscale_wire_frame(),
@@ -1149,6 +1165,8 @@ where
 
                 draw_wire(
                     &ui,
+                    snarl_id,
+                    None,
                     &mut wire_shapes,
                     wire_frame_size,
                     style.get_upscale_wire_frame(),

@@ -1,6 +1,13 @@
 use core::f32;
 
-use egui::{epaint::PathShape, pos2, Color32, Pos2, Rect, Shape, Stroke, Ui};
+use egui::{
+    ahash::HashMap, cache::CacheTrait, epaint::PathShape, pos2, Color32, Id, Pos2, Rect, Shape,
+    Stroke, Ui,
+};
+
+use crate::Wire;
+
+const MAX_CURVE_SAMPLES: usize = 100;
 
 /// Layer where wires are rendered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -68,10 +75,10 @@ fn adjust_frame_size(
 ) -> f32 {
     let length = (from - to).length();
     if upscale {
-        frame_size = frame_size.max(length / 4.0);
+        frame_size = frame_size.max(length / 6.0);
     }
     if downscale {
-        frame_size = frame_size.min(length / 4.0);
+        frame_size = frame_size.min(length / 6.0);
     }
     frame_size
 }
@@ -204,6 +211,8 @@ fn wire_bezier_5(frame_size: f32, from: Pos2, to: Pos2) -> [Pos2; 6] {
 #[allow(clippy::too_many_arguments)]
 pub fn draw_wire(
     ui: &Ui,
+    snarl_id: Id,
+    wire: Option<Wire>,
     shapes: &mut Vec<Shape>,
     frame_size: f32,
     upscale: bool,
@@ -228,34 +237,27 @@ pub fn draw_wire(
             }
         }
         WireStyle::Bezier3 => {
-            let [a, _, b, c, _, d] = wire_bezier_5(frame_size, from, to);
+            let [a, b, _, _, c, d] = wire_bezier_5(frame_size, from, to);
             let points = [a, b, c, d];
 
-            let bb = Rect::from_points(&points);
-            if ui.is_rect_visible(bb) {
-                draw_bezier_3(shapes, &points, stroke, threshold);
-            }
+            draw_bezier_3(ui, snarl_id, wire, &points, stroke, threshold, shapes);
         }
 
         WireStyle::Bezier5 => {
             let points = wire_bezier_5(frame_size, from, to);
 
-            let bb = Rect::from_points(&points);
-            if ui.is_rect_visible(bb) {
-                draw_bezier_5(shapes, &points, stroke, threshold);
-            }
+            draw_bezier_5(ui, snarl_id, wire, &points, stroke, threshold, shapes);
         }
 
         WireStyle::AxisAligned { corner_radius } => {
             draw_axis_aligned(
-                ui,
-                shapes,
                 corner_radius,
                 frame_size,
                 from,
                 to,
                 stroke,
                 threshold,
+                shapes,
             );
         }
     }
@@ -290,13 +292,13 @@ pub fn hit_wire(
             dist2 < threshold * threshold
         }
         WireStyle::Bezier3 => {
-            let [a, _, b, c, _, d] = wire_bezier_5(frame_size, from, to);
+            let [a, b, _, _, c, d] = wire_bezier_5(frame_size, from, to);
             let points = [a, b, c, d];
-            hit_bezier_3(pos, &points, threshold)
+            hit_bezier_3(&points, pos, threshold)
         }
         WireStyle::Bezier5 => {
             let points = wire_bezier_5(frame_size, from, to);
-            hit_bezier_5(pos, &points, threshold)
+            hit_bezier_5(&points, pos, threshold)
         }
         WireStyle::AxisAligned { corner_radius } => {
             hit_axis_aligned(pos, corner_radius, frame_size, from, to, threshold)
@@ -305,7 +307,7 @@ pub fn hit_wire(
 }
 
 #[inline]
-fn curve_reference_size(points: &[Pos2]) -> f32 {
+fn bezier_arc_length_upper_bound(points: &[Pos2]) -> f32 {
     let mut size = 0.0;
     for i in 1..points.len() {
         size += (points[i] - points[i - 1]).length();
@@ -313,59 +315,328 @@ fn curve_reference_size(points: &[Pos2]) -> f32 {
     size
 }
 
-const MAX_CURVE_SAMPLES: usize = 100;
-
-fn bezier_samples_number(points: &[Pos2], threshold: f32) -> usize {
-    let reference_size = curve_reference_size(points);
+fn bezier_hit_samples_number(points: &[Pos2], threshold: f32) -> usize {
+    let arc_length = bezier_arc_length_upper_bound(points);
 
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_possible_truncation)]
-    ((reference_size / threshold).ceil().max(0.0) as usize).min(MAX_CURVE_SAMPLES)
+    ((arc_length / threshold).ceil().max(0.0) as usize)
 }
 
-fn draw_bezier_5(shapes: &mut Vec<Shape>, points: &[Pos2; 6], stroke: Stroke, threshold: f32) {
-    let samples = bezier_samples_number(points, threshold);
+fn bezier_derivative_3(points: &[Pos2; 4]) -> [Pos2; 3] {
+    let [p0, p1, p2, p3] = *points;
 
-    let mut path = Vec::new();
+    let factor = 3.0;
 
-    for i in 0..samples {
-        #[allow(clippy::cast_precision_loss)]
-        let t = i as f32 / (samples - 1) as f32;
-        path.push(sample_bezier(points, t));
+    [
+        (factor * (p1 - p0)).to_pos2(),
+        (factor * (p2 - p1)).to_pos2(),
+        (factor * (p3 - p2)).to_pos2(),
+    ]
+}
+
+fn bezier_derivative_5(points: &[Pos2; 6]) -> [Pos2; 5] {
+    let [p0, p1, p2, p3, p4, p5] = *points;
+
+    let factor = 5.0;
+
+    [
+        (factor * (p1 - p0)).to_pos2(),
+        (factor * (p2 - p1)).to_pos2(),
+        (factor * (p3 - p2)).to_pos2(),
+        (factor * (p4 - p3)).to_pos2(),
+        (factor * (p5 - p4)).to_pos2(),
+    ]
+}
+
+fn bezier_draw_samples_number_3(points: &[Pos2; 4], threshold: f32) -> usize {
+    let d = bezier_derivative_3(points);
+
+    lower_bound(2, MAX_CURVE_SAMPLES, |n| {
+        let mut prev = points[0];
+        for i in 1..n {
+            #[allow(clippy::cast_precision_loss)]
+            let t = i as f32 / (n - 1) as f32;
+            let next = sample_bezier(points, t);
+
+            let m = t - 0.5 / (n - 1) as f32;
+
+            // Compare absolute error of mid point
+            let mid_line = ((prev.to_vec2() + next.to_vec2()) * 0.5).to_pos2();
+            let mid_curve = sample_bezier(points, m);
+
+            let error_sq = (mid_curve - mid_line).length_sq();
+            if error_sq > threshold * threshold {
+                return false;
+            }
+
+            // Compare angular error of mid point
+            let mid_line_dx = next.x - prev.x;
+            let mid_line_dy = next.y - prev.y;
+
+            let line_w = f32::hypot(mid_line_dx, mid_line_dy);
+
+            let d_curve = sample_bezier(&d, m);
+            let mid_curve_dx = d_curve.x;
+            let mid_curve_dy = d_curve.y;
+
+            let curve_w = f32::hypot(mid_curve_dx, mid_curve_dy);
+
+            let error = f32::max(
+                (mid_curve_dx / curve_w * line_w - mid_line_dx).abs(),
+                (mid_curve_dy / curve_w * line_w - mid_line_dy).abs(),
+            );
+            if error > threshold * 2.0 {
+                return false;
+            }
+
+            prev = next;
+        }
+
+        true
+    })
+}
+
+fn bezier_draw_samples_number_5(points: &[Pos2; 6], threshold: f32) -> usize {
+    let d = bezier_derivative_5(points);
+
+    lower_bound(2, MAX_CURVE_SAMPLES, |n| {
+        let mut prev = points[0];
+        for i in 1..n {
+            #[allow(clippy::cast_precision_loss)]
+            let t = i as f32 / (n - 1) as f32;
+            let next = sample_bezier(points, t);
+
+            let m = t - 0.5 / (n - 1) as f32;
+
+            // Compare absolute error of mid point
+            let mid_line = ((prev.to_vec2() + next.to_vec2()) * 0.5).to_pos2();
+            let mid_curve = sample_bezier(points, m);
+
+            let error_sq = (mid_curve - mid_line).length_sq();
+            if error_sq > threshold * threshold {
+                return false;
+            }
+
+            // Compare angular error of mid point
+            let mid_line_dx = next.x - prev.x;
+            let mid_line_dy = next.y - prev.y;
+
+            let line_w = f32::hypot(mid_line_dx, mid_line_dy);
+
+            let d_curve = sample_bezier(&d, m);
+            let mid_curve_dx = d_curve.x;
+            let mid_curve_dy = d_curve.y;
+
+            let curve_w = f32::hypot(mid_curve_dx, mid_curve_dy);
+
+            let error = f32::max(
+                (mid_curve_dx / curve_w * line_w - mid_line_dx).abs(),
+                (mid_curve_dy / curve_w * line_w - mid_line_dy).abs(),
+            );
+            if error > threshold * 2.0 {
+                return false;
+            }
+
+            prev = next;
+        }
+
+        true
+    })
+}
+
+#[derive(Default)]
+struct WiresCache {
+    generation: u32,
+    bezier_3: HashMap<(Id, Option<Wire>), (u32, [Pos2; 4], f32, Vec<Pos2>)>,
+    bezier_5: HashMap<(Id, Option<Wire>), (u32, [Pos2; 6], f32, Vec<Pos2>)>,
+}
+
+impl CacheTrait for WiresCache {
+    fn update(&mut self) {
+        self.bezier_3
+            .retain(|_, (generation, _, _, _)| *generation == self.generation);
+        self.bezier_5
+            .retain(|_, (generation, _, _, _)| *generation == self.generation);
+
+        self.generation = self.generation.wrapping_add(1);
     }
 
-    let shape = Shape::Path(PathShape {
-        points: path,
-        closed: false,
-        fill: Color32::TRANSPARENT,
-        stroke: stroke.into(),
-    });
-
-    shapes.push(shape);
-}
-
-fn draw_bezier_3(shapes: &mut Vec<Shape>, points: &[Pos2; 4], stroke: Stroke, threshold: f32) {
-    let samples = bezier_samples_number(points, threshold);
-
-    let mut path = Vec::new();
-
-    for i in 0..samples {
-        #[allow(clippy::cast_precision_loss)]
-        let t = i as f32 / (samples - 1) as f32;
-        path.push(sample_bezier(points, t));
+    fn len(&self) -> usize {
+        self.bezier_3.len() + self.bezier_5.len()
     }
 
-    let shape = Shape::Path(PathShape {
-        points: path,
-        closed: false,
-        fill: Color32::TRANSPARENT,
-        stroke: stroke.into(),
-    });
-
-    shapes.push(shape);
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
-#[allow(clippy::let_and_return)]
+impl WiresCache {
+    pub fn get_3(
+        &mut self,
+        snarl_id: Id,
+        wire: Option<Wire>,
+        points: &[Pos2; 4],
+        threshold: f32,
+    ) -> Vec<Pos2> {
+        let (generation, cached_points, cached_threshold, cached_line) = self
+            .bezier_3
+            .entry((snarl_id, wire))
+            .or_insert_with(|| (0, [Pos2::ZERO; 4], threshold, Vec::new()));
+
+        *generation = self.generation;
+
+        if cached_points == points && *cached_threshold == threshold {
+            return cached_line.clone();
+        }
+
+        // dbg!("Calculating new bezier 3");
+
+        let samples = bezier_draw_samples_number_3(points, threshold);
+
+        let line = (0..samples)
+            .map(|i| {
+                #[allow(clippy::cast_precision_loss)]
+                let t = i as f32 / (samples - 1) as f32;
+                sample_bezier(points, t)
+            })
+            .collect::<Vec<Pos2>>();
+
+        *cached_points = *points;
+        *cached_threshold = threshold;
+        *cached_line = line.clone();
+
+        line
+    }
+
+    pub fn get_5(
+        &mut self,
+        snarl_id: Id,
+        wire: Option<Wire>,
+        points: &[Pos2; 6],
+        threshold: f32,
+    ) -> Vec<Pos2> {
+        let (generation, cached_points, cached_threshold, cached_line) = self
+            .bezier_5
+            .entry((snarl_id, wire))
+            .or_insert_with(|| (0, [Pos2::ZERO; 6], threshold, Vec::new()));
+
+        *generation = self.generation;
+
+        if cached_points == points && *cached_threshold == threshold {
+            return cached_line.clone();
+        }
+
+        // dbg!("Calculating new bezier 5");
+
+        let samples = bezier_draw_samples_number_5(points, threshold);
+
+        let line = (0..samples)
+            .map(|i| {
+                #[allow(clippy::cast_precision_loss)]
+                let t = i as f32 / (samples - 1) as f32;
+                sample_bezier(points, t)
+            })
+            .collect::<Vec<Pos2>>();
+
+        *cached_points = *points;
+        *cached_threshold = threshold;
+        *cached_line = line.clone();
+
+        line
+    }
+}
+
+#[inline(never)]
+fn draw_bezier_3(
+    ui: &Ui,
+    snarl_id: Id,
+    wire: Option<Wire>,
+    points: &[Pos2; 4],
+    stroke: Stroke,
+    threshold: f32,
+    shapes: &mut Vec<Shape>,
+) {
+    let bb = Rect::from_points(points);
+    if !ui.is_rect_visible(bb) {
+        return;
+    }
+
+    let line = ui.memory_mut(|m| {
+        m.caches
+            .cache::<WiresCache>()
+            .get_3(snarl_id, wire, points, threshold)
+    });
+
+    shapes.push(Shape::line(line, stroke));
+
+    // {
+    //     let samples = bezier_draw_samples_number_3(points, threshold);
+    //     // dbg!(samples, bezier_hit_samples_number(points, threshold));
+    //     shapes.push(Shape::line(
+    //         points.to_vec(),
+    //         Stroke::new(1.0, Color32::PLACEHOLDER),
+    //     ));
+
+    //     let samples = 100;
+    //     shapes.push(Shape::line(
+    //         (0..samples)
+    //             .map(|i| {
+    //                 #[allow(clippy::cast_precision_loss)]
+    //                 let t = i as f32 / (samples - 1) as f32;
+    //                 sample_bezier(points, t)
+    //             })
+    //             .collect(),
+    //         Stroke::new(1.0, Color32::PLACEHOLDER),
+    //     ));
+    // }
+}
+
+fn draw_bezier_5(
+    ui: &Ui,
+    snarl_id: Id,
+    wire: Option<Wire>,
+    points: &[Pos2; 6],
+    stroke: Stroke,
+    threshold: f32,
+    shapes: &mut Vec<Shape>,
+) {
+    let bb = Rect::from_points(points);
+    if !ui.is_rect_visible(bb) {
+        return;
+    }
+
+    let line = ui.memory_mut(|m| {
+        m.caches
+            .cache::<WiresCache>()
+            .get_5(snarl_id, wire, points, threshold)
+    });
+
+    shapes.push(Shape::line(line, stroke));
+
+    // {
+    //     let samples = bezier_draw_samples_number_5(points, threshold);
+    //     // dbg!(samples, bezier_hit_samples_number(points, threshold));
+    //     shapes.push(Shape::line(
+    //         points.to_vec(),
+    //         Stroke::new(1.0, Color32::PLACEHOLDER),
+    //     ));
+
+    //     let samples = 100;
+    //     shapes.push(Shape::line(
+    //         (0..samples)
+    //             .map(|i| {
+    //                 #[allow(clippy::cast_precision_loss)]
+    //                 let t = i as f32 / (samples - 1) as f32;
+    //                 sample_bezier(points, t)
+    //             })
+    //             .collect(),
+    //         Stroke::new(1.0, Color32::PLACEHOLDER),
+    //     ));
+    // }
+}
+
+// #[allow(clippy::let_and_return)]
 fn sample_bezier(points: &[Pos2], t: f32) -> Pos2 {
     match *points {
         [] => unimplemented!(),
@@ -449,7 +720,7 @@ fn split_bezier_3(points: &[Pos2; 4], t: f32) -> [[Pos2; 4]; 2] {
     [[p0_0, p0_1, p0_2, p0_3], [p0_3, p1_2, p2_1, p3_0]]
 }
 
-fn hit_bezier_3(pos: Pos2, points: &[Pos2; 4], threshold: f32) -> bool {
+fn hit_bezier_3(points: &[Pos2; 4], pos: Pos2, threshold: f32) -> bool {
     let aabb = Rect::from_points(points);
 
     let aabb_e = aabb.expand(threshold);
@@ -457,18 +728,20 @@ fn hit_bezier_3(pos: Pos2, points: &[Pos2; 4], threshold: f32) -> bool {
         return false;
     }
 
-    let samples = bezier_samples_number(points, threshold);
-    if samples > 16 {
+    let samples = bezier_hit_samples_number(points, threshold);
+    if samples > 8 {
         let [points1, points2] = split_bezier_3(points, 0.5);
 
-        return hit_bezier_3(pos, &points1, threshold) || hit_bezier_3(pos, &points2, threshold);
+        return hit_bezier_3(&points1, pos, threshold) || hit_bezier_3(&points2, pos, threshold);
     }
+
+    let threshold_sq = threshold * threshold;
 
     for i in 0..samples {
         #[allow(clippy::cast_precision_loss)]
         let t = i as f32 / (samples - 1) as f32;
         let p = sample_bezier(points, t);
-        if (p - pos).length() < threshold {
+        if p.distance_sq(pos) <= threshold_sq {
             return true;
         }
     }
@@ -512,7 +785,7 @@ fn split_bezier_5(points: &[Pos2; 6], t: f32) -> [[Pos2; 6]; 2] {
     ]
 }
 
-fn hit_bezier_5(pos: Pos2, points: &[Pos2; 6], threshold: f32) -> bool {
+fn hit_bezier_5(points: &[Pos2; 6], pos: Pos2, threshold: f32) -> bool {
     let aabb = Rect::from_points(points);
 
     let aabb_e = aabb.expand(threshold);
@@ -520,18 +793,21 @@ fn hit_bezier_5(pos: Pos2, points: &[Pos2; 6], threshold: f32) -> bool {
         return false;
     }
 
-    let samples = bezier_samples_number(points, threshold);
+    let samples = bezier_hit_samples_number(points, threshold);
     if samples > 16 {
         let [points1, points2] = split_bezier_5(points, 0.5);
 
-        return hit_bezier_5(pos, &points1, threshold) || hit_bezier_5(pos, &points2, threshold);
+        return hit_bezier_5(&points1, pos, threshold) || hit_bezier_5(&points2, pos, threshold);
     }
+
+    let threshold_sq = threshold * threshold;
 
     for i in 0..samples {
         #[allow(clippy::cast_precision_loss)]
         let t = i as f32 / (samples - 1) as f32;
         let p = sample_bezier(points, t);
-        if (p - pos).length() < threshold {
+
+        if p.distance_sq(pos) <= threshold_sq {
             return true;
         }
     }
@@ -752,21 +1028,14 @@ fn turn_samples_number(radius: f32, threshold: f32) -> usize {
 
 #[allow(clippy::too_many_arguments)]
 fn draw_axis_aligned(
-    ui: &Ui,
-    shapes: &mut Vec<Shape>,
     corner_radius: f32,
     frame_size: f32,
     from: Pos2,
     to: Pos2,
     stroke: Stroke,
     threshold: f32,
+    shapes: &mut Vec<Shape>,
 ) {
-    let aabb = Rect::from_two_pos(from, to);
-
-    if !ui.is_rect_visible(aabb) {
-        return;
-    }
-
     let wire = wire_axis_aligned(corner_radius, frame_size, from, to, threshold);
 
     let mut path = Vec::new();
@@ -825,4 +1094,27 @@ fn draw_axis_aligned(
     });
 
     shapes.push(shape);
+}
+
+fn lower_bound(min: usize, max: usize, f: impl Fn(usize) -> bool) -> usize {
+    let mut min = min;
+    let mut max = max;
+
+    while min < max {
+        let mid = (min + max) / 2;
+        if f(mid) {
+            max = mid;
+        } else {
+            min = mid + 1;
+        }
+    }
+
+    min
+
+    // for i in min..max {
+    //     if f(i) {
+    //         return i;
+    //     }
+    // }
+    // max
 }
