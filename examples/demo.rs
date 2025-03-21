@@ -5,11 +5,11 @@ use std::collections::HashMap;
 use eframe::{App, CreationContext};
 use egui::{Color32, Id, Ui};
 use egui_snarl::{
-    ui::{
-        get_selected_nodes, AnyPins, NodeLayout, PinInfo, PinPlacement, SnarlStyle, SnarlViewer,
-        SnarlWidget, WireStyle,
-    },
     InPin, InPinId, NodeId, OutPin, OutPinId, Snarl,
+    ui::{
+        AnyPins, NodeLayout, PinInfo, PinPlacement, SnarlStyle, SnarlViewer, SnarlWidget,
+        WireStyle, get_selected_nodes,
+    },
 };
 
 const STRING_COLOR: Color32 = Color32::from_rgb(0x00, 0xb0, 0x00);
@@ -700,17 +700,13 @@ impl Expr {
             |name: &str| bindings.iter().position(|binding| binding == name).unwrap();
 
         match self {
-            Expr::Var(ref name) => args[binding_index(name)],
+            Expr::Var(name) => args[binding_index(name)],
             Expr::Val(value) => *value,
-            Expr::UnOp { op, ref expr } => match op {
+            Expr::UnOp { op, expr } => match op {
                 UnOp::Pos => expr.eval(bindings, args),
                 UnOp::Neg => -expr.eval(bindings, args),
             },
-            Expr::BinOp {
-                ref lhs,
-                op,
-                ref rhs,
-            } => match op {
+            Expr::BinOp { lhs, op, rhs } => match op {
                 BinOp::Add => lhs.eval(bindings, args) + rhs.eval(bindings, args),
                 BinOp::Sub => lhs.eval(bindings, args) - rhs.eval(bindings, args),
                 BinOp::Mul => lhs.eval(bindings, args) * rhs.eval(bindings, args),

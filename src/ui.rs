@@ -3,14 +3,15 @@
 use std::{collections::HashMap, hash::Hash};
 
 use egui::{
+    Align, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers, PointerButton,
+    Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, UiKind, UiStackInfo,
+    Vec2,
     collapsing_header::paint_default_icon,
     emath::{GuiRounding, TSTransform},
     epaint::Shadow,
     pos2,
     response::Flags,
-    vec2, Align, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers,
-    PointerButton, Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder,
-    UiKind, UiStackInfo, Vec2,
+    vec2,
 };
 use zoom::Zoom;
 
@@ -365,6 +366,10 @@ pub struct SnarlStyle {
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    #[cfg_attr(
+        feature = "egui-probe",
+        egui_probe(range = 0.0f32..=10.0f32 by 0.05f32)
     )]
     pub wire_smoothness: Option<f32>,
 
@@ -802,6 +807,10 @@ where
         .zoom_range(min_scale..=max_scale)
         .register_pan_and_zoom(&ui, &mut snarl_resp, &mut to_global);
 
+    if snarl_resp.changed() {
+        ui.ctx().request_repaint();
+    }
+
     // Inform viewer about current transform.
     viewer.current_transform(&mut to_global, snarl);
 
@@ -936,12 +945,16 @@ where
 
             if let Some(latest_pos) = latest_pos {
                 let wire_hit = hit_wire(
-                    latest_pos,
+                    ui.ctx(),
+                    snarl_id,
+                    wire,
                     wire_frame_size,
                     style.get_upscale_wire_frame(),
                     style.get_downscale_wire_frame(),
                     from_r.pos,
                     to_r.pos,
+                    latest_pos,
+                    wire_threshold,
                     wire_width.max(2.0),
                     pick_wire_style(from_r.wire_style, to_r.wire_style),
                 );
@@ -998,11 +1011,7 @@ where
                 select_rect.intersects(rect)
             };
 
-            if select {
-                Some(id)
-            } else {
-                None
-            }
+            if select { Some(id) } else { None }
         });
 
         if modifiers.command {
