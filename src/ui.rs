@@ -138,6 +138,9 @@ pub enum PinPlacement {
         /// Margin between node frame and pins.
         margin: f32,
     },
+
+    /// Pins are placed at the center of the node frame.
+    Center,
 }
 
 /// Style for rendering Snarl.
@@ -1681,6 +1684,7 @@ where
             PinPlacement::Outside { margin } => {
                 pin_size.mul_add(-0.5, node_frame_rect.left() - margin)
             }
+            PinPlacement::Center => node_frame_rect.center().x,
         };
 
         // Input pins' spacing required.
@@ -1692,6 +1696,7 @@ where
                     .max(0.0),
             ),
             PinPlacement::Outside { .. } => None,
+            PinPlacement::Center => None,
         };
 
         // Output pins' center side by X axis.
@@ -1704,6 +1709,7 @@ where
             PinPlacement::Outside { margin } => {
                 pin_size.mul_add(0.5, node_frame_rect.right() + margin)
             }
+            PinPlacement::Center => node_frame_rect.center().x,
         };
 
         // Output pins' spacing required.
@@ -1715,6 +1721,7 @@ where
                     .max(0.0),
             ),
             PinPlacement::Outside { .. } => None,
+            PinPlacement::Center => None,
         };
 
         // Input/output pin block
