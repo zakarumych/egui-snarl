@@ -5,7 +5,7 @@ resolver = "3"
 
 [workspace.package]
 rust-version = "1.85"
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/egui-snarl"
 repository = "https://github.com/zakarumych/egui-snarl"
