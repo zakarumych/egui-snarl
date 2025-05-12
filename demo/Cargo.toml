@@ -9,15 +9,16 @@ name = "demo"
 path = "../examples/demo.rs"
 
 [dependencies]
-egui = { version = "0.31.0" }
-egui-probe = { version = "0.8.0", features = ["derive"] }
-eframe = { version = "0.31.0", features = ["serde", "persistence"] }
-egui_extras = { version = "0.31.0", features = ["all_loaders"] }
-syn = { version = "2.0", features = ["extra-traits"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0" }
+egui.workspace = true
+egui-probe = { workspace = true, features = ["derive"] }
+eframe = { workspace = true, features = ["serde", "persistence"] }
+egui_extras = { workspace = true, features = ["all_loaders"] }
+syn = { workspace = true, features = ["extra-traits"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
 egui-snarl = { path = "..", features = ["egui-probe", "serde"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen-futures = "0.4"
-web-sys = "0.3.70"
+wasm-bindgen-futures.workspace = true
+web-sys.workspace = true

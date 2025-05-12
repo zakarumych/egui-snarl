@@ -10,6 +10,19 @@ license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/egui-snarl"
 repository = "https://github.com/zakarumych/egui-snarl"
 
+[workspace.dependencies]
+egui = { version = "0.31" }
+eframe = { version = "0.31" }
+egui_extras = { version = "0.31" }
+syn = { version = "2" }
+serde = { version = "1" }
+serde_json = { version = "1" }
+
+egui-probe = { version = "0.8.0", git = "https://github.com/zakarumych/egui-probe" }
+egui-scale = { version = "0.1.0" }
+wasm-bindgen-futures = "0.4"
+web-sys = "0.3.70"
+
 [package]
 name = "egui-snarl"
 version = "0.8.0"
@@ -18,7 +31,6 @@ rust-version.workspace = true
 license.workspace = true
 documentation.workspace = true
 repository.workspace = true
-
 description = "Node-graphs for egui"
 readme = "README.md"
 keywords = ["egui", "node", "graph", "ui", "node-graph"]
@@ -28,27 +40,22 @@ categories = ["gui", "visualization"]
 serde = ["dep:serde", "egui/serde", "slab/serde"]
 
 [dependencies]
-egui = { version = "0.31" }
+egui.workspace = true
 slab = { version = "0.4" }
-serde = { version = "1", features = ["derive"], optional = true }
+serde = { workspace = true, features = ["derive"], optional = true }
 
-egui-probe = { version = "0.8.0", features = ["derive"], optional = true }
-egui-scale = { version = "0.1.0" }
+egui-probe = { workspace = true, features = ["derive"], optional = true }
+egui-scale.workspace = true
 
 [dev-dependencies]
-eframe = { version = "0.31", features = ["serde", "persistence"] }
-egui_extras = { version = "0.31", features = ["all_loaders"] }
-syn = { version = "2", features = ["extra-traits"] }
-serde_json = { version = "1" }
+eframe = { workspace = true, features = ["serde", "persistence"] }
+egui_extras = { workspace = true, features = ["all_loaders"] }
+serde_json.workspace = true
+syn = { workspace = true, features = ["extra-traits"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-wasm-bindgen-futures = "0.4"
+wasm-bindgen-futures.workspace = true
 
 [[example]]
 name = "demo"
 required-features = ["serde", "egui-probe"]
-
-# [patch.crates-io]
-# egui = { path = "../egui/crates/egui" }
-# eframe = { path = "../egui/crates/eframe" }
-# egui_extras = { path = "../egui/crates/egui_extras" }
