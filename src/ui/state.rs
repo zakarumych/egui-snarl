@@ -1,13 +1,13 @@
 use egui::{
+    Context, Id, Pos2, Rect, Ui, Vec2,
     ahash::HashSet,
     emath::{GuiRounding, TSTransform},
     style::Spacing,
-    Context, Id, Pos2, Rect, Ui, Vec2,
 };
 
 use crate::{InPinId, NodeId, OutPinId, Snarl};
 
-use super::{transform_matching_points, SnarlWidget};
+use super::{SnarlWidget, transform_matching_points};
 
 /// Node UI state.
 pub struct NodeState {
@@ -123,13 +123,13 @@ pub struct SnarlState {
 
     new_wires: Option<NewWires>,
 
+    /// Flag indicating that new wires are owned by the menu now.
+    new_wires_menu: bool,
+
     id: Id,
 
     /// Flag indicating that the graph state is dirty must be saved.
     dirty: bool,
-
-    /// Flag indicating that the link menu is open.
-    is_link_menu_open: bool,
 
     /// Active rect selection.
     rect_selection: Option<RectSelect>,
@@ -182,8 +182,8 @@ impl SelectedNodes {
 #[derive(Clone)]
 struct SnarlStateData {
     to_global: TSTransform,
-    is_link_menu_open: bool,
     new_wires: Option<NewWires>,
+    new_wires_menu: bool,
     rect_selection: Option<RectSelect>,
 }
 
@@ -227,7 +227,7 @@ impl SnarlState {
         SnarlState {
             to_global: data.to_global,
             new_wires: data.new_wires,
-            is_link_menu_open: data.is_link_menu_open,
+            new_wires_menu: data.new_wires_menu,
             id,
             dirty,
             rect_selection: data.rect_selection,
@@ -259,7 +259,7 @@ impl SnarlState {
         SnarlState {
             to_global,
             new_wires: None,
-            is_link_menu_open: false,
+            new_wires_menu: false,
             id,
             dirty: true,
             draw_order: Vec::new(),
@@ -276,7 +276,7 @@ impl SnarlState {
             let data = SnarlStateData {
                 to_global: self.to_global,
                 new_wires: self.new_wires,
-                is_link_menu_open: self.is_link_menu_open,
+                new_wires_menu: self.new_wires_menu,
                 rect_selection: self.rect_selection,
             };
             data.save(cx, self.id);
@@ -311,98 +311,128 @@ impl SnarlState {
 
     pub fn start_new_wire_in(&mut self, pin: InPinId) {
         self.new_wires = Some(NewWires::In(vec![pin]));
+        self.new_wires_menu = false;
         self.dirty = true;
     }
 
     pub fn start_new_wire_out(&mut self, pin: OutPinId) {
         self.new_wires = Some(NewWires::Out(vec![pin]));
+        self.new_wires_menu = false;
         self.dirty = true;
     }
 
     pub fn start_new_wires_in(&mut self, pins: &[InPinId]) {
         self.new_wires = Some(NewWires::In(pins.to_vec()));
+        self.new_wires_menu = false;
         self.dirty = true;
     }
 
     pub fn start_new_wires_out(&mut self, pins: &[OutPinId]) {
         self.new_wires = Some(NewWires::Out(pins.to_vec()));
+        self.new_wires_menu = false;
         self.dirty = true;
     }
 
     pub fn add_new_wire_in(&mut self, pin: InPinId) {
-        if let Some(NewWires::In(pins)) = &mut self.new_wires {
-            if !pins.contains(&pin) {
-                pins.push(pin);
-                self.dirty = true;
-            }
+        debug_assert!(self.new_wires_menu == false);
+        let Some(NewWires::In(pins)) = &mut self.new_wires else {
+            unreachable!();
+        };
+
+        if !pins.contains(&pin) {
+            pins.push(pin);
+            self.dirty = true;
         }
     }
 
     pub fn add_new_wire_out(&mut self, pin: OutPinId) {
-        if let Some(NewWires::Out(pins)) = &mut self.new_wires {
-            if !pins.contains(&pin) {
-                pins.push(pin);
-                self.dirty = true;
-            }
+        debug_assert!(self.new_wires_menu == false);
+        let Some(NewWires::Out(pins)) = &mut self.new_wires else {
+            unreachable!();
+        };
+
+        if !pins.contains(&pin) {
+            pins.push(pin);
+            self.dirty = true;
         }
     }
 
     pub fn remove_new_wire_in(&mut self, pin: InPinId) {
-        if let Some(NewWires::In(pins)) = &mut self.new_wires {
-            if let Some(idx) = pins.iter().position(|p| *p == pin) {
-                pins.swap_remove(idx);
-                self.dirty = true;
-            }
+        debug_assert!(self.new_wires_menu == false);
+        let Some(NewWires::In(pins)) = &mut self.new_wires else {
+            unreachable!();
+        };
+
+        if let Some(idx) = pins.iter().position(|p| *p == pin) {
+            pins.swap_remove(idx);
+            self.dirty = true;
         }
     }
 
     pub fn remove_new_wire_out(&mut self, pin: OutPinId) {
-        if let Some(NewWires::Out(pins)) = &mut self.new_wires {
-            if let Some(idx) = pins.iter().position(|p| *p == pin) {
-                pins.swap_remove(idx);
-                self.dirty = true;
-            }
+        debug_assert!(self.new_wires_menu == false);
+        let Some(NewWires::Out(pins)) = &mut self.new_wires else {
+            unreachable!();
+        };
+
+        if let Some(idx) = pins.iter().position(|p| *p == pin) {
+            pins.swap_remove(idx);
+            self.dirty = true;
         }
     }
 
     pub const fn has_new_wires(&self) -> bool {
-        self.new_wires.is_some()
+        match (self.new_wires.as_ref(), self.new_wires_menu) {
+            (Some(_), false) => true,
+            _ => false,
+        }
     }
 
     pub const fn has_new_wires_in(&self) -> bool {
-        matches!(self.new_wires, Some(NewWires::In(_)))
+        match (&self.new_wires, self.new_wires_menu) {
+            (Some(NewWires::In(_)), false) => true,
+            _ => false,
+        }
     }
 
     pub const fn has_new_wires_out(&self) -> bool {
-        matches!(self.new_wires, Some(NewWires::Out(_)))
+        match (&self.new_wires, self.new_wires_menu) {
+            (Some(NewWires::Out(_)), false) => true,
+            _ => false,
+        }
     }
 
     pub const fn new_wires(&self) -> Option<&NewWires> {
-        self.new_wires.as_ref()
+        match (&self.new_wires, self.new_wires_menu) {
+            (Some(new_wires), false) => Some(new_wires),
+            _ => None,
+        }
     }
 
-    pub fn take_wires(&mut self) -> Option<NewWires> {
-        self.dirty |= self.new_wires.is_some();
-        self.new_wires.take()
+    pub fn take_new_wires(&mut self) -> Option<NewWires> {
+        match (&self.new_wires, self.new_wires_menu) {
+            (Some(_), false) => {
+                self.dirty = true;
+                self.new_wires.take()
+            }
+            _ => None,
+        }
     }
 
-    pub(crate) fn revert_take_wires(&mut self, wires: NewWires) {
+    pub(crate) fn take_new_wires_menu(&mut self) -> Option<NewWires> {
+        match (&self.new_wires, self.new_wires_menu) {
+            (Some(_), true) => {
+                self.dirty = true;
+                self.new_wires.take()
+            }
+            _ => None,
+        }
+    }
+
+    pub(crate) fn set_new_wires_menu(&mut self, wires: NewWires) {
+        debug_assert!(self.new_wires.is_none());
         self.new_wires = Some(wires);
-    }
-
-    pub(crate) fn open_link_menu(&mut self) {
-        self.is_link_menu_open = true;
-        self.dirty = true;
-    }
-
-    pub(crate) fn close_link_menu(&mut self) {
-        self.new_wires = None;
-        self.is_link_menu_open = false;
-        self.dirty = true;
-    }
-
-    pub(crate) const fn is_link_menu_open(&self) -> bool {
-        self.is_link_menu_open
+        self.new_wires_menu = true;
     }
 
     pub(crate) fn update_draw_order<T>(&mut self, snarl: &Snarl<T>) -> Vec<NodeId> {

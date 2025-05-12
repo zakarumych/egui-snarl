@@ -1,17 +1,28 @@
-workspace = { members = ["demo"] }
+
+[workspace]
+members = ["demo"]
+resolver = "3"
+
+[workspace.package]
+rust-version = "1.85"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+documentation = "https://docs.rs/egui-snarl"
+repository = "https://github.com/zakarumych/egui-snarl"
 
 [package]
 name = "egui-snarl"
 version = "0.8.0"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+documentation.workspace = true
+repository.workspace = true
+
 description = "Node-graphs for egui"
-license = "MIT OR Apache-2.0"
-documentation = "https://docs.rs/egui-snarl"
-repository = "https://github.com/zakarumych/egui-snarl"
 readme = "README.md"
 keywords = ["egui", "node", "graph", "ui", "node-graph"]
 categories = ["gui", "visualization"]
-rust-version = "1.81"
 
 [features]
 serde = ["dep:serde", "egui/serde", "slab/serde"]
@@ -22,6 +33,7 @@ slab = { version = "0.4" }
 serde = { version = "1", features = ["derive"], optional = true }
 
 egui-probe = { version = "0.8.0", features = ["derive"], optional = true }
+egui-scale = { version = "0.1.0" }
 
 [dev-dependencies]
 eframe = { version = "0.31", features = ["serde", "persistence"] }
