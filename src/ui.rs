@@ -27,7 +27,7 @@ mod wire;
 
 use self::{
     pin::AnyPin,
-    state::{NewWires, NodeState, SnarlState},
+    state::{NewWires, NodeState, RowHeights, SnarlState},
     wire::{draw_wire, hit_wire, pick_wire_style},
 };
 
@@ -39,82 +39,8 @@ pub use self::{
     wire::{WireLayer, WireStyle},
 };
 
-/// Controls how inputs and outputs are laid out in the coil node layout.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
-pub enum PinHeights {
-    /// Inputs and outputs are laid out in independent rows.
-    #[default]
-    Flexible,
-
-    /// All inputs and outputs are laid out with same height.
-    Matching,
-}
-
-/// Controls how node elements are laid out.
-///
-///
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
-pub struct NodeLayout {
-    /// Controls method of laying out node elements.
-    pub kind: NodeLayoutKind,
-
-    /// Controls how input and output pins are sized vertically.
-    pub pin_heights: PinHeights,
-}
-
-impl NodeLayout {
-    /// Creates new [`NodeLayout`] with `Coil` kind and flexible pin heights.
-    #[inline]
-    pub const fn coil() -> Self {
-        NodeLayout {
-            kind: NodeLayoutKind::Coil,
-            pin_heights: PinHeights::Flexible,
-        }
-    }
-
-    /// Creates new [`NodeLayout`] with `Sandwich` kind and flexible pin heights.
-    #[inline]
-    pub const fn sandwich() -> Self {
-        NodeLayout {
-            kind: NodeLayoutKind::Sandwich,
-            pin_heights: PinHeights::Flexible,
-        }
-    }
-
-    /// Creates new [`NodeLayout`] with `FlippedSandwich` kind and flexible pin heights.
-    #[inline]
-    pub const fn flipped_sandwich() -> Self {
-        NodeLayout {
-            kind: NodeLayoutKind::FlippedSandwich,
-            pin_heights: PinHeights::Flexible,
-        }
-    }
-
-    /// Returns new [`NodeLayout`] with same `kind` and specified pin heights.
-    pub const fn with_pin_heghts(self, pin_heights: PinHeights) -> Self {
-        NodeLayout {
-            kind: self.kind,
-            pin_heights,
-        }
-    }
-}
-
-impl From<NodeLayoutKind> for NodeLayout {
-    #[inline]
-    fn from(kind: NodeLayoutKind) -> Self {
-        NodeLayout {
-            kind,
-            pin_heights: PinHeights::Flexible,
-        }
-    }
-}
-
 /// Controls how header, pins, body and footer are placed in the node.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
 pub enum NodeLayoutKind {
@@ -132,6 +58,7 @@ pub enum NodeLayoutKind {
     /// |       Footer        |
     /// +---------------------+
     ///
+    #[default]
     Coil,
 
     /// All elements are placed in vertical stack.
@@ -178,83 +105,180 @@ pub enum NodeLayoutKind {
     // TODO: Add vertical layouts.
 }
 
-impl Default for NodeLayout {
+/// Controls how node elements are laid out.
+///
+///
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
+pub struct NodeLayout {
+    /// Controls method of laying out node elements.
+    pub kind: NodeLayoutKind,
+
+    /// Controls minimal height of pin rows.
+    pub min_pin_row_height: f32,
+
+    /// Controls how pin rows heights are set.
+    /// If true, all pin rows will have the same height, matching the largest content.
+    /// False by default.
+    pub equal_pin_row_heights: bool,
+}
+
+impl NodeLayout {
+    /// Creates new [`NodeLayout`] with `Coil` kind and flexible pin heights.
     #[inline]
-    fn default() -> Self {
+    pub const fn coil() -> Self {
         NodeLayout {
             kind: NodeLayoutKind::Coil,
-            pin_heights: PinHeights::Flexible,
+            min_pin_row_height: 0.0,
+            equal_pin_row_heights: false,
+        }
+    }
+
+    /// Creates new [`NodeLayout`] with `Sandwich` kind and flexible pin heights.
+    #[inline]
+    pub const fn sandwich() -> Self {
+        NodeLayout {
+            kind: NodeLayoutKind::Sandwich,
+            min_pin_row_height: 0.0,
+            equal_pin_row_heights: false,
+        }
+    }
+
+    /// Creates new [`NodeLayout`] with `FlippedSandwich` kind and flexible pin heights.
+    #[inline]
+    pub const fn flipped_sandwich() -> Self {
+        NodeLayout {
+            kind: NodeLayoutKind::FlippedSandwich,
+            min_pin_row_height: 0.0,
+            equal_pin_row_heights: false,
+        }
+    }
+
+    /// Returns new [`NodeLayout`] with same `kind` and specified pin heights.
+    pub const fn with_equal_pin_rows(self) -> Self {
+        NodeLayout {
+            kind: self.kind,
+            min_pin_row_height: self.min_pin_row_height,
+            equal_pin_row_heights: true,
+        }
+    }
+
+    /// Returns new [`NodeLayout`] with same `kind` and specified minimum pin row height.
+    pub const fn with_min_pin_row_height(self, min_pin_row_height: f32) -> Self {
+        NodeLayout {
+            kind: self.kind,
+            min_pin_row_height,
+            equal_pin_row_heights: self.equal_pin_row_heights,
         }
     }
 }
 
+impl From<NodeLayoutKind> for NodeLayout {
+    #[inline]
+    fn from(kind: NodeLayoutKind) -> Self {
+        NodeLayout {
+            kind,
+            min_pin_row_height: 0.0,
+            equal_pin_row_heights: false,
+        }
+    }
+}
+
+impl Default for NodeLayout {
+    #[inline]
+    fn default() -> Self {
+        NodeLayout::coil()
+    }
+}
+
+#[derive(Clone, Debug)]
+enum OuterHeights {
+    Flexible { rows: RowHeights },
+    Matching { max: f32 },
+    Tight,
+}
+
+#[derive(Clone, Debug)]
+struct Heights {
+    rows: RowHeights,
+    outer: OuterHeights,
+    min_outer: f32,
+}
+
+impl Heights {
+    fn get(&self, idx: usize) -> (f32, f32) {
+        let inner = match self.rows.get(idx) {
+            Some(&value) => value,
+            None => 0.0,
+        };
+
+        let outer = match &self.outer {
+            OuterHeights::Flexible { rows } => match rows.get(idx) {
+                Some(&outer) => outer.max(inner),
+                None => inner,
+            },
+            OuterHeights::Matching { max } => max.max(inner),
+            OuterHeights::Tight => inner,
+        };
+
+        (inner, outer.max(self.min_outer))
+    }
+}
+
 impl NodeLayout {
-    fn input_heights(&self, state: &NodeState) -> PinInnerOuterHeights {
-        match (self.kind, self.pin_heights) {
-            (NodeLayoutKind::Coil, PinHeights::Flexible) => PinInnerOuterHeights::Flexible {
-                inner_heights: state.input_heights().clone(),
-                outer_heights: state
-                    .input_heights()
-                    .iter()
-                    .copied()
-                    .enumerate()
-                    .map(|(idx, h)| state.output_heights().get(idx).copied().unwrap_or(h).max(h))
-                    .collect(),
+    fn input_heights(&self, state: &NodeState) -> Heights {
+        let rows = state.input_heights().clone();
+
+        let outer = match (self.kind, self.equal_pin_row_heights) {
+            (NodeLayoutKind::Coil, false) => OuterHeights::Flexible {
+                rows: state.output_heights().clone(),
             },
-            (_, PinHeights::Matching) => PinInnerOuterHeights::Matching {
-                inner_heights: state.input_heights().clone(),
-                outer_height: state
-                    .input_heights()
-                    .iter()
-                    .chain(state.output_heights())
-                    .copied()
-                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                    .unwrap_or(0.0),
-            },
-            (_, PinHeights::Flexible) => PinInnerOuterHeights::Flexible {
-                inner_heights: state.input_heights().clone(),
-                outer_heights: state.input_heights().clone(),
-            },
+            (_, true) => {
+                let mut max_height = 0.0f32;
+                for &h in state.input_heights() {
+                    max_height = max_height.max(h);
+                }
+                for &h in state.output_heights() {
+                    max_height = max_height.max(h);
+                }
+                OuterHeights::Matching { max: max_height }
+            }
+            (_, false) => OuterHeights::Tight,
+        };
+
+        Heights {
+            rows,
+            outer,
+            min_outer: self.min_pin_row_height,
         }
     }
 
-    fn output_heights(&self, state: &NodeState) -> PinInnerOuterHeights {
-        match (self.kind, self.pin_heights) {
-            (NodeLayoutKind::Coil, PinHeights::Flexible) => PinInnerOuterHeights::Flexible {
-                inner_heights: state.output_heights().clone(),
-                outer_heights: state
-                    .input_heights()
-                    .iter()
-                    .copied()
-                    .enumerate()
-                    .map(|(idx, h)| state.output_heights().get(idx).copied().unwrap_or(h).max(h))
-                    .collect(),
-            },
-            (_, PinHeights::Matching) => PinInnerOuterHeights::Matching {
-                inner_heights: state.output_heights().clone(),
-                outer_height: state
-                    .input_heights()
-                    .iter()
-                    .chain(state.output_heights())
-                    .copied()
-                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                    .unwrap_or(0.0),
-            },
-            (_, PinHeights::Flexible) => PinInnerOuterHeights::Flexible {
-                inner_heights: state.output_heights().clone(),
-                outer_heights: state.output_heights().clone(),
-            },
-        }
-    }
+    fn output_heights(&self, state: &NodeState) -> Heights {
+        let rows = state.output_heights().clone();
 
-    fn update_heights(
-        &self,
-        inputs: PinInnerOuterHeights,
-        outputs: PinInnerOuterHeights,
-        state: &mut NodeState,
-    ) {
-        state.set_input_heights(inputs.take_inner());
-        state.set_output_heights(outputs.take_inner());
+        let outer = match (self.kind, self.equal_pin_row_heights) {
+            (NodeLayoutKind::Coil, false) => OuterHeights::Flexible {
+                rows: state.input_heights().clone(),
+            },
+            (_, true) => {
+                let mut max_height = 0.0f32;
+                for &h in state.input_heights() {
+                    max_height = max_height.max(h);
+                }
+                for &h in state.output_heights() {
+                    max_height = max_height.max(h);
+                }
+                OuterHeights::Matching { max: max_height }
+            }
+            (_, false) => OuterHeights::Tight,
+        };
+
+        Heights {
+            rows,
+            outer,
+            min_outer: self.min_pin_row_height,
+        }
     }
 }
 
@@ -775,7 +799,7 @@ struct DrawPinsResponse {
     drag_released: bool,
     pin_hovered: Option<AnyPin>,
     final_rect: Rect,
-    new_heights: PinInnerOuterHeights,
+    new_heights: RowHeights,
 }
 
 struct DrawBodyResponse {
@@ -786,86 +810,6 @@ struct PinResponse {
     pos: Pos2,
     wire_color: Color32,
     wire_style: WireStyle,
-}
-
-#[derive(Clone, Debug)]
-enum PinInnerOuterHeights {
-    Matching {
-        outer_height: f32,
-        inner_heights: SmallVec<[f32; 8]>,
-    },
-    Flexible {
-        outer_heights: SmallVec<[f32; 8]>,
-        inner_heights: SmallVec<[f32; 8]>,
-    },
-}
-
-impl PinInnerOuterHeights {
-    fn take_inner(self) -> SmallVec<[f32; 8]> {
-        match self {
-            PinInnerOuterHeights::Matching { inner_heights, .. } => inner_heights,
-            PinInnerOuterHeights::Flexible { inner_heights, .. } => inner_heights,
-        }
-    }
-
-    fn get_inner(&self, idx: usize) -> f32 {
-        match self {
-            PinInnerOuterHeights::Matching { inner_heights, .. }
-            | PinInnerOuterHeights::Flexible { inner_heights, .. } => {
-                match inner_heights.get(idx) {
-                    Some(height) => *height,
-                    None => match inner_heights.last() {
-                        Some(last_height) => *last_height,
-                        None => 0.01,
-                    },
-                }
-            }
-        }
-    }
-
-    fn get_outer(&self, idx: usize) -> f32 {
-        match self {
-            PinInnerOuterHeights::Matching { outer_height, .. } => *outer_height,
-            PinInnerOuterHeights::Flexible { outer_heights, .. } => match outer_heights.get(idx) {
-                Some(height) => *height,
-                None => match outer_heights.last() {
-                    Some(last_height) => *last_height,
-                    None => 0.01,
-                },
-            },
-        }
-    }
-
-    fn set_inner(&mut self, idx: usize, value: f32) {
-        match self {
-            PinInnerOuterHeights::Matching {
-                outer_height,
-                inner_heights,
-            } => {
-                *outer_height = f32::max(*outer_height, value);
-                if inner_heights.len() <= idx {
-                    inner_heights.resize(idx + 1, value);
-                } else {
-                    inner_heights[idx] = value;
-                }
-            }
-            PinInnerOuterHeights::Flexible {
-                outer_heights,
-                inner_heights,
-            } => {
-                if outer_heights.len() <= idx {
-                    outer_heights.resize(idx + 1, value);
-                } else {
-                    outer_heights[idx] = f32::max(outer_heights[idx], value);
-                }
-                if inner_heights.len() <= idx {
-                    inner_heights.resize(idx + 1, value);
-                } else {
-                    inner_heights[idx] = value;
-                }
-            }
-        }
-    }
 }
 
 /// Widget to display [`Snarl`] graph in [`Ui`].
@@ -1455,6 +1399,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(never)]
 fn draw_inputs<T, V>(
     snarl: &mut Snarl<T>,
     viewer: &mut V,
@@ -1472,7 +1417,7 @@ fn draw_inputs<T, V>(
     snarl_state: &mut SnarlState,
     modifiers: Modifiers,
     input_positions: &mut HashMap<InPinId, PinResponse>,
-    heights: PinInnerOuterHeights,
+    heights: Heights,
 ) -> DrawPinsResponse
 where
     V: SnarlViewer<T>,
@@ -1492,13 +1437,12 @@ where
     inputs_ui.shrink_clip_rect(payload_clip_rect);
 
     let pin_layout = Layout::left_to_right(Align::Min);
-    let mut new_heights = heights.clone();
+    let mut new_heights = SmallVec::with_capacity(inputs.len());
 
     for in_pin in inputs {
         // Show input pin.
         let cursor = inputs_ui.cursor();
-        let height = heights.get_inner(in_pin.id.input);
-        let height_outer = heights.get_outer(in_pin.id.input);
+        let (height, height_outer) = heights.get(in_pin.id.input);
 
         let margin = (height_outer - height) / 2.0;
         let outer_rect = cursor.with_max_y(cursor.top() + height_outer);
@@ -1596,7 +1540,7 @@ where
                 },
             );
 
-            new_heights.set_inner(in_pin.id.input, pin_ui.min_rect().height());
+            new_heights.push(pin_ui.min_rect().height());
 
             pin_ui.expand_to_include_y(outer_rect.bottom());
         });
@@ -1631,7 +1575,7 @@ fn draw_outputs<T, V>(
     snarl_state: &mut SnarlState,
     modifiers: Modifiers,
     output_positions: &mut HashMap<OutPinId, PinResponse>,
-    heights: PinInnerOuterHeights,
+    heights: Heights,
 ) -> DrawPinsResponse
 where
     V: SnarlViewer<T>,
@@ -1650,14 +1594,13 @@ where
     outputs_ui.shrink_clip_rect(payload_clip_rect);
 
     let pin_layout = Layout::right_to_left(Align::Min);
-    let mut new_heights = heights.clone();
+    let mut new_heights = SmallVec::with_capacity(outputs.len());
 
     // Output pins on the right.
     for out_pin in outputs {
         // Show output pin.
         let cursor = outputs_ui.cursor();
-        let height = heights.get_inner(out_pin.id.output);
-        let height_outer = heights.get_outer(out_pin.id.output);
+        let (height, height_outer) = heights.get(out_pin.id.output);
 
         let margin = (height_outer - height) / 2.0;
         let outer_rect = cursor.with_max_y(cursor.top() + height_outer);
@@ -1756,7 +1699,7 @@ where
                 },
             );
 
-            new_heights.set_inner(out_pin.id.output, pin_ui.min_rect().height());
+            new_heights.push(pin_ui.min_rect().height());
 
             pin_ui.expand_to_include_y(outer_rect.bottom());
         });
@@ -2109,7 +2052,8 @@ where
                     return;
                 }
 
-                node_layout.update_heights(new_input_heights, new_output_heights, &mut node_state);
+                node_state.set_input_heights(new_input_heights);
+                node_state.set_output_heights(new_output_heights);
 
                 new_pins_size = vec2(
                     inputs_size.x + outputs_size.x + ui.spacing().item_spacing.x,
@@ -2269,7 +2213,8 @@ where
                     return;
                 }
 
-                node_layout.update_heights(new_input_heights, new_output_heights, &mut node_state);
+                node_state.set_input_heights(new_input_heights);
+                node_state.set_output_heights(new_output_heights);
 
                 new_pins_size.x = f32::max(new_pins_size.x, outputs_rect.width());
                 new_pins_size.y += outputs_rect.height() + ui.spacing().item_spacing.y;
@@ -2392,7 +2337,8 @@ where
                     return;
                 }
 
-                node_layout.update_heights(new_input_heights, new_output_heights, &mut node_state);
+                node_state.set_input_heights(new_input_heights);
+                node_state.set_output_heights(new_output_heights);
 
                 new_pins_size.x = f32::max(new_pins_size.x, inputs_rect.width());
                 new_pins_size.y += inputs_rect.height() + ui.spacing().item_spacing.y;

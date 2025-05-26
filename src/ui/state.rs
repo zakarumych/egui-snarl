@@ -10,6 +10,8 @@ use crate::{InPinId, NodeId, OutPinId, Snarl};
 
 use super::{SnarlWidget, transform_matching_points};
 
+pub type RowHeights = SmallVec<[f32; 8]>;
+
 /// Node UI state.
 #[derive(Debug)]
 pub struct NodeState {
@@ -17,8 +19,8 @@ pub struct NodeState {
     /// It is updated to fit content.
     size: Vec2,
     header_height: f32,
-    input_heights: SmallVec<[f32; 8]>,
-    output_heights: SmallVec<[f32; 8]>,
+    input_heights: RowHeights,
+    output_heights: RowHeights,
 
     id: Id,
     dirty: bool,
@@ -28,8 +30,8 @@ pub struct NodeState {
 struct NodeData {
     size: Vec2,
     header_height: f32,
-    input_heights: SmallVec<[f32; 8]>,
-    output_heights: SmallVec<[f32; 8]>,
+    input_heights: RowHeights,
+    output_heights: RowHeights,
 }
 
 impl NodeState {
@@ -106,15 +108,15 @@ impl NodeState {
         }
     }
 
-    pub fn input_heights(&self) -> &SmallVec<[f32; 8]> {
+    pub fn input_heights(&self) -> &RowHeights {
         &self.input_heights
     }
 
-    pub fn output_heights(&self) -> &SmallVec<[f32; 8]> {
+    pub fn output_heights(&self) -> &RowHeights {
         &self.output_heights
     }
 
-    pub fn set_input_heights(&mut self, input_heights: SmallVec<[f32; 8]>) {
+    pub fn set_input_heights(&mut self, input_heights: RowHeights) {
         #[allow(clippy::float_cmp)]
         if self.input_heights != input_heights {
             self.input_heights = input_heights;
@@ -122,7 +124,7 @@ impl NodeState {
         }
     }
 
-    pub fn set_output_heights(&mut self, output_heights: SmallVec<[f32; 8]>) {
+    pub fn set_output_heights(&mut self, output_heights: RowHeights) {
         #[allow(clippy::float_cmp)]
         if self.output_heights != output_heights {
             self.output_heights = output_heights;
