@@ -14,6 +14,7 @@ use egui::{
     vec2,
 };
 use egui_scale::EguiScale;
+use smallvec::SmallVec;
 
 use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl};
 
@@ -26,7 +27,7 @@ mod wire;
 
 use self::{
     pin::AnyPin,
-    state::{NewWires, NodeState, SnarlState},
+    state::{NewWires, NodeState, RowHeights, SnarlState},
     wire::{draw_wire, hit_wire, pick_wire_style},
 };
 
@@ -42,7 +43,7 @@ pub use self::{
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
-pub enum NodeLayout {
+pub enum NodeLayoutKind {
     /// Input pins, body and output pins are placed horizontally.
     /// With header on top and footer on bottom.
     ///
@@ -58,7 +59,7 @@ pub enum NodeLayout {
     /// +---------------------+
     ///
     #[default]
-    Basic,
+    Coil,
 
     /// All elements are placed in vertical stack.
     /// Header is on top, then input pins, body, output pins and footer.
@@ -104,6 +105,183 @@ pub enum NodeLayout {
     // TODO: Add vertical layouts.
 }
 
+/// Controls how node elements are laid out.
+///
+///
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
+pub struct NodeLayout {
+    /// Controls method of laying out node elements.
+    pub kind: NodeLayoutKind,
+
+    /// Controls minimal height of pin rows.
+    pub min_pin_row_height: f32,
+
+    /// Controls how pin rows heights are set.
+    /// If true, all pin rows will have the same height, matching the largest content.
+    /// False by default.
+    pub equal_pin_row_heights: bool,
+}
+
+impl NodeLayout {
+    /// Creates new [`NodeLayout`] with `Coil` kind and flexible pin heights.
+    #[inline]
+    pub const fn coil() -> Self {
+        NodeLayout {
+            kind: NodeLayoutKind::Coil,
+            min_pin_row_height: 0.0,
+            equal_pin_row_heights: false,
+        }
+    }
+
+    /// Creates new [`NodeLayout`] with `Sandwich` kind and flexible pin heights.
+    #[inline]
+    pub const fn sandwich() -> Self {
+        NodeLayout {
+            kind: NodeLayoutKind::Sandwich,
+            min_pin_row_height: 0.0,
+            equal_pin_row_heights: false,
+        }
+    }
+
+    /// Creates new [`NodeLayout`] with `FlippedSandwich` kind and flexible pin heights.
+    #[inline]
+    pub const fn flipped_sandwich() -> Self {
+        NodeLayout {
+            kind: NodeLayoutKind::FlippedSandwich,
+            min_pin_row_height: 0.0,
+            equal_pin_row_heights: false,
+        }
+    }
+
+    /// Returns new [`NodeLayout`] with same `kind` and specified pin heights.
+    pub const fn with_equal_pin_rows(self) -> Self {
+        NodeLayout {
+            kind: self.kind,
+            min_pin_row_height: self.min_pin_row_height,
+            equal_pin_row_heights: true,
+        }
+    }
+
+    /// Returns new [`NodeLayout`] with same `kind` and specified minimum pin row height.
+    pub const fn with_min_pin_row_height(self, min_pin_row_height: f32) -> Self {
+        NodeLayout {
+            kind: self.kind,
+            min_pin_row_height,
+            equal_pin_row_heights: self.equal_pin_row_heights,
+        }
+    }
+}
+
+impl From<NodeLayoutKind> for NodeLayout {
+    #[inline]
+    fn from(kind: NodeLayoutKind) -> Self {
+        NodeLayout {
+            kind,
+            min_pin_row_height: 0.0,
+            equal_pin_row_heights: false,
+        }
+    }
+}
+
+impl Default for NodeLayout {
+    #[inline]
+    fn default() -> Self {
+        NodeLayout::coil()
+    }
+}
+
+#[derive(Clone, Debug)]
+enum OuterHeights {
+    Flexible { rows: RowHeights },
+    Matching { max: f32 },
+    Tight,
+}
+
+#[derive(Clone, Debug)]
+struct Heights {
+    rows: RowHeights,
+    outer: OuterHeights,
+    min_outer: f32,
+}
+
+impl Heights {
+    fn get(&self, idx: usize) -> (f32, f32) {
+        let inner = match self.rows.get(idx) {
+            Some(&value) => value,
+            None => 0.0,
+        };
+
+        let outer = match &self.outer {
+            OuterHeights::Flexible { rows } => match rows.get(idx) {
+                Some(&outer) => outer.max(inner),
+                None => inner,
+            },
+            OuterHeights::Matching { max } => max.max(inner),
+            OuterHeights::Tight => inner,
+        };
+
+        (inner, outer.max(self.min_outer))
+    }
+}
+
+impl NodeLayout {
+    fn input_heights(&self, state: &NodeState) -> Heights {
+        let rows = state.input_heights().clone();
+
+        let outer = match (self.kind, self.equal_pin_row_heights) {
+            (NodeLayoutKind::Coil, false) => OuterHeights::Flexible {
+                rows: state.output_heights().clone(),
+            },
+            (_, true) => {
+                let mut max_height = 0.0f32;
+                for &h in state.input_heights() {
+                    max_height = max_height.max(h);
+                }
+                for &h in state.output_heights() {
+                    max_height = max_height.max(h);
+                }
+                OuterHeights::Matching { max: max_height }
+            }
+            (_, false) => OuterHeights::Tight,
+        };
+
+        Heights {
+            rows,
+            outer,
+            min_outer: self.min_pin_row_height,
+        }
+    }
+
+    fn output_heights(&self, state: &NodeState) -> Heights {
+        let rows = state.output_heights().clone();
+
+        let outer = match (self.kind, self.equal_pin_row_heights) {
+            (NodeLayoutKind::Coil, false) => OuterHeights::Flexible {
+                rows: state.input_heights().clone(),
+            },
+            (_, true) => {
+                let mut max_height = 0.0f32;
+                for &h in state.input_heights() {
+                    max_height = max_height.max(h);
+                }
+                for &h in state.output_heights() {
+                    max_height = max_height.max(h);
+                }
+                OuterHeights::Matching { max: max_height }
+            }
+            (_, false) => OuterHeights::Tight,
+        };
+
+        Heights {
+            rows,
+            outer,
+            min_outer: self.min_pin_row_height,
+        }
+    }
+}
+
 /// Controls style of node selection rect.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -147,7 +325,7 @@ pub enum PinPlacement {
 #[cfg_attr(feature = "egui-probe", derive(egui_probe::EguiProbe))]
 pub struct SnarlStyle {
     /// Controls how nodes are laid out.
-    /// Defaults to [`NodeLayout::Basic`].
+    /// Defaults to [`NodeLayoutKind::Coil`].
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
@@ -382,7 +560,7 @@ pub struct SnarlStyle {
 
 impl SnarlStyle {
     fn get_node_layout(&self) -> NodeLayout {
-        self.node_layout.unwrap_or(NodeLayout::Basic)
+        self.node_layout.unwrap_or(NodeLayout::default())
     }
 
     fn get_pin_size(&self, style: &Style) -> f32 {
@@ -621,6 +799,7 @@ struct DrawPinsResponse {
     drag_released: bool,
     pin_hovered: Option<AnyPin>,
     final_rect: Rect,
+    new_heights: RowHeights,
 }
 
 struct DrawBodyResponse {
@@ -1195,7 +1374,6 @@ where
 
     if let Some(node) = node_to_top {
         if snarl.nodes.contains(node.0) {
-            ui.ctx().request_repaint();
             snarl_state.node_to_top(node);
         }
     }
@@ -1221,6 +1399,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(never)]
 fn draw_inputs<T, V>(
     snarl: &mut Snarl<T>,
     viewer: &mut V,
@@ -1228,15 +1407,17 @@ fn draw_inputs<T, V>(
     inputs: &[InPin],
     pin_size: f32,
     style: &SnarlStyle,
-    ui: &mut Ui,
+    node_ui: &mut Ui,
     inputs_rect: Rect,
     payload_clip_rect: Rect,
     input_x: f32,
-    min_pin_y: f32,
+    min_pin_y_top: f32,
+    min_pin_y_bottom: f32,
     input_spacing: Option<f32>,
     snarl_state: &mut SnarlState,
     modifiers: Modifiers,
     input_positions: &mut HashMap<InPinId, PinResponse>,
+    heights: Heights,
 ) -> DrawPinsResponse
 where
     V: SnarlViewer<T>,
@@ -1245,43 +1426,62 @@ where
     let mut pin_hovered = None;
 
     // Input pins on the left.
-    let inputs_ui = &mut ui.new_child(
+    let mut inputs_ui = node_ui.new_child(
         UiBuilder::new()
             .max_rect(inputs_rect.round_ui())
             .layout(Layout::top_down(Align::Min))
             .id_salt("inputs"),
     );
 
-    let snarl_clip_rect = ui.clip_rect();
+    let snarl_clip_rect = node_ui.clip_rect();
     inputs_ui.shrink_clip_rect(payload_clip_rect);
+
+    let pin_layout = Layout::left_to_right(Align::Min);
+    let mut new_heights = SmallVec::with_capacity(inputs.len());
 
     for in_pin in inputs {
         // Show input pin.
-        inputs_ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
+        let cursor = inputs_ui.cursor();
+        let (height, height_outer) = heights.get(in_pin.id.input);
+
+        let margin = (height_outer - height) / 2.0;
+        let outer_rect = cursor.with_max_y(cursor.top() + height_outer);
+        let inner_rect = outer_rect.shrink2(vec2(0.0, margin));
+
+        let builder = UiBuilder::new().layout(pin_layout).max_rect(inner_rect);
+
+        inputs_ui.allocate_new_ui(builder, |pin_ui| {
             if let Some(input_spacing) = input_spacing {
-                ui.allocate_space(vec2(input_spacing, pin_size));
+                let min = pin_ui.next_widget_position();
+                pin_ui.advance_cursor_after_rect(Rect::from_min_size(
+                    min,
+                    vec2(input_spacing, pin_size),
+                ));
             }
 
-            let y0 = ui.cursor().min.y;
+            let y0 = pin_ui.max_rect().min.y;
+            let y1 = pin_ui.max_rect().max.y;
 
             // Show input content
-            let snarl_pin = viewer.show_input(in_pin, ui, snarl);
+            let snarl_pin = viewer.show_input(in_pin, pin_ui, snarl);
             if !snarl.nodes.contains(node.0) {
                 // If removed
                 return;
             }
 
-            let y1 = ui.min_rect().max.y;
-
-            let pin_rect =
-                snarl_pin.pin_rect(input_x, min_pin_y.max(y0), min_pin_y.max(y1), pin_size);
+            let pin_rect = snarl_pin.pin_rect(
+                input_x,
+                min_pin_y_top.max(y0),
+                min_pin_y_bottom.max(y1),
+                pin_size,
+            );
 
             // Interact with pin shape.
-            ui.set_clip_rect(snarl_clip_rect);
+            pin_ui.set_clip_rect(snarl_clip_rect);
 
-            let r = ui.interact(pin_rect, ui.next_auto_id(), Sense::click_and_drag());
+            let r = pin_ui.interact(pin_rect, pin_ui.next_auto_id(), Sense::click_and_drag());
 
-            ui.skip_ahead_auto_ids(1);
+            pin_ui.skip_ahead_auto_ids(1);
 
             if r.clicked_by(PointerButton::Secondary) {
                 if snarl_state.has_new_wires() {
@@ -1328,7 +1528,8 @@ where
                 visual_pin_rect = visual_pin_rect.scale_from_center(1.2);
             }
 
-            let wire_info = snarl_pin.draw(style, ui.style(), visual_pin_rect, ui.painter());
+            let wire_info =
+                snarl_pin.draw(style, pin_ui.style(), visual_pin_rect, pin_ui.painter());
 
             input_positions.insert(
                 in_pin.id,
@@ -1338,16 +1539,21 @@ where
                     wire_style: wire_info.style,
                 },
             );
+
+            new_heights.push(pin_ui.min_rect().height());
+
+            pin_ui.expand_to_include_y(outer_rect.bottom());
         });
     }
 
     let final_rect = inputs_ui.min_rect();
-    ui.expand_to_include_rect(final_rect.intersect(payload_clip_rect));
+    node_ui.expand_to_include_rect(final_rect.intersect(payload_clip_rect));
 
     DrawPinsResponse {
         drag_released,
         pin_hovered,
         final_rect,
+        new_heights,
     }
 }
 
@@ -1359,15 +1565,17 @@ fn draw_outputs<T, V>(
     outputs: &[OutPin],
     pin_size: f32,
     style: &SnarlStyle,
-    ui: &mut Ui,
+    node_ui: &mut Ui,
     outputs_rect: Rect,
     payload_clip_rect: Rect,
     output_x: f32,
-    min_pin_y: f32,
+    min_pin_y_top: f32,
+    min_pin_y_bottom: f32,
     output_spacing: Option<f32>,
     snarl_state: &mut SnarlState,
     modifiers: Modifiers,
     output_positions: &mut HashMap<OutPinId, PinResponse>,
+    heights: Heights,
 ) -> DrawPinsResponse
 where
     V: SnarlViewer<T>,
@@ -1375,44 +1583,63 @@ where
     let mut drag_released = false;
     let mut pin_hovered = None;
 
-    let outputs_ui = &mut ui.new_child(
+    let mut outputs_ui = node_ui.new_child(
         UiBuilder::new()
             .max_rect(outputs_rect.round_ui())
             .layout(Layout::top_down(Align::Max))
             .id_salt("outputs"),
     );
 
-    let snarl_clip_rect = ui.clip_rect();
+    let snarl_clip_rect = node_ui.clip_rect();
     outputs_ui.shrink_clip_rect(payload_clip_rect);
+
+    let pin_layout = Layout::right_to_left(Align::Min);
+    let mut new_heights = SmallVec::with_capacity(outputs.len());
 
     // Output pins on the right.
     for out_pin in outputs {
         // Show output pin.
-        outputs_ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+        let cursor = outputs_ui.cursor();
+        let (height, height_outer) = heights.get(out_pin.id.output);
+
+        let margin = (height_outer - height) / 2.0;
+        let outer_rect = cursor.with_max_y(cursor.top() + height_outer);
+        let inner_rect = outer_rect.shrink2(vec2(0.0, margin));
+
+        let builder = UiBuilder::new().layout(pin_layout).max_rect(inner_rect);
+
+        outputs_ui.allocate_new_ui(builder, |pin_ui| {
             // Allocate space for pin shape.
             if let Some(output_spacing) = output_spacing {
-                ui.allocate_space(vec2(output_spacing, pin_size));
+                let min = pin_ui.next_widget_position();
+                pin_ui.advance_cursor_after_rect(Rect::from_min_size(
+                    min,
+                    vec2(output_spacing, pin_size),
+                ));
             }
 
-            let y0 = ui.cursor().min.y;
+            let y0 = pin_ui.max_rect().min.y;
+            let y1 = pin_ui.max_rect().max.y;
 
             // Show output content
-            let snarl_pin = viewer.show_output(out_pin, ui, snarl);
+            let snarl_pin = viewer.show_output(out_pin, pin_ui, snarl);
             if !snarl.nodes.contains(node.0) {
                 // If removed
                 return;
             }
 
-            let y1 = ui.min_rect().max.y;
+            let pin_rect = snarl_pin.pin_rect(
+                output_x,
+                min_pin_y_top.max(y0),
+                min_pin_y_bottom.max(y1),
+                pin_size,
+            );
 
-            let pin_rect =
-                snarl_pin.pin_rect(output_x, min_pin_y.max(y0), min_pin_y.max(y1), pin_size);
+            pin_ui.set_clip_rect(snarl_clip_rect);
 
-            ui.set_clip_rect(snarl_clip_rect);
+            let r = pin_ui.interact(pin_rect, pin_ui.next_auto_id(), Sense::click_and_drag());
 
-            let r = ui.interact(pin_rect, ui.next_auto_id(), Sense::click_and_drag());
-
-            ui.skip_ahead_auto_ids(1);
+            pin_ui.skip_ahead_auto_ids(1);
 
             if r.clicked_by(PointerButton::Secondary) {
                 if snarl_state.has_new_wires() {
@@ -1440,6 +1667,7 @@ where
                     snarl_state.start_new_wire_out(out_pin.id);
                 }
             }
+
             if r.drag_stopped() {
                 drag_released = true;
             }
@@ -1459,7 +1687,8 @@ where
                 visual_pin_rect = visual_pin_rect.scale_from_center(1.2);
             }
 
-            let wire_info = snarl_pin.draw(style, ui.style(), visual_pin_rect, ui.painter());
+            let wire_info =
+                snarl_pin.draw(style, pin_ui.style(), visual_pin_rect, pin_ui.painter());
 
             output_positions.insert(
                 out_pin.id,
@@ -1469,15 +1698,20 @@ where
                     wire_style: wire_info.style,
                 },
             );
+
+            new_heights.push(pin_ui.min_rect().height());
+
+            pin_ui.expand_to_include_y(outer_rect.bottom());
         });
     }
     let final_rect = outputs_ui.min_rect();
-    ui.expand_to_include_rect(final_rect.intersect(payload_clip_rect));
+    node_ui.expand_to_include_rect(final_rect.intersect(payload_clip_rect));
 
     DrawPinsResponse {
         drag_released,
         pin_hovered,
         final_rect,
+        new_heights,
     }
 }
 
@@ -1670,8 +1904,6 @@ where
             viewer.apply_node_style(ui.style_mut(), node, &inputs, &outputs, snarl);
         }
 
-        let min_pin_y = node_state.header_height().mul_add(0.5, node_rect.min.y);
-
         // Input pins' center side by X axis.
         let input_x = match pin_placement {
             PinPlacement::Inside => pin_size.mul_add(
@@ -1743,8 +1975,8 @@ where
         let payload_clip_rect =
             Rect::from_min_max(node_rect.min, pos2(node_rect.max.x, f32::INFINITY));
 
-        let pins_rect = match node_layout {
-            NodeLayout::Basic => {
+        let pins_rect = match node_layout.kind {
+            NodeLayoutKind::Coil => {
                 // Show input pins.
                 let r = draw_inputs(
                     snarl,
@@ -1757,12 +1989,16 @@ where
                     payload_rect,
                     payload_clip_rect,
                     input_x,
-                    min_pin_y,
+                    node_rect.min.y,
+                    node_rect.min.y + node_state.header_height(),
                     input_spacing,
                     snarl_state,
                     modifiers,
                     input_positions,
+                    node_layout.input_heights(&node_state),
                 );
+
+                let new_input_heights = r.new_heights;
 
                 drag_released |= r.drag_released;
 
@@ -1791,12 +2027,16 @@ where
                     payload_rect,
                     payload_clip_rect,
                     output_x,
-                    min_pin_y,
+                    node_rect.min.y,
+                    node_rect.min.y + node_state.header_height(),
                     output_spacing,
                     snarl_state,
                     modifiers,
                     output_positions,
+                    node_layout.output_heights(&node_state),
                 );
+
+                let new_output_heights = r.new_heights;
 
                 drag_released |= r.drag_released;
 
@@ -1811,6 +2051,9 @@ where
                     // If removed
                     return;
                 }
+
+                node_state.set_input_heights(new_input_heights);
+                node_state.set_output_heights(new_output_heights);
 
                 new_pins_size = vec2(
                     inputs_size.x + outputs_size.x + ui.spacing().item_spacing.x,
@@ -1857,7 +2100,7 @@ where
 
                 pins_rect
             }
-            NodeLayout::Sandwich => {
+            NodeLayoutKind::Sandwich => {
                 // Show input pins.
 
                 let r = draw_inputs(
@@ -1871,12 +2114,16 @@ where
                     payload_rect,
                     payload_clip_rect,
                     input_x,
-                    min_pin_y,
+                    node_rect.min.y,
+                    node_rect.min.y + node_state.header_height(),
                     input_spacing,
                     snarl_state,
                     modifiers,
                     input_positions,
+                    node_layout.input_heights(&node_state),
                 );
+
+                let new_input_heights = r.new_heights;
 
                 drag_released |= r.drag_released;
 
@@ -1942,12 +2189,16 @@ where
                     outputs_rect,
                     payload_clip_rect,
                     output_x,
-                    min_pin_y,
+                    node_rect.min.y,
+                    node_rect.min.y + node_state.header_height(),
                     output_spacing,
                     snarl_state,
                     modifiers,
                     output_positions,
+                    node_layout.output_heights(&node_state),
                 );
+
+                let new_output_heights = r.new_heights;
 
                 drag_released |= r.drag_released;
 
@@ -1962,6 +2213,9 @@ where
                     return;
                 }
 
+                node_state.set_input_heights(new_input_heights);
+                node_state.set_output_heights(new_output_heights);
+
                 new_pins_size.x = f32::max(new_pins_size.x, outputs_rect.width());
                 new_pins_size.y += outputs_rect.height() + ui.spacing().item_spacing.y;
 
@@ -1969,7 +2223,7 @@ where
 
                 pins_rect
             }
-            NodeLayout::FlippedSandwich => {
+            NodeLayoutKind::FlippedSandwich => {
                 // Show input pins.
 
                 let outputs_rect = payload_rect;
@@ -1984,12 +2238,16 @@ where
                     outputs_rect,
                     payload_clip_rect,
                     output_x,
-                    min_pin_y,
+                    node_rect.min.y,
+                    node_rect.min.y + node_state.header_height(),
                     output_spacing,
                     snarl_state,
                     modifiers,
                     output_positions,
+                    node_layout.output_heights(&node_state),
                 );
+
+                let new_output_heights = r.new_heights;
 
                 drag_released |= r.drag_released;
 
@@ -2055,12 +2313,16 @@ where
                     inputs_rect,
                     payload_clip_rect,
                     input_x,
-                    min_pin_y,
+                    node_rect.min.y,
+                    node_rect.min.y + node_state.header_height(),
                     input_spacing,
                     snarl_state,
                     modifiers,
                     input_positions,
+                    node_layout.input_heights(&node_state),
                 );
+
+                let new_input_heights = r.new_heights;
 
                 drag_released |= r.drag_released;
 
@@ -2074,6 +2336,9 @@ where
                     // If removed
                     return;
                 }
+
+                node_state.set_input_heights(new_input_heights);
+                node_state.set_output_heights(new_output_heights);
 
                 new_pins_size.x = f32::max(new_pins_size.x, inputs_rect.width());
                 new_pins_size.y += inputs_rect.height() + ui.spacing().item_spacing.y;

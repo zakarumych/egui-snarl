@@ -816,7 +816,6 @@ fn draw_bezier_3(
 
     // {
     //     let samples = bezier_draw_samples_number_3(points, threshold);
-    //     // dbg!(samples, bezier_hit_samples_number(points, threshold));
     //     shapes.push(Shape::line(
     //         points.to_vec(),
     //         Stroke::new(1.0, Color32::PLACEHOLDER),
@@ -864,7 +863,6 @@ fn draw_bezier_5(
 
     // {
     //     let samples = bezier_draw_samples_number_5(points, threshold);
-    //     // dbg!(samples, bezier_hit_samples_number(points, threshold));
     //     shapes.push(Shape::line(
     //         points.to_vec(),
     //         Stroke::new(1.0, Color32::PLACEHOLDER),

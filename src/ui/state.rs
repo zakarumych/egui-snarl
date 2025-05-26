@@ -4,31 +4,39 @@ use egui::{
     emath::{GuiRounding, TSTransform},
     style::Spacing,
 };
+use smallvec::{SmallVec, ToSmallVec, smallvec};
 
 use crate::{InPinId, NodeId, OutPinId, Snarl};
 
 use super::{SnarlWidget, transform_matching_points};
 
+pub type RowHeights = SmallVec<[f32; 8]>;
+
 /// Node UI state.
+#[derive(Debug)]
 pub struct NodeState {
     /// Node size for this frame.
     /// It is updated to fit content.
     size: Vec2,
     header_height: f32,
+    input_heights: RowHeights,
+    output_heights: RowHeights,
 
     id: Id,
     dirty: bool,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 struct NodeData {
     size: Vec2,
     header_height: f32,
+    input_heights: RowHeights,
+    output_heights: RowHeights,
 }
 
 impl NodeState {
     pub fn load(cx: &Context, id: Id, spacing: &Spacing) -> Self {
-        cx.data_mut(|d| d.get_temp::<NodeData>(id)).map_or_else(
+        cx.data(|d| d.get_temp::<NodeData>(id)).map_or_else(
             || {
                 cx.request_discard("NodeState initialization");
                 Self::initial(id, spacing)
@@ -36,6 +44,8 @@ impl NodeState {
             |data| NodeState {
                 size: data.size,
                 header_height: data.header_height,
+                input_heights: data.input_heights,
+                output_heights: data.output_heights,
                 id,
                 dirty: false,
             },
@@ -46,7 +56,7 @@ impl NodeState {
         cx.data_mut(|d| d.remove::<Self>(self.id));
     }
 
-    pub fn store(&self, cx: &Context) {
+    pub fn store(self, cx: &Context) {
         if self.dirty {
             cx.data_mut(|d| {
                 d.insert_temp(
@@ -54,9 +64,12 @@ impl NodeState {
                     NodeData {
                         size: self.size,
                         header_height: self.header_height,
+                        input_heights: self.input_heights,
+                        output_heights: self.output_heights,
                     },
                 );
             });
+            cx.request_repaint();
         }
     }
 
@@ -95,10 +108,36 @@ impl NodeState {
         }
     }
 
+    pub fn input_heights(&self) -> &RowHeights {
+        &self.input_heights
+    }
+
+    pub fn output_heights(&self) -> &RowHeights {
+        &self.output_heights
+    }
+
+    pub fn set_input_heights(&mut self, input_heights: RowHeights) {
+        #[allow(clippy::float_cmp)]
+        if self.input_heights != input_heights {
+            self.input_heights = input_heights;
+            self.dirty = true;
+        }
+    }
+
+    pub fn set_output_heights(&mut self, output_heights: RowHeights) {
+        #[allow(clippy::float_cmp)]
+        if self.output_heights != output_heights {
+            self.output_heights = output_heights;
+            self.dirty = true;
+        }
+    }
+
     const fn initial(id: Id, spacing: &Spacing) -> Self {
         NodeState {
             size: spacing.interact_size,
             header_height: spacing.interact_size.y,
+            input_heights: SmallVec::new_const(),
+            output_heights: SmallVec::new_const(),
             id,
             dirty: true,
         }
@@ -107,8 +146,8 @@ impl NodeState {
 
 #[derive(Clone)]
 pub enum NewWires {
-    In(Vec<InPinId>),
-    Out(Vec<OutPinId>),
+    In(SmallVec<[InPinId; 4]>),
+    Out(SmallVec<[OutPinId; 4]>),
 }
 
 #[derive(Clone, Copy)]
@@ -138,7 +177,7 @@ pub struct SnarlState {
     draw_order: Vec<NodeId>,
 
     /// List of currently selected nodes.
-    selected_nodes: Vec<NodeId>,
+    selected_nodes: SmallVec<[NodeId; 8]>,
 }
 
 #[derive(Clone, Default)]
@@ -161,7 +200,7 @@ impl DrawOrder {
 }
 
 #[derive(Clone, Default)]
-struct SelectedNodes(Vec<NodeId>);
+struct SelectedNodes(SmallVec<[NodeId; 8]>);
 
 impl SelectedNodes {
     fn save(self, cx: &Context, id: Id) {
@@ -169,6 +208,7 @@ impl SelectedNodes {
             if self.0.is_empty() {
                 d.remove_temp::<Self>(id);
             } else {
+                d.get_temp_mut_or_default::<Self>(id).clone_from(&self);
                 d.insert_temp::<Self>(id, self);
             }
         });
@@ -199,7 +239,7 @@ impl SnarlStateData {
     }
 }
 
-fn prune_selected_nodes<T>(selected_nodes: &mut Vec<NodeId>, snarl: &Snarl<T>) -> bool {
+fn prune_selected_nodes<T>(selected_nodes: &mut SmallVec<[NodeId; 8]>, snarl: &Snarl<T>) -> bool {
     let old_size = selected_nodes.len();
     selected_nodes.retain(|node| snarl.nodes.contains(node.0));
     old_size != selected_nodes.len()
@@ -264,7 +304,7 @@ impl SnarlState {
             dirty: true,
             draw_order: Vec::new(),
             rect_selection: None,
-            selected_nodes: Vec::new(),
+            selected_nodes: SmallVec::new(),
         }
     }
 
@@ -283,6 +323,8 @@ impl SnarlState {
 
             DrawOrder(self.draw_order).save(cx, self.id);
             SelectedNodes(self.selected_nodes).save(cx, self.id);
+
+            cx.request_repaint();
         }
     }
 
@@ -310,25 +352,25 @@ impl SnarlState {
     }
 
     pub fn start_new_wire_in(&mut self, pin: InPinId) {
-        self.new_wires = Some(NewWires::In(vec![pin]));
+        self.new_wires = Some(NewWires::In(smallvec![pin]));
         self.new_wires_menu = false;
         self.dirty = true;
     }
 
     pub fn start_new_wire_out(&mut self, pin: OutPinId) {
-        self.new_wires = Some(NewWires::Out(vec![pin]));
+        self.new_wires = Some(NewWires::Out(smallvec![pin]));
         self.new_wires_menu = false;
         self.dirty = true;
     }
 
     pub fn start_new_wires_in(&mut self, pins: &[InPinId]) {
-        self.new_wires = Some(NewWires::In(pins.to_vec()));
+        self.new_wires = Some(NewWires::In(pins.to_smallvec()));
         self.new_wires_menu = false;
         self.dirty = true;
     }
 
     pub fn start_new_wires_out(&mut self, pins: &[OutPinId]) {
-        self.new_wires = Some(NewWires::Out(pins.to_vec()));
+        self.new_wires = Some(NewWires::Out(pins.to_smallvec()));
         self.new_wires_menu = false;
         self.dirty = true;
     }
@@ -566,6 +608,7 @@ impl SnarlWidget {
         let snarl_id = self.get_id(ui_id);
 
         ctx.data(|d| d.get_temp::<SelectedNodes>(snarl_id).unwrap_or_default().0)
+            .into_vec()
     }
 }
 
@@ -577,4 +620,5 @@ impl SnarlWidget {
 #[inline]
 pub fn get_selected_nodes(id: Id, ctx: &Context) -> Vec<NodeId> {
     ctx.data(|d| d.get_temp::<SelectedNodes>(id).unwrap_or_default().0)
+        .into_vec()
 }
