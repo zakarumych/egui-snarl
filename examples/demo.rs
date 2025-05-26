@@ -933,7 +933,7 @@ pub struct DemoApp {
 
 const fn default_style() -> SnarlStyle {
     SnarlStyle {
-        node_layout: Some(NodeLayout::FlippedSandwich),
+        node_layout: Some(NodeLayout::coil()),
         pin_placement: Some(PinPlacement::Edge),
         pin_size: Some(7.0),
         node_frame: Some(egui::Frame {

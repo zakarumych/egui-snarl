@@ -43,6 +43,7 @@ serde = ["dep:serde", "egui/serde", "slab/serde"]
 egui.workspace = true
 slab = { version = "0.4" }
 serde = { workspace = true, features = ["derive"], optional = true }
+smallvec = { version = "1.15", features = ["const_new"] }
 
 egui-probe = { workspace = true, features = ["derive"], optional = true }
 egui-scale.workspace = true
