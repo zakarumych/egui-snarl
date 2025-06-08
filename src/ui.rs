@@ -3,9 +3,8 @@
 use std::{collections::HashMap, hash::Hash};
 
 use egui::{
-    Align, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers, PointerButton,
-    Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, UiKind, UiStackInfo,
-    Vec2,
+    Align, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers, Pos2, Rect, Scene,
+    Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, UiKind, UiStackInfo, Vec2,
     collapsing_header::paint_default_icon,
     emath::{GuiRounding, TSTransform},
     epaint::Shadow,
@@ -19,6 +18,7 @@ use smallvec::SmallVec;
 use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl};
 
 mod background_pattern;
+mod config;
 mod pin;
 mod scale;
 mod state;
@@ -33,6 +33,7 @@ use self::{
 
 pub use self::{
     background_pattern::{BackgroundPattern, Grid},
+    config::{ModifierClick, SnarlConfig},
     pin::{AnyPins, PinInfo, PinShape, PinWireInfo, SnarlPin},
     state::get_selected_nodes,
     viewer::SnarlViewer,
@@ -818,6 +819,7 @@ pub struct SnarlWidget {
     id_salt: Id,
     id: Option<Id>,
     style: SnarlStyle,
+    config: SnarlConfig,
     min_size: Vec2,
     max_size: Vec2,
 }
@@ -838,6 +840,7 @@ impl SnarlWidget {
             id_salt: Id::new(":snarl:"),
             id: None,
             style: SnarlStyle::new(),
+            config: SnarlConfig::new(),
             min_size: Vec2::ZERO,
             max_size: Vec2::INFINITY,
         }
@@ -876,6 +879,14 @@ impl SnarlWidget {
         self
     }
 
+    /// Set config parameters for the [`Snarl`] widget.
+    #[inline]
+    #[must_use]
+    pub fn config(mut self, config: SnarlConfig) -> Self {
+        self.config = config;
+        self
+    }
+
     /// Set minimum size of the [`Snarl`] widget.
     #[inline]
     #[must_use]
@@ -908,6 +919,7 @@ impl SnarlWidget {
         show_snarl(
             snarl_id,
             self.style,
+            self.config,
             self.min_size,
             self.max_size,
             snarl,
@@ -921,6 +933,7 @@ impl SnarlWidget {
 fn show_snarl<T, V>(
     snarl_id: Id,
     mut style: SnarlStyle,
+    mut config: SnarlConfig,
     min_size: Vec2,
     max_size: Vec2,
     snarl: &mut Snarl<T>,
@@ -1025,10 +1038,10 @@ where
 
     // Process selection rect.
     let mut rect_selection_ended = None;
-    if modifiers.shift || snarl_state.is_rect_selection() {
+    if modifiers == config.rect_select.modifiers || snarl_state.is_rect_selection() {
         let select_resp = ui.interact(snarl_resp.rect, snarl_id.with("select"), Sense::drag());
 
-        if select_resp.dragged_by(PointerButton::Primary) {
+        if select_resp.dragged_by(config.rect_select.mouse_button) {
             if let Some(pos) = select_resp.interact_pointer_pos() {
                 if snarl_state.is_rect_selection() {
                     snarl_state.update_rect_selection(pos);
@@ -1038,7 +1051,7 @@ where
             }
         }
 
-        if select_resp.drag_stopped_by(PointerButton::Primary) {
+        if select_resp.drag_stopped_by(config.rect_select.mouse_button) {
             if let Some(select_rect) = snarl_state.rect_selection() {
                 rect_selection_ended = Some(select_rect);
             }
@@ -1078,6 +1091,7 @@ where
             node_idx,
             viewer,
             &mut snarl_state,
+            &mut config,
             &style,
             snarl_id,
             &mut input_info,
@@ -1145,7 +1159,8 @@ where
                         ui.interact(snarl_resp.rect, ui.make_persistent_id(wire), Sense::click());
 
                     //Remove hovered wire by second click
-                    hovered_wire_disconnect |= wire_r.clicked_by(PointerButton::Secondary);
+                    hovered_wire_disconnect |=
+                        wire_r.clicked_by(config.remove_hovered_wire.mouse_button);
                 }
             }
         }
@@ -1193,10 +1208,13 @@ where
             if select { Some(id) } else { None }
         });
 
-        if modifiers.command {
+        if modifiers.contains(config.deselect_all_nodes.modifiers) {
             snarl_state.deselect_many_nodes(select_nodes);
         } else {
-            snarl_state.select_many_nodes(!modifiers.shift, select_nodes);
+            snarl_state.select_many_nodes(
+                !modifiers.contains(config.rect_select.modifiers),
+                select_nodes,
+            );
         }
     }
 
@@ -1216,7 +1234,8 @@ where
     //
     // This uses `button_down` directly, instead of `clicked_by` to improve
     // responsiveness of the cancel action.
-    if snarl_state.has_new_wires() && ui.input(|x| x.pointer.button_down(PointerButton::Secondary))
+    if snarl_state.has_new_wires()
+        && ui.input(|x| x.pointer.button_down(config.cancel_wire_drag.mouse_button))
     {
         let _ = snarl_state.take_new_wires();
         snarl_resp.flags.remove(Flags::CLICKED);
@@ -1228,7 +1247,9 @@ where
         snarl_state.look_at(nodes_bb, ui_rect, min_scale, max_scale);
     }
 
-    if modifiers.command && snarl_resp.clicked_by(PointerButton::Primary) {
+    if modifiers == config.deselect_all_nodes.modifiers
+        && snarl_resp.clicked_by(config.deselect_all_nodes.mouse_button)
+    {
         snarl_state.deselect_all_nodes();
     }
 
@@ -1415,6 +1436,7 @@ fn draw_inputs<T, V>(
     min_pin_y_bottom: f32,
     input_spacing: Option<f32>,
     snarl_state: &mut SnarlState,
+    config: &mut SnarlConfig,
     modifiers: Modifiers,
     input_positions: &mut HashMap<InPinId, PinResponse>,
     heights: Heights,
@@ -1483,7 +1505,7 @@ where
 
             pin_ui.skip_ahead_auto_ids(1);
 
-            if r.clicked_by(PointerButton::Secondary) {
+            if r.clicked_by(config.click_pin.mouse_button) {
                 if snarl_state.has_new_wires() {
                     snarl_state.remove_new_wire_in(in_pin.id);
                 } else {
@@ -1494,10 +1516,12 @@ where
                     }
                 }
             }
-            if r.drag_started_by(PointerButton::Primary) {
+            if r.drag_started_by(config.drag_pin.mouse_button) {
+                // TODO: I am not sure what start_new_wires_out() does?
+                // Is that for a future feature where you can draw several wires at once?
                 if modifiers.command {
                     snarl_state.start_new_wires_out(&in_pin.remotes);
-                    if !modifiers.shift {
+                    if modifiers != config.drag_pin.modifiers {
                         snarl.drop_inputs(in_pin.id);
                         if !snarl.nodes.contains(node.0) {
                             // If removed
@@ -1517,6 +1541,7 @@ where
 
             if r.contains_pointer() {
                 if snarl_state.has_new_wires_in() {
+                    // TODO: And here I am also not sure what these modifiers do
                     if modifiers.shift && !modifiers.command {
                         snarl_state.add_new_wire_in(in_pin.id);
                     }
@@ -1573,6 +1598,7 @@ fn draw_outputs<T, V>(
     min_pin_y_bottom: f32,
     output_spacing: Option<f32>,
     snarl_state: &mut SnarlState,
+    config: &mut SnarlConfig,
     modifiers: Modifiers,
     output_positions: &mut HashMap<OutPinId, PinResponse>,
     heights: Heights,
@@ -1641,7 +1667,7 @@ where
 
             pin_ui.skip_ahead_auto_ids(1);
 
-            if r.clicked_by(PointerButton::Secondary) {
+            if r.clicked_by(config.click_pin.mouse_button) {
                 if snarl_state.has_new_wires() {
                     snarl_state.remove_new_wire_out(out_pin.id);
                 } else {
@@ -1652,11 +1678,11 @@ where
                     }
                 }
             }
-            if r.drag_started_by(PointerButton::Primary) {
-                if modifiers.command {
+            if r.drag_started_by(config.drag_pin.mouse_button) {
+                if modifiers.contains(config.drag_pin.modifiers) {
                     snarl_state.start_new_wires_in(&out_pin.remotes);
 
-                    if !modifiers.shift {
+                    if !modifiers.contains(config.no_menu.modifiers) {
                         snarl.drop_outputs(out_pin.id);
                         if !snarl.nodes.contains(node.0) {
                             // If removed
@@ -1675,6 +1701,7 @@ where
             let mut visual_pin_rect = r.rect;
 
             if r.contains_pointer() {
+                // TODO: What is happening here?
                 if snarl_state.has_new_wires_out() {
                     if modifiers.shift && !modifiers.command {
                         snarl_state.add_new_wire_out(out_pin.id);
@@ -1759,6 +1786,7 @@ fn draw_node<T, V>(
     node: NodeId,
     viewer: &mut V,
     snarl_state: &mut SnarlState,
+    config: &mut SnarlConfig,
     style: &SnarlStyle,
     snarl_id: Id,
     input_positions: &mut HashMap<InPinId, PinResponse>,
@@ -1850,14 +1878,17 @@ where
         Sense::click_and_drag(),
     );
 
-    if !modifiers.shift && !modifiers.command && r.dragged_by(PointerButton::Primary) {
+    if !modifiers.contains(config.select_node.modifiers)
+        && !modifiers.contains(config.deselect_node.modifiers)
+        && r.dragged_by(config.click_node.mouse_button)
+    {
         node_moved = Some((node, r.drag_delta()));
     }
 
-    if r.clicked_by(PointerButton::Primary) || r.dragged_by(PointerButton::Primary) {
-        if modifiers.shift {
+    if r.clicked_by(config.click_node.mouse_button) || r.dragged_by(config.drag_node.mouse_button) {
+        if modifiers.contains(config.select_node.modifiers) {
             snarl_state.select_one_node(modifiers.command, node);
-        } else if modifiers.command {
+        } else if modifiers.contains(config.deselect_node.modifiers) {
             snarl_state.deselect_one_node(node);
         }
     }
@@ -1993,6 +2024,7 @@ where
                     node_rect.min.y + node_state.header_height(),
                     input_spacing,
                     snarl_state,
+                    config,
                     modifiers,
                     input_positions,
                     node_layout.input_heights(&node_state),
@@ -2031,6 +2063,7 @@ where
                     node_rect.min.y + node_state.header_height(),
                     output_spacing,
                     snarl_state,
+                    config,
                     modifiers,
                     output_positions,
                     node_layout.output_heights(&node_state),
@@ -2118,6 +2151,7 @@ where
                     node_rect.min.y + node_state.header_height(),
                     input_spacing,
                     snarl_state,
+                    config,
                     modifiers,
                     input_positions,
                     node_layout.input_heights(&node_state),
@@ -2193,6 +2227,7 @@ where
                     node_rect.min.y + node_state.header_height(),
                     output_spacing,
                     snarl_state,
+                    config,
                     modifiers,
                     output_positions,
                     node_layout.output_heights(&node_state),
@@ -2242,6 +2277,7 @@ where
                     node_rect.min.y + node_state.header_height(),
                     output_spacing,
                     snarl_state,
+                    config,
                     modifiers,
                     output_positions,
                     node_layout.output_heights(&node_state),
@@ -2317,6 +2353,7 @@ where
                     node_rect.min.y + node_state.header_height(),
                     input_spacing,
                     snarl_state,
+                    config,
                     modifiers,
                     input_positions,
                     node_layout.input_heights(&node_state),
@@ -2403,7 +2440,7 @@ where
                     );
                     paint_default_icon(ui, openness, &r);
 
-                    if r.clicked_by(PointerButton::Primary) {
+                    if r.clicked_by(config.click_header.mouse_button) {
                         // Toggle node's openness.
                         snarl.open_node(node, !open);
                     }
@@ -2541,13 +2578,20 @@ const fn mix_colors(a: Color32, b: Color32) -> Color32 {
 impl<T> Snarl<T> {
     /// Render [`Snarl`] using given viewer and style into the [`Ui`].
     #[inline]
-    pub fn show<V>(&mut self, viewer: &mut V, style: &SnarlStyle, id_salt: impl Hash, ui: &mut Ui)
-    where
+    pub fn show<V>(
+        &mut self,
+        viewer: &mut V,
+        style: &SnarlStyle,
+        config: &SnarlConfig,
+        id_salt: impl Hash,
+        ui: &mut Ui,
+    ) where
         V: SnarlViewer<T>,
     {
         show_snarl(
             ui.make_persistent_id(id_salt),
             *style,
+            *config,
             Vec2::ZERO,
             Vec2::INFINITY,
             self,
