@@ -18,7 +18,7 @@ syn = { version = "2" }
 serde = { version = "1" }
 serde_json = { version = "1" }
 
-egui-probe = { version = "0.8.0", git = "https://github.com/zakarumych/egui-probe" }
+egui-probe = { version = "0.8.0", git = "https://github.com/zakarumych/egui-probe", branch = "main" }
 egui-scale = { version = "0.1.0" }
 wasm-bindgen-futures = "0.4"
 web-sys = "0.3.70"
