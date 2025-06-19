@@ -1145,7 +1145,7 @@ where
                         ui.interact(snarl_resp.rect, ui.make_persistent_id(wire), Sense::click());
 
                     //Remove hovered wire by second click
-                    hovered_wire_disconnect |= wire_r.clicked_by(PointerButton::Secondary);
+                    hovered_wire_disconnect |= wire_r.clicked_by(PointerButton::Secondary) | wire_r.clicked_by(PointerButton::Primary);
                 }
             }
         }
