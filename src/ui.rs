@@ -1,6 +1,6 @@
 //! This module provides functionality for showing [`Snarl`] graph in [`Ui`].
 
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap, hash::Hash, ops::Add};
 
 use egui::{
     Align, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers, PointerButton,
@@ -1107,6 +1107,7 @@ where
     let mut hovered_wire = None;
     let mut hovered_wire_disconnect = false;
     let mut wire_shapes = Vec::new();
+    let mut wire_widgets = Vec::new();
 
     // Draw and interact with wires
     for wire in snarl.wires.iter() {
@@ -1171,6 +1172,16 @@ where
             wire_threshold,
             pick_wire_style(from_r.wire_style, to_r.wire_style),
         );
+        if viewer.has_wire_widget(&wire.out_pin, &wire.in_pin, snarl) {
+            wire_widgets.push((
+                snarl.out_pin(wire.out_pin),
+                snarl.in_pin(wire.in_pin),
+                Pos2 {
+                    x: (from_r.pos.x + to_r.pos.x) / 2.0,
+                    y: (from_r.pos.y + to_r.pos.y) / 2.0,
+                },
+            ));
+        }
     }
 
     // Remove hovered wire by second click
@@ -1368,6 +1379,22 @@ where
         Some(idx) => {
             ui.painter().set(idx, Shape::Vec(wire_shapes));
         }
+    }
+
+    for (out_pin, in_pin, pos) in wire_widgets {
+        let rect = Rect::from_center_size(
+            pos.add(Vec2::from([0.0, -10.0])), // add the widget little above the wire
+            Vec2::from([200.0, 20.0]),
+        );
+        let wire_ui = &mut ui.new_child(
+            UiBuilder::new()
+                .max_rect(rect.round_ui())
+                .layout(Layout::centered_and_justified(egui::Direction::LeftToRight))
+                .id_salt(Id::new("wire widget")),
+        );
+        egui::Frame::new().show(wire_ui, |ui| {
+            viewer.show_wire_widget(&out_pin, &in_pin, ui, snarl);
+        });
     }
 
     ui.advance_cursor_after_rect(Rect::from_min_size(snarl_resp.rect.min, Vec2::ZERO));
