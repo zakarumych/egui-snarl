@@ -16,7 +16,7 @@ use egui::{
 use egui_scale::EguiScale;
 use smallvec::SmallVec;
 
-use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl};
+use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl, ui::wire::WireId};
 
 mod background_pattern;
 mod pin;
@@ -126,6 +126,7 @@ pub struct NodeLayout {
 
 impl NodeLayout {
     /// Creates new [`NodeLayout`] with `Coil` kind and flexible pin heights.
+    #[must_use]
     #[inline]
     pub const fn coil() -> Self {
         NodeLayout {
@@ -136,6 +137,7 @@ impl NodeLayout {
     }
 
     /// Creates new [`NodeLayout`] with `Sandwich` kind and flexible pin heights.
+    #[must_use]
     #[inline]
     pub const fn sandwich() -> Self {
         NodeLayout {
@@ -146,6 +148,7 @@ impl NodeLayout {
     }
 
     /// Creates new [`NodeLayout`] with `FlippedSandwich` kind and flexible pin heights.
+    #[must_use]
     #[inline]
     pub const fn flipped_sandwich() -> Self {
         NodeLayout {
@@ -156,6 +159,8 @@ impl NodeLayout {
     }
 
     /// Returns new [`NodeLayout`] with same `kind` and specified pin heights.
+    #[must_use]
+    #[inline]
     pub const fn with_equal_pin_rows(self) -> Self {
         NodeLayout {
             kind: self.kind,
@@ -165,6 +170,8 @@ impl NodeLayout {
     }
 
     /// Returns new [`NodeLayout`] with same `kind` and specified minimum pin row height.
+    #[must_use]
+    #[inline]
     pub const fn with_min_pin_row_height(self, min_pin_row_height: f32) -> Self {
         NodeLayout {
             kind: self.kind,
@@ -192,21 +199,21 @@ impl Default for NodeLayout {
     }
 }
 
-#[derive(Clone, Debug)]
-enum OuterHeights {
-    Flexible { rows: RowHeights },
+#[derive(Clone, Copy, Debug)]
+enum OuterHeights<'a> {
+    Flexible { rows: &'a [f32] },
     Matching { max: f32 },
     Tight,
 }
 
-#[derive(Clone, Debug)]
-struct Heights {
-    rows: RowHeights,
-    outer: OuterHeights,
+#[derive(Clone, Copy, Debug)]
+struct Heights<'a> {
+    rows: &'a [f32],
+    outer: OuterHeights<'a>,
     min_outer: f32,
 }
 
-impl Heights {
+impl Heights<'_> {
     fn get(&self, idx: usize) -> (f32, f32) {
         let inner = match self.rows.get(idx) {
             Some(&value) => value,
@@ -227,12 +234,12 @@ impl Heights {
 }
 
 impl NodeLayout {
-    fn input_heights(&self, state: &NodeState) -> Heights {
-        let rows = state.input_heights().clone();
+    fn input_heights(self, state: &NodeState) -> Heights<'_> {
+        let rows = state.input_heights().as_slice();
 
         let outer = match (self.kind, self.equal_pin_row_heights) {
             (NodeLayoutKind::Coil, false) => OuterHeights::Flexible {
-                rows: state.output_heights().clone(),
+                rows: state.output_heights().as_slice(),
             },
             (_, true) => {
                 let mut max_height = 0.0f32;
@@ -254,12 +261,12 @@ impl NodeLayout {
         }
     }
 
-    fn output_heights(&self, state: &NodeState) -> Heights {
-        let rows = state.output_heights().clone();
+    fn output_heights(self, state: &NodeState) -> Heights {
+        let rows = state.output_heights().as_slice();
 
         let outer = match (self.kind, self.equal_pin_row_heights) {
             (NodeLayoutKind::Coil, false) => OuterHeights::Flexible {
-                rows: state.input_heights().clone(),
+                rows: state.input_heights().as_slice(),
             },
             (_, true) => {
                 let mut max_height = 0.0f32;
@@ -560,7 +567,7 @@ pub struct SnarlStyle {
 
 impl SnarlStyle {
     fn get_node_layout(&self) -> NodeLayout {
-        self.node_layout.unwrap_or(NodeLayout::default())
+        self.node_layout.unwrap_or_default()
     }
 
     fn get_pin_size(&self, style: &Style) -> f32 {
@@ -1125,15 +1132,17 @@ where
             if let Some(latest_pos) = latest_pos {
                 let wire_hit = hit_wire(
                     ui.ctx(),
-                    snarl_id,
-                    wire,
+                    WireId::Connected {
+                        snarl_id,
+                        out_pin: wire.out_pin,
+                        in_pin: wire.in_pin,
+                    },
                     wire_frame_size,
                     style.get_upscale_wire_frame(),
                     style.get_downscale_wire_frame(),
                     from_r.pos,
                     to_r.pos,
                     latest_pos,
-                    wire_threshold,
                     wire_width.max(2.0),
                     pick_wire_style(from_r.wire_style, to_r.wire_style),
                 );
@@ -1159,8 +1168,11 @@ where
 
         draw_wire(
             &ui,
-            snarl_id,
-            Some(wire),
+            WireId::Connected {
+                snarl_id,
+                out_pin: wire.out_pin,
+                in_pin: wire.in_pin,
+            },
             &mut wire_shapes,
             wire_frame_size,
             style.get_upscale_wire_frame(),
@@ -1317,15 +1329,14 @@ where
 
     match snarl_state.new_wires() {
         None => {}
-        Some(NewWires::In(pins)) => {
-            for pin in pins {
+        Some(NewWires::In(in_pins)) => {
+            for &in_pin in in_pins {
                 let from_pos = wire_end_pos;
-                let to_r = &input_info[pin];
+                let to_r = &input_info[&in_pin];
 
                 draw_wire(
                     &ui,
-                    snarl_id,
-                    None,
+                    WireId::NewInput { snarl_id, in_pin },
                     &mut wire_shapes,
                     wire_frame_size,
                     style.get_upscale_wire_frame(),
@@ -1338,15 +1349,14 @@ where
                 );
             }
         }
-        Some(NewWires::Out(pins)) => {
-            for pin in pins {
-                let from_r = &output_info[pin];
+        Some(NewWires::Out(out_pins)) => {
+            for &out_pin in out_pins {
+                let from_r = &output_info[&out_pin];
                 let to_pos = wire_end_pos;
 
                 draw_wire(
                     &ui,
-                    snarl_id,
-                    None,
+                    WireId::NewOutput { snarl_id, out_pin },
                     &mut wire_shapes,
                     wire_frame_size,
                     style.get_upscale_wire_frame(),
@@ -1399,7 +1409,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-#[inline(never)]
+#[allow(clippy::too_many_lines)]
 fn draw_inputs<T, V>(
     snarl: &mut Snarl<T>,
     viewer: &mut V,
@@ -1558,6 +1568,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 fn draw_outputs<T, V>(
     snarl: &mut Snarl<T>,
     viewer: &mut V,
@@ -2463,10 +2474,10 @@ const fn mix_colors(a: Color32, b: Color32) -> Color32 {
     #![allow(clippy::cast_possible_truncation)]
 
     Color32::from_rgba_premultiplied(
-        ((a.r() as u16 + b.r() as u16) / 2) as u8,
-        ((a.g() as u16 + b.g() as u16) / 2) as u8,
-        ((a.b() as u16 + b.b() as u16) / 2) as u8,
-        ((a.a() as u16 + b.a() as u16) / 2) as u8,
+        u8::midpoint(a.r(), b.r()),
+        u8::midpoint(a.g(), b.g()),
+        u8::midpoint(a.b(), b.b()),
+        u8::midpoint(a.a(), b.a()),
     )
 }
 

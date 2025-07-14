@@ -2,7 +2,7 @@ use core::f32;
 
 use egui::{Context, Id, Pos2, Rect, Shape, Stroke, Ui, ahash::HashMap, cache::CacheTrait, pos2};
 
-use crate::Wire;
+use crate::{InPinId, OutPinId};
 
 const MAX_CURVE_SAMPLES: usize = 100;
 
@@ -19,6 +19,23 @@ pub enum WireLayer {
 
     /// Wires are rendered above nodes.
     AboveNodes,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum WireId {
+    Connected {
+        snarl_id: Id,
+        out_pin: OutPinId,
+        in_pin: InPinId,
+    },
+    NewInput {
+        snarl_id: Id,
+        in_pin: InPinId,
+    },
+    NewOutput {
+        snarl_id: Id,
+        out_pin: OutPinId,
+    },
 }
 
 /// Controls style in which wire is rendered.
@@ -214,8 +231,7 @@ fn wire_bezier_3(frame_size: f32, from: Pos2, to: Pos2) -> [Pos2; 4] {
 #[allow(clippy::too_many_arguments)]
 pub fn draw_wire(
     ui: &Ui,
-    snarl_id: Id,
-    wire: Option<Wire>,
+    wire: WireId,
     shapes: &mut Vec<Shape>,
     frame_size: f32,
     upscale: bool,
@@ -236,6 +252,14 @@ pub fn draw_wire(
     }
 
     let frame_size = adjust_frame_size(frame_size, upscale, downscale, from, to);
+
+    let args = WireArgs {
+        frame_size,
+        from,
+        to,
+        radius: 0.0,
+    };
+
     match style {
         WireStyle::Line => {
             let bb = Rect::from_two_pos(from, to);
@@ -244,30 +268,19 @@ pub fn draw_wire(
             }
         }
         WireStyle::Bezier3 => {
-            draw_bezier_3(
-                ui, snarl_id, wire, frame_size, from, to, stroke, threshold, shapes,
-            );
+            draw_bezier_3(ui, wire, args, stroke, threshold, shapes);
         }
 
         WireStyle::Bezier5 => {
-            draw_bezier_5(
-                ui, snarl_id, wire, frame_size, from, to, stroke, threshold, shapes,
-            );
+            draw_bezier_5(ui, wire, args, stroke, threshold, shapes);
         }
 
         WireStyle::AxisAligned { corner_radius } => {
-            draw_axis_aligned(
-                ui,
-                snarl_id,
-                wire,
-                corner_radius,
-                frame_size,
-                from,
-                to,
-                stroke,
-                threshold,
-                shapes,
-            );
+            let args = WireArgs {
+                radius: corner_radius,
+                ..args
+            };
+            draw_axis_aligned(ui, wire, args, stroke, threshold, shapes);
         }
     }
 }
@@ -275,19 +288,25 @@ pub fn draw_wire(
 #[allow(clippy::too_many_arguments)]
 pub fn hit_wire(
     ctx: &Context,
-    snarl_id: Id,
-    wire: Wire,
+    wire: WireId,
     frame_size: f32,
     upscale: bool,
     downscale: bool,
     from: Pos2,
     to: Pos2,
     pos: Pos2,
-    threshold: f32,
     hit_threshold: f32,
     style: WireStyle,
 ) -> bool {
     let frame_size = adjust_frame_size(frame_size, upscale, downscale, from, to);
+
+    let args = WireArgs {
+        frame_size,
+        from,
+        to,
+        radius: 0.0,
+    };
+
     match style {
         WireStyle::Line => {
             let aabb = Rect::from_two_pos(from, to);
@@ -304,38 +323,15 @@ pub fn hit_wire(
 
             dist2 < hit_threshold * hit_threshold
         }
-        WireStyle::Bezier3 => hit_wire_bezier_3(
-            ctx,
-            snarl_id,
-            wire,
-            frame_size,
-            from,
-            to,
-            pos,
-            hit_threshold,
-        ),
-        WireStyle::Bezier5 => hit_wire_bezier_5(
-            ctx,
-            snarl_id,
-            wire,
-            frame_size,
-            from,
-            to,
-            pos,
-            hit_threshold,
-        ),
-        WireStyle::AxisAligned { corner_radius } => hit_wire_axis_aligned(
-            ctx,
-            snarl_id,
-            wire,
-            corner_radius,
-            frame_size,
-            from,
-            to,
-            pos,
-            threshold,
-            hit_threshold,
-        ),
+        WireStyle::Bezier3 => hit_wire_bezier_3(ctx, wire, args, pos, hit_threshold),
+        WireStyle::Bezier5 => hit_wire_bezier_5(ctx, wire, args, pos, hit_threshold),
+        WireStyle::AxisAligned { corner_radius } => {
+            let args = WireArgs {
+                radius: corner_radius,
+                ..args
+            };
+            hit_wire_axis_aligned(ctx, wire, args, pos, hit_threshold)
+        }
     }
 }
 
@@ -482,17 +478,28 @@ fn bezier_draw_samples_number_5(points: &[Pos2; 6], threshold: f32) -> usize {
     })
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-struct WireId {
-    snarl_id: Id,
-    wire: Option<Wire>,
+#[derive(Clone, Copy, PartialEq)]
+struct WireArgs {
+    frame_size: f32,
+    from: Pos2,
+    to: Pos2,
+    radius: f32,
+}
+
+impl Default for WireArgs {
+    fn default() -> Self {
+        WireArgs {
+            frame_size: 0.0,
+            from: Pos2::ZERO,
+            to: Pos2::ZERO,
+            radius: 0.0,
+        }
+    }
 }
 
 struct WireCache3 {
     generation: u32,
-    frame_size: f32,
-    from: Pos2,
-    to: Pos2,
+    args: WireArgs,
     aabb: Rect,
     points: [Pos2; 4],
     threshold: f32,
@@ -501,11 +508,9 @@ struct WireCache3 {
 
 impl Default for WireCache3 {
     fn default() -> Self {
-        Self {
+        WireCache3 {
             generation: 0,
-            frame_size: 0.0,
-            from: Pos2::ZERO,
-            to: Pos2::ZERO,
+            args: WireArgs::default(),
             aabb: Rect::NOTHING,
             points: [Pos2::ZERO; 4],
             threshold: 0.0,
@@ -540,9 +545,7 @@ impl WireCache3 {
 
 struct WireCache5 {
     generation: u32,
-    frame_size: f32,
-    from: Pos2,
-    to: Pos2,
+    args: WireArgs,
     aabb: Rect,
     points: [Pos2; 6],
     threshold: f32,
@@ -553,9 +556,7 @@ impl Default for WireCache5 {
     fn default() -> Self {
         Self {
             generation: 0,
-            frame_size: 0.0,
-            from: Pos2::ZERO,
-            to: Pos2::ZERO,
+            args: WireArgs::default(),
             aabb: Rect::NOTHING,
             points: [Pos2::ZERO; 6],
             threshold: 0.0,
@@ -591,19 +592,16 @@ impl WireCache5 {
 #[derive(Default)]
 struct WireCacheAA {
     generation: u32,
-    frame_size: f32,
-    from: Pos2,
-    to: Pos2,
-    corner_radius: f32,
+    args: WireArgs,
     aawire: AxisAlignedWire,
     threshold: f32,
     line: Vec<Pos2>,
 }
 
 impl WireCacheAA {
-    fn line(&mut self) -> Vec<Pos2> {
+    fn line(&mut self, threshold: f32) -> Vec<Pos2> {
         #[allow(clippy::float_cmp)]
-        if !self.line.is_empty() {
+        if !self.line.is_empty() && self.threshold == threshold {
             return self.line.clone();
         }
 
@@ -650,6 +648,7 @@ impl WireCacheAA {
         line.push(self.aawire.segments[self.aawire.turns].0);
         line.push(self.aawire.segments[self.aawire.turns].1);
 
+        self.threshold = threshold;
         self.line.clone_from(&line);
 
         line
@@ -686,29 +685,19 @@ impl CacheTrait for WiresCache {
 }
 
 impl WiresCache {
-    pub fn get_3(
-        &mut self,
-        snarl_id: Id,
-        wire: Option<Wire>,
-        frame_size: f32,
-        from: Pos2,
-        to: Pos2,
-    ) -> &mut WireCache3 {
-        let cached = self.bezier_3.entry(WireId { snarl_id, wire }).or_default();
+    pub fn get_3(&mut self, wire: WireId, args: WireArgs) -> &mut WireCache3 {
+        let cached = self.bezier_3.entry(wire).or_default();
 
         cached.generation = self.generation;
 
-        #[allow(clippy::float_cmp)]
-        if cached.frame_size == frame_size && cached.from == from && cached.to == to {
+        if cached.args == args {
             return cached;
         }
 
-        let points = wire_bezier_3(frame_size, from, to);
+        let points = wire_bezier_3(args.frame_size, args.from, args.to);
         let aabb = Rect::from_points(&points);
 
-        cached.frame_size = frame_size;
-        cached.from = from;
-        cached.to = to;
+        cached.args = args;
         cached.points = points;
         cached.aabb = aabb;
         cached.line.clear();
@@ -716,29 +705,19 @@ impl WiresCache {
         cached
     }
 
-    pub fn get_5(
-        &mut self,
-        snarl_id: Id,
-        wire: Option<Wire>,
-        frame_size: f32,
-        from: Pos2,
-        to: Pos2,
-    ) -> &mut WireCache5 {
-        let cached = self.bezier_5.entry(WireId { snarl_id, wire }).or_default();
+    pub fn get_5(&mut self, wire: WireId, args: WireArgs) -> &mut WireCache5 {
+        let cached = self.bezier_5.entry(wire).or_default();
 
         cached.generation = self.generation;
 
-        #[allow(clippy::float_cmp)]
-        if cached.frame_size == frame_size && cached.from == from && cached.to == to {
+        if cached.args == args {
             return cached;
         }
 
-        let points = wire_bezier_5(frame_size, from, to);
+        let points = wire_bezier_5(args.frame_size, args.from, args.to);
         let aabb = Rect::from_points(&points);
 
-        cached.frame_size = frame_size;
-        cached.from = from;
-        cached.to = to;
+        cached.args = args;
         cached.points = points;
         cached.aabb = aabb;
         cached.line.clear();
@@ -746,40 +725,19 @@ impl WiresCache {
         cached
     }
 
-    pub fn get_aa(
-        &mut self,
-        snarl_id: Id,
-        wire: Option<Wire>,
-        frame_size: f32,
-        from: Pos2,
-        to: Pos2,
-        corner_radius: f32,
-        threshold: f32,
-    ) -> &mut WireCacheAA {
-        let cached = self
-            .axis_aligned
-            .entry(WireId { snarl_id, wire })
-            .or_default();
+    #[allow(clippy::too_many_arguments)]
+    pub fn get_aa(&mut self, wire: WireId, args: WireArgs) -> &mut WireCacheAA {
+        let cached = self.axis_aligned.entry(wire).or_default();
 
         cached.generation = self.generation;
 
-        #[allow(clippy::float_cmp)]
-        if cached.frame_size == frame_size
-            && cached.from == from
-            && cached.to == to
-            && cached.corner_radius == corner_radius
-            && cached.threshold == threshold
-        {
+        if cached.args == args {
             return cached;
         }
 
-        let aawire = wire_axis_aligned(corner_radius, frame_size, from, to, threshold);
+        let aawire = wire_axis_aligned(args.radius, args.frame_size, args.from, args.to);
 
-        cached.frame_size = frame_size;
-        cached.from = from;
-        cached.to = to;
-        cached.corner_radius = corner_radius;
-        cached.threshold = threshold;
+        cached.args = args;
         cached.aawire = aawire;
         cached.line.clear();
 
@@ -790,11 +748,8 @@ impl WiresCache {
 #[inline(never)]
 fn draw_bezier_3(
     ui: &Ui,
-    snarl_id: Id,
-    wire: Option<Wire>,
-    frame_size: f32,
-    from: Pos2,
-    to: Pos2,
+    wire: WireId,
+    args: WireArgs,
     stroke: Stroke,
     threshold: f32,
     shapes: &mut Vec<Shape>,
@@ -804,10 +759,7 @@ fn draw_bezier_3(
     let clip_rect = ui.clip_rect();
 
     ui.memory_mut(|m| {
-        let cached = m
-            .caches
-            .cache::<WiresCache>()
-            .get_3(snarl_id, wire, frame_size, from, to);
+        let cached = m.caches.cache::<WiresCache>().get_3(wire, args);
 
         if cached.aabb.intersects(clip_rect) {
             shapes.push(Shape::line(cached.line(threshold), stroke));
@@ -837,11 +789,8 @@ fn draw_bezier_3(
 
 fn draw_bezier_5(
     ui: &Ui,
-    snarl_id: Id,
-    wire: Option<Wire>,
-    frame_size: f32,
-    from: Pos2,
-    to: Pos2,
+    wire: WireId,
+    args: WireArgs,
     stroke: Stroke,
     threshold: f32,
     shapes: &mut Vec<Shape>,
@@ -851,10 +800,7 @@ fn draw_bezier_5(
     let clip_rect = ui.clip_rect();
 
     ui.memory_mut(|m| {
-        let cached = m
-            .caches
-            .cache::<WiresCache>()
-            .get_5(snarl_id, wire, frame_size, from, to);
+        let cached = m.caches.cache::<WiresCache>().get_5(wire, args);
 
         if cached.aabb.intersects(clip_rect) {
             shapes.push(Shape::line(cached.line(threshold), stroke));
@@ -966,19 +912,13 @@ fn split_bezier_3(points: &[Pos2; 4], t: f32) -> [[Pos2; 4]; 2] {
 
 fn hit_wire_bezier_3(
     ctx: &Context,
-    snarl_id: Id,
-    wire: Wire,
-    frame_size: f32,
-    from: Pos2,
-    to: Pos2,
+    wire: WireId,
+    args: WireArgs,
     pos: Pos2,
     hit_threshold: f32,
 ) -> bool {
     let (aabb, points) = ctx.memory_mut(|m| {
-        let cache =
-            m.caches
-                .cache::<WiresCache>()
-                .get_3(snarl_id, Some(wire), frame_size, from, to);
+        let cache = m.caches.cache::<WiresCache>().get_3(wire, args);
 
         (cache.aabb, cache.points)
     });
@@ -994,7 +934,7 @@ fn hit_wire_bezier_3(
 fn hit_bezier_3(points: &[Pos2; 4], pos: Pos2, hit_threshold: f32) -> bool {
     let samples = bezier_hit_samples_number(points, hit_threshold);
     if samples > 8 {
-        let [points1, points2] = split_bezier_3(&points, 0.5);
+        let [points1, points2] = split_bezier_3(points, 0.5);
 
         let aabb_e = Rect::from_points(&points1).expand(hit_threshold);
         if aabb_e.contains(pos) && hit_bezier_3(&points1, pos, hit_threshold) {
@@ -1059,19 +999,13 @@ fn split_bezier_5(points: &[Pos2; 6], t: f32) -> [[Pos2; 6]; 2] {
 
 fn hit_wire_bezier_5(
     ctx: &Context,
-    snarl_id: Id,
-    wire: Wire,
-    frame_size: f32,
-    from: Pos2,
-    to: Pos2,
+    wire: WireId,
+    args: WireArgs,
     pos: Pos2,
     hit_threshold: f32,
 ) -> bool {
     let (aabb, points) = ctx.memory_mut(|m| {
-        let cache =
-            m.caches
-                .cache::<WiresCache>()
-                .get_5(snarl_id, Some(wire), frame_size, from, to);
+        let cache = m.caches.cache::<WiresCache>().get_5(wire, args);
 
         (cache.aabb, cache.points)
     });
@@ -1137,13 +1071,7 @@ impl Default for AxisAlignedWire {
 }
 
 #[allow(clippy::too_many_lines)]
-fn wire_axis_aligned(
-    corner_radius: f32,
-    frame_size: f32,
-    from: Pos2,
-    to: Pos2,
-    threshold: f32,
-) -> AxisAlignedWire {
+fn wire_axis_aligned(corner_radius: f32, frame_size: f32, from: Pos2, to: Pos2) -> AxisAlignedWire {
     let corner_radius = corner_radius.max(0.0);
 
     let half_height = f32::abs(from.y - to.y) / 2.0;
@@ -1154,7 +1082,7 @@ fn wire_axis_aligned(
     let zero_segment = (Pos2::ZERO, Pos2::ZERO);
 
     if from.x + frame_size <= to.x - frame_size {
-        if f32::abs(from.y - to.y) < threshold {
+        if f32::abs(from.y - to.y) < 1.0 {
             // Single segment case.
             AxisAlignedWire {
                 aabb: Rect::from_two_pos(from, to),
@@ -1171,7 +1099,7 @@ fn wire_axis_aligned(
             }
         } else {
             // Two turns case.
-            let mid_x = (from.x + to.x) / 2.0;
+            let mid_x = f32::midpoint(from.x, to.x);
             let half_width = (to.x - from.x) / 2.0;
 
             let turn_radius = max_radius.min(half_width);
@@ -1212,7 +1140,7 @@ fn wire_axis_aligned(
         }
     } else {
         // Four turns case.
-        let mid = (from.y + to.y) / 2.0;
+        let mid = f32::midpoint(from.y, to.y);
 
         let right = from.x + frame_size;
         let left = to.x - frame_size;
@@ -1280,26 +1208,13 @@ fn wire_axis_aligned(
 
 fn hit_wire_axis_aligned(
     ctx: &Context,
-    snarl_id: Id,
-    wire: Wire,
-    corner_radius: f32,
-    frame_size: f32,
-    from: Pos2,
-    to: Pos2,
+    wire: WireId,
+    args: WireArgs,
     pos: Pos2,
-    threshold: f32,
     hit_threshold: f32,
 ) -> bool {
     let aawire = ctx.memory_mut(|m| {
-        let cache = m.caches.cache::<WiresCache>().get_aa(
-            snarl_id,
-            Some(wire),
-            frame_size,
-            from,
-            to,
-            corner_radius,
-            threshold,
-        );
+        let cache = m.caches.cache::<WiresCache>().get_aa(wire, args);
 
         cache.aawire
     });
@@ -1350,6 +1265,7 @@ fn hit_wire_axis_aligned(
 fn turn_samples_number(radius: f32, threshold: f32) -> usize {
     #![allow(clippy::cast_sign_loss)]
     #![allow(clippy::cast_possible_truncation)]
+    #![allow(clippy::cast_precision_loss)]
 
     if threshold / radius >= 1.0 {
         return 2;
@@ -1359,18 +1275,15 @@ fn turn_samples_number(radius: f32, threshold: f32) -> usize {
     let samples = (std::f32::consts::PI / (4.0 * a) + 1.0)
         .min(MAX_CURVE_SAMPLES as f32)
         .ceil() as usize;
-    samples.max(2).min(MAX_CURVE_SAMPLES)
+
+    samples.clamp(2, MAX_CURVE_SAMPLES)
 }
 
 #[allow(clippy::too_many_arguments)]
 fn draw_axis_aligned(
     ui: &Ui,
-    snarl_id: Id,
-    wire: Option<Wire>,
-    corner_radius: f32,
-    frame_size: f32,
-    from: Pos2,
-    to: Pos2,
+    wire: WireId,
+    args: WireArgs,
     stroke: Stroke,
     threshold: f32,
     shapes: &mut Vec<Shape>,
@@ -1379,18 +1292,10 @@ fn draw_axis_aligned(
 
     let clip_rect = ui.clip_rect();
     ui.memory_mut(|m| {
-        let cached = m.caches.cache::<WiresCache>().get_aa(
-            snarl_id,
-            wire,
-            frame_size,
-            from,
-            to,
-            corner_radius,
-            threshold,
-        );
+        let cached = m.caches.cache::<WiresCache>().get_aa(wire, args);
 
         if cached.aawire.aabb.intersects(clip_rect) {
-            shapes.push(Shape::line(cached.line(), stroke));
+            shapes.push(Shape::line(cached.line(threshold), stroke));
         }
     });
 }
@@ -1409,7 +1314,7 @@ fn lower_bound(min: usize, max: usize, f: impl Fn(usize) -> bool) -> usize {
     let mut max = max;
 
     while min < max {
-        let mid = (min + max) / 2;
+        let mid = usize::midpoint(min, max);
         if f(mid) {
             max = mid;
         } else {

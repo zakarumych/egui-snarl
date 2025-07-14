@@ -376,7 +376,7 @@ impl SnarlState {
     }
 
     pub fn add_new_wire_in(&mut self, pin: InPinId) {
-        debug_assert!(self.new_wires_menu == false);
+        debug_assert!(!self.new_wires_menu);
         let Some(NewWires::In(pins)) = &mut self.new_wires else {
             unreachable!();
         };
@@ -388,7 +388,7 @@ impl SnarlState {
     }
 
     pub fn add_new_wire_out(&mut self, pin: OutPinId) {
-        debug_assert!(self.new_wires_menu == false);
+        debug_assert!(!self.new_wires_menu);
         let Some(NewWires::Out(pins)) = &mut self.new_wires else {
             unreachable!();
         };
@@ -400,7 +400,7 @@ impl SnarlState {
     }
 
     pub fn remove_new_wire_in(&mut self, pin: InPinId) {
-        debug_assert!(self.new_wires_menu == false);
+        debug_assert!(!self.new_wires_menu);
         let Some(NewWires::In(pins)) = &mut self.new_wires else {
             unreachable!();
         };
@@ -412,7 +412,7 @@ impl SnarlState {
     }
 
     pub fn remove_new_wire_out(&mut self, pin: OutPinId) {
-        debug_assert!(self.new_wires_menu == false);
+        debug_assert!(!self.new_wires_menu);
         let Some(NewWires::Out(pins)) = &mut self.new_wires else {
             unreachable!();
         };
@@ -424,24 +424,24 @@ impl SnarlState {
     }
 
     pub const fn has_new_wires(&self) -> bool {
-        match (self.new_wires.as_ref(), self.new_wires_menu) {
-            (Some(_), false) => true,
-            _ => false,
-        }
+        matches!(
+            (self.new_wires.as_ref(), self.new_wires_menu),
+            (Some(_), false)
+        )
     }
 
     pub const fn has_new_wires_in(&self) -> bool {
-        match (&self.new_wires, self.new_wires_menu) {
-            (Some(NewWires::In(_)), false) => true,
-            _ => false,
-        }
+        matches!(
+            (&self.new_wires, self.new_wires_menu),
+            (Some(NewWires::In(_)), false)
+        )
     }
 
     pub const fn has_new_wires_out(&self) -> bool {
-        match (&self.new_wires, self.new_wires_menu) {
-            (Some(NewWires::Out(_)), false) => true,
-            _ => false,
-        }
+        matches!(
+            (&self.new_wires, self.new_wires_menu),
+            (Some(NewWires::Out(_)), false)
+        )
     }
 
     pub const fn new_wires(&self) -> Option<&NewWires> {
