@@ -500,10 +500,10 @@ impl SnarlViewer<DemoNode> for DemoViewer {
 
         match src_pins {
             AnyPins::Out(src_pins) => {
-                assert!(
-                    src_pins.len() == 1,
-                    "There's no concept of multi-input nodes in this demo"
-                );
+                if src_pins.len() != 1 {
+                    ui.label("Multiple output pins are not supported in this demo");
+                    return;
+                }
 
                 let src_pin = src_pins[0];
                 let src_out_ty = pin_out_compat(snarl.get_node(src_pin.node).unwrap());
