@@ -1450,7 +1450,7 @@ where
 
         let builder = UiBuilder::new().layout(pin_layout).max_rect(inner_rect);
 
-        inputs_ui.allocate_new_ui(builder, |pin_ui| {
+        inputs_ui.scope_builder(builder, |pin_ui| {
             if let Some(input_spacing) = input_spacing {
                 let min = pin_ui.next_widget_position();
                 pin_ui.advance_cursor_after_rect(Rect::from_min_size(
@@ -1608,7 +1608,7 @@ where
 
         let builder = UiBuilder::new().layout(pin_layout).max_rect(inner_rect);
 
-        outputs_ui.allocate_new_ui(builder, |pin_ui| {
+        outputs_ui.scope_builder(builder, |pin_ui| {
             // Allocate space for pin shape.
             if let Some(output_spacing) = output_spacing {
                 let min = pin_ui.next_widget_position();

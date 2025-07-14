@@ -429,23 +429,23 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         ui.label("Add node");
         if ui.button("Number").clicked() {
             snarl.insert_node(pos, DemoNode::Number(0.0));
-            ui.close_menu();
+            ui.close();
         }
         if ui.button("Expr").clicked() {
             snarl.insert_node(pos, DemoNode::ExprNode(ExprNode::new()));
-            ui.close_menu();
+            ui.close();
         }
         if ui.button("String").clicked() {
             snarl.insert_node(pos, DemoNode::String(String::new()));
-            ui.close_menu();
+            ui.close();
         }
         if ui.button("Show image").clicked() {
             snarl.insert_node(pos, DemoNode::ShowImage(String::new()));
-            ui.close_menu();
+            ui.close();
         }
         if ui.button("Sink").clicked() {
             snarl.insert_node(pos, DemoNode::Sink);
-            ui.close_menu();
+            ui.close();
         }
     }
 
@@ -524,7 +524,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
 
                         // Connect the wire.
                         snarl.connect(src_pin, dst_pin);
-                        ui.close_menu();
+                        ui.close();
                     }
                 }
             }
@@ -565,7 +565,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                                 // Therefore here we drop inputs of source input pin.
                                 snarl.drop_inputs(*src_pin);
                                 snarl.connect(dst_pin, *src_pin);
-                                ui.close_menu();
+                                ui.close();
                             }
                         }
                     }
@@ -589,7 +589,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         ui.label("Node menu");
         if ui.button("Remove").clicked() {
             snarl.remove_node(node);
-            ui.close_menu();
+            ui.close();
         }
     }
 
