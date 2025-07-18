@@ -1,13 +1,13 @@
 //! This module provides functionality for showing [`Snarl`] graph in [`Ui`].
 
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap, hash::Hash, ops::Add};
 
 use egui::{
     Align, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers, PointerButton,
     Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, UiKind, UiStackInfo,
     Vec2,
     collapsing_header::paint_default_icon,
-    emath::{GuiRounding, TSTransform},
+    emath::{GuiRounding, RectAlign, TSTransform},
     epaint::Shadow,
     pos2,
     response::Flags,
@@ -1114,13 +1114,14 @@ where
     let mut hovered_wire = None;
     let mut hovered_wire_disconnect = false;
     let mut wire_shapes = Vec::new();
+    let mut wire_widgets = Vec::new();
 
     // Draw and interact with wires
     for wire in snarl.wires.iter() {
-        let Some(from_r) = output_info.get(&wire.out_pin) else {
+        let Some((from_r, out_pin)) = output_info.get(&wire.out_pin) else {
             continue;
         };
-        let Some(to_r) = input_info.get(&wire.in_pin) else {
+        let Some((to_r, in_pin)) = input_info.get(&wire.in_pin) else {
             continue;
         };
 
@@ -1183,6 +1184,14 @@ where
             wire_threshold,
             pick_wire_style(from_r.wire_style, to_r.wire_style),
         );
+        let rect = RectAlign::TOP.align_rect(
+            &Rect::from_min_max(from_r.pos, to_r.pos),
+            Vec2::new(200.0, 20.0),
+            5.0,
+        );
+        if viewer.has_wire_widget(&wire.out_pin, &wire.in_pin, snarl) {
+            wire_widgets.push((out_pin, in_pin, rect));
+        }
     }
 
     // Remove hovered wire by second click
@@ -1332,7 +1341,7 @@ where
         Some(NewWires::In(in_pins)) => {
             for &in_pin in in_pins {
                 let from_pos = wire_end_pos;
-                let to_r = &input_info[&in_pin];
+                let (to_r, _) = &input_info[&in_pin];
 
                 draw_wire(
                     &ui,
@@ -1351,7 +1360,7 @@ where
         }
         Some(NewWires::Out(out_pins)) => {
             for &out_pin in out_pins {
-                let from_r = &output_info[&out_pin];
+                let (from_r, _) = &output_info[&out_pin];
                 let to_pos = wire_end_pos;
 
                 draw_wire(
@@ -1378,6 +1387,16 @@ where
         Some(idx) => {
             ui.painter().set(idx, Shape::Vec(wire_shapes));
         }
+    }
+
+    for (out_pin, in_pin, rect) in wire_widgets {
+        let wire_ui = &mut ui.new_child(
+            UiBuilder::new()
+                .max_rect(rect.round_ui())
+                .layout(Layout::centered_and_justified(egui::Direction::LeftToRight))
+                .id_salt(Id::new("wire widget")),
+        );
+        viewer.show_wire_widget(&out_pin, &in_pin, wire_ui, snarl);
     }
 
     ui.advance_cursor_after_rect(Rect::from_min_size(snarl_resp.rect.min, Vec2::ZERO));
@@ -1426,7 +1445,7 @@ fn draw_inputs<T, V>(
     input_spacing: Option<f32>,
     snarl_state: &mut SnarlState,
     modifiers: Modifiers,
-    input_positions: &mut HashMap<InPinId, PinResponse>,
+    input_positions: &mut HashMap<InPinId, (PinResponse, InPin)>,
     heights: Heights,
 ) -> DrawPinsResponse
 where
@@ -1543,11 +1562,14 @@ where
 
             input_positions.insert(
                 in_pin.id,
-                PinResponse {
-                    pos: r.rect.center(),
-                    wire_color: wire_info.color,
-                    wire_style: wire_info.style,
-                },
+                (
+                    PinResponse {
+                        pos: r.rect.center(),
+                        wire_color: wire_info.color,
+                        wire_style: wire_info.style,
+                    },
+                    in_pin.clone(),
+                ),
             );
 
             new_heights.push(pin_ui.min_rect().height());
@@ -1585,7 +1607,7 @@ fn draw_outputs<T, V>(
     output_spacing: Option<f32>,
     snarl_state: &mut SnarlState,
     modifiers: Modifiers,
-    output_positions: &mut HashMap<OutPinId, PinResponse>,
+    output_positions: &mut HashMap<OutPinId, (PinResponse, OutPin)>,
     heights: Heights,
 ) -> DrawPinsResponse
 where
@@ -1703,11 +1725,14 @@ where
 
             output_positions.insert(
                 out_pin.id,
-                PinResponse {
-                    pos: r.rect.center(),
-                    wire_color: wire_info.color,
-                    wire_style: wire_info.style,
-                },
+                (
+                    PinResponse {
+                        pos: r.rect.center(),
+                        wire_color: wire_info.color,
+                        wire_style: wire_info.style,
+                    },
+                    out_pin.clone(),
+                ),
             );
 
             new_heights.push(pin_ui.min_rect().height());
@@ -1772,9 +1797,9 @@ fn draw_node<T, V>(
     snarl_state: &mut SnarlState,
     style: &SnarlStyle,
     snarl_id: Id,
-    input_positions: &mut HashMap<InPinId, PinResponse>,
+    input_positions: &mut HashMap<InPinId, (PinResponse, InPin)>,
     modifiers: Modifiers,
-    output_positions: &mut HashMap<OutPinId, PinResponse>,
+    output_positions: &mut HashMap<OutPinId, (PinResponse, OutPin)>,
 ) -> Option<DrawNodeResponse>
 where
     V: SnarlViewer<T>,
