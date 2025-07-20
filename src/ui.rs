@@ -7,7 +7,7 @@ use egui::{
     Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, UiKind, UiStackInfo,
     Vec2,
     collapsing_header::paint_default_icon,
-    emath::{GuiRounding, TSTransform},
+    emath::{GuiRounding, RectAlign, TSTransform},
     epaint::Shadow,
     pos2,
     response::Flags,
@@ -800,6 +800,8 @@ struct DrawNodeResponse {
     drag_released: bool,
     pin_hovered: Option<AnyPin>,
     final_rect: Rect,
+    in_pins: Vec<InPin>,
+    out_pins: Vec<OutPin>,
 }
 
 struct DrawPinsResponse {
@@ -1064,6 +1066,8 @@ where
 
     let mut input_info = HashMap::new();
     let mut output_info = HashMap::new();
+    let mut input_pins = HashMap::new();
+    let mut output_pins = HashMap::new();
 
     let mut pin_hovered = None;
 
@@ -1108,12 +1112,19 @@ where
             if rect_selection_ended.is_some() {
                 node_rects.push((node_idx, response.final_rect));
             }
+            for pin in response.in_pins {
+                input_pins.insert(pin.id, pin);
+            }
+            for pin in response.out_pins {
+                output_pins.insert(pin.id, pin);
+            }
         }
     }
 
     let mut hovered_wire = None;
     let mut hovered_wire_disconnect = false;
     let mut wire_shapes = Vec::new();
+    let mut wire_widgets = Vec::new();
 
     // Draw and interact with wires
     for wire in snarl.wires.iter() {
@@ -1121,6 +1132,12 @@ where
             continue;
         };
         let Some(to_r) = input_info.get(&wire.in_pin) else {
+            continue;
+        };
+        let Some(out_pin) = output_pins.get(&wire.out_pin) else {
+            continue;
+        };
+        let Some(in_pin) = input_pins.get(&wire.in_pin) else {
             continue;
         };
 
@@ -1183,6 +1200,14 @@ where
             wire_threshold,
             pick_wire_style(from_r.wire_style, to_r.wire_style),
         );
+        let rect = RectAlign::TOP.align_rect(
+            &Rect::from_min_max(from_r.pos, to_r.pos),
+            Vec2::new(200.0, 20.0),
+            5.0,
+        );
+        if viewer.has_wire_widget(&wire.out_pin, &wire.in_pin, snarl) {
+            wire_widgets.push((out_pin, in_pin, rect));
+        }
     }
 
     // Remove hovered wire by second click
@@ -1378,6 +1403,16 @@ where
         Some(idx) => {
             ui.painter().set(idx, Shape::Vec(wire_shapes));
         }
+    }
+
+    for (out_pin, in_pin, rect) in wire_widgets {
+        let wire_ui = &mut ui.new_child(
+            UiBuilder::new()
+                .max_rect(rect.round_ui())
+                .layout(Layout::centered_and_justified(egui::Direction::LeftToRight))
+                .id_salt(Id::new("wire widget")),
+        );
+        viewer.show_wire_widget(&out_pin, &in_pin, wire_ui, snarl);
     }
 
     ui.advance_cursor_after_rect(Rect::from_min_size(snarl_resp.rect.min, Vec2::ZERO));
@@ -2467,6 +2502,8 @@ where
         drag_released,
         pin_hovered,
         final_rect: r.response.rect,
+        in_pins: inputs,
+        out_pins: outputs,
     })
 }
 
