@@ -1,6 +1,6 @@
 //! This module provides functionality for showing [`Snarl`] graph in [`Ui`].
 
-use std::{collections::HashMap, hash::Hash, ops::Add};
+use std::{collections::HashMap, hash::Hash};
 
 use egui::{
     Align, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers, PointerButton,
@@ -800,6 +800,8 @@ struct DrawNodeResponse {
     drag_released: bool,
     pin_hovered: Option<AnyPin>,
     final_rect: Rect,
+    in_pins: Vec<InPin>,
+    out_pins: Vec<OutPin>,
 }
 
 struct DrawPinsResponse {
@@ -1064,6 +1066,8 @@ where
 
     let mut input_info = HashMap::new();
     let mut output_info = HashMap::new();
+    let mut input_pins = HashMap::new();
+    let mut output_pins = HashMap::new();
 
     let mut pin_hovered = None;
 
@@ -1108,6 +1112,12 @@ where
             if rect_selection_ended.is_some() {
                 node_rects.push((node_idx, response.final_rect));
             }
+            for pin in response.in_pins {
+                input_pins.insert(pin.id, pin);
+            }
+            for pin in response.out_pins {
+                output_pins.insert(pin.id, pin);
+            }
         }
     }
 
@@ -1118,10 +1128,16 @@ where
 
     // Draw and interact with wires
     for wire in snarl.wires.iter() {
-        let Some((from_r, out_pin)) = output_info.get(&wire.out_pin) else {
+        let Some(from_r) = output_info.get(&wire.out_pin) else {
             continue;
         };
-        let Some((to_r, in_pin)) = input_info.get(&wire.in_pin) else {
+        let Some(to_r) = input_info.get(&wire.in_pin) else {
+            continue;
+        };
+        let Some(out_pin) = output_pins.get(&wire.out_pin) else {
+            continue;
+        };
+        let Some(in_pin) = input_pins.get(&wire.in_pin) else {
             continue;
         };
 
@@ -1341,7 +1357,7 @@ where
         Some(NewWires::In(in_pins)) => {
             for &in_pin in in_pins {
                 let from_pos = wire_end_pos;
-                let (to_r, _) = &input_info[&in_pin];
+                let to_r = &input_info[&in_pin];
 
                 draw_wire(
                     &ui,
@@ -1360,7 +1376,7 @@ where
         }
         Some(NewWires::Out(out_pins)) => {
             for &out_pin in out_pins {
-                let (from_r, _) = &output_info[&out_pin];
+                let from_r = &output_info[&out_pin];
                 let to_pos = wire_end_pos;
 
                 draw_wire(
@@ -1445,7 +1461,7 @@ fn draw_inputs<T, V>(
     input_spacing: Option<f32>,
     snarl_state: &mut SnarlState,
     modifiers: Modifiers,
-    input_positions: &mut HashMap<InPinId, (PinResponse, InPin)>,
+    input_positions: &mut HashMap<InPinId, PinResponse>,
     heights: Heights,
 ) -> DrawPinsResponse
 where
@@ -1562,14 +1578,11 @@ where
 
             input_positions.insert(
                 in_pin.id,
-                (
-                    PinResponse {
-                        pos: r.rect.center(),
-                        wire_color: wire_info.color,
-                        wire_style: wire_info.style,
-                    },
-                    in_pin.clone(),
-                ),
+                PinResponse {
+                    pos: r.rect.center(),
+                    wire_color: wire_info.color,
+                    wire_style: wire_info.style,
+                },
             );
 
             new_heights.push(pin_ui.min_rect().height());
@@ -1607,7 +1620,7 @@ fn draw_outputs<T, V>(
     output_spacing: Option<f32>,
     snarl_state: &mut SnarlState,
     modifiers: Modifiers,
-    output_positions: &mut HashMap<OutPinId, (PinResponse, OutPin)>,
+    output_positions: &mut HashMap<OutPinId, PinResponse>,
     heights: Heights,
 ) -> DrawPinsResponse
 where
@@ -1725,14 +1738,11 @@ where
 
             output_positions.insert(
                 out_pin.id,
-                (
-                    PinResponse {
-                        pos: r.rect.center(),
-                        wire_color: wire_info.color,
-                        wire_style: wire_info.style,
-                    },
-                    out_pin.clone(),
-                ),
+                PinResponse {
+                    pos: r.rect.center(),
+                    wire_color: wire_info.color,
+                    wire_style: wire_info.style,
+                },
             );
 
             new_heights.push(pin_ui.min_rect().height());
@@ -1797,9 +1807,9 @@ fn draw_node<T, V>(
     snarl_state: &mut SnarlState,
     style: &SnarlStyle,
     snarl_id: Id,
-    input_positions: &mut HashMap<InPinId, (PinResponse, InPin)>,
+    input_positions: &mut HashMap<InPinId, PinResponse>,
     modifiers: Modifiers,
-    output_positions: &mut HashMap<OutPinId, (PinResponse, OutPin)>,
+    output_positions: &mut HashMap<OutPinId, PinResponse>,
 ) -> Option<DrawNodeResponse>
 where
     V: SnarlViewer<T>,
@@ -2492,6 +2502,8 @@ where
         drag_released,
         pin_hovered,
         final_rect: r.response.rect,
+        in_pins: inputs,
+        out_pins: outputs,
     })
 }
 
