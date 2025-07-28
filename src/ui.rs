@@ -1,11 +1,14 @@
 //! This module provides functionality for showing [`Snarl`] graph in [`Ui`].
 
-use std::{collections::HashMap, hash::Hash};
+use std::{
+    collections::HashMap,
+    hash::{DefaultHasher, Hash, Hasher},
+};
 
 use egui::{
-    Align, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers, PointerButton,
-    Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, UiKind, UiStackInfo,
-    Vec2,
+    Align, Align2, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers,
+    PointerButton, Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder,
+    UiKind, UiStackInfo, Vec2,
     collapsing_header::paint_default_icon,
     emath::{GuiRounding, RectAlign, TSTransform},
     epaint::Shadow,
@@ -558,6 +561,25 @@ pub struct SnarlStyle {
     )]
     pub wire_smoothness: Option<f32>,
 
+    /// Controls the gap between wire widget and wire.
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    #[cfg_attr(
+        feature = "egui-probe",
+        egui_probe(range = 0.0..)
+    )]
+    pub wire_widget_gap: Option<f32>,
+
+    /// Controls the alignment of wire widget with respect to the center point of wire
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
+    pub wire_widget_align: Option<Align2>,
+
     #[doc(hidden)]
     #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
@@ -781,6 +803,8 @@ impl SnarlStyle {
             select_style: None,
             crisp_magnified_text: None,
             wire_smoothness: None,
+            wire_widget_gap: None,
+            wire_widget_align: None,
 
             _non_exhaustive: (),
         }
@@ -1200,13 +1224,14 @@ where
             wire_threshold,
             pick_wire_style(from_r.wire_style, to_r.wire_style),
         );
-        let rect = RectAlign::TOP.align_rect(
-            &Rect::from_min_max(from_r.pos, to_r.pos),
-            Vec2::new(200.0, 20.0),
-            5.0,
-        );
         if viewer.has_wire_widget(&wire.out_pin, &wire.in_pin, snarl) {
-            wire_widgets.push((out_pin, in_pin, rect));
+            let center = Pos2::new(
+                (from_r.pos.x + to_r.pos.x) / 2.0,
+                (from_r.pos.y + to_r.pos.y) / 2.0,
+            );
+            let wire_x_length =
+                f32::max(from_r.pos.x, to_r.pos.x) - f32::min(from_r.pos.x, to_r.pos.x);
+            wire_widgets.push((out_pin, in_pin, center, wire_x_length));
         }
     }
 
@@ -1405,14 +1430,57 @@ where
         }
     }
 
-    for (out_pin, in_pin, rect) in wire_widgets {
-        let wire_ui = &mut ui.new_child(
+    for (out_pin, in_pin, center, wire_x_length) in wire_widgets {
+        let mut hasher = DefaultHasher::new();
+        (out_pin.id, in_pin.id).hash(&mut hasher);
+        let id = Id::new(hasher.finish());
+        let cached = ui.ctx().memory(|mem| mem.data.get_temp::<(Rect, f32)>(id));
+        let widget_rect = if let Some((widget_rect, current_wire_x_length)) = cached {
+            if current_wire_x_length != wire_x_length {
+                RectAlign {
+                    parent: Align2::CENTER_CENTER,
+                    child: style.wire_widget_align.unwrap_or(Align2::CENTER_CENTER),
+                }
+                .align_rect(
+                    &Rect::from_center_size(center, [wire_x_length, 0.0].into()),
+                    Vec2::new(wire_x_length, 0.0),
+                    style.wire_widget_gap.unwrap_or(0.0),
+                )
+            } else {
+                widget_rect
+            }
+        } else {
+            RectAlign {
+                parent: Align2::CENTER_CENTER,
+                child: style.wire_widget_align.unwrap_or(Align2::CENTER_CENTER),
+            }
+            .align_rect(
+                &Rect::from_center_size(center, [wire_x_length, 0.0].into()),
+                Vec2::new(wire_x_length, 0.0),
+                style.wire_widget_gap.unwrap_or(0.0),
+            )
+        };
+        let mut wire_ui = ui.new_child(
             UiBuilder::new()
-                .max_rect(rect.round_ui())
-                .layout(Layout::centered_and_justified(egui::Direction::LeftToRight))
-                .id_salt(Id::new("wire widget")),
+                .max_rect(widget_rect)
+                .layout(Layout::default())
+                .id_salt(id),
         );
-        viewer.show_wire_widget(&out_pin, &in_pin, wire_ui, snarl);
+        viewer.show_wire_widget(&out_pin, &in_pin, &mut wire_ui, snarl);
+        if widget_rect != wire_ui.min_rect() {
+            ui.ctx().memory_mut(|mem| {
+                mem.data.insert_temp(
+                    id,
+                    (
+                        Rect::from_center_size(
+                            center,
+                            Vec2::new(wire_ui.min_rect().width(), wire_ui.min_rect().height()),
+                        ),
+                        wire_x_length,
+                    ),
+                )
+            });
+        }
     }
 
     ui.advance_cursor_after_rect(Rect::from_min_size(snarl_resp.rect.min, Vec2::ZERO));
