@@ -1,9 +1,6 @@
 //! This module provides functionality for showing [`Snarl`] graph in [`Ui`].
 
-use std::{
-    collections::HashMap,
-    hash::{DefaultHasher, Hash, Hasher},
-};
+use std::{collections::HashMap, hash::Hash};
 
 use egui::{
     Align, Align2, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers,
@@ -106,6 +103,13 @@ pub enum NodeLayoutKind {
     /// +---------------------+
     FlippedSandwich,
     // TODO: Add vertical layouts.
+}
+
+/// Cache params for wire widget
+#[derive(Clone)]
+pub struct WireWidgetCache {
+    widget_rect: Rect,
+    wire_len: f32,
 }
 
 /// Controls how node elements are laid out.
@@ -1431,13 +1435,13 @@ where
     }
 
     for (out_pin, in_pin, center, wire_x_length) in wire_widgets {
-        let mut hasher = DefaultHasher::new();
-        (out_pin.id, in_pin.id).hash(&mut hasher);
-        let id = Id::new(hasher.finish());
-        let cached = ui.ctx().memory(|mem| mem.data.get_temp::<(Rect, f32)>(id));
-        let widget_rect = if let Some((widget_rect, current_wire_x_length)) = cached {
-            if current_wire_x_length != wire_x_length {
-                RectAlign {
+        let id = Id::new("wire-widget").with((out_pin.id, in_pin.id));
+        let cached = ui
+            .ctx()
+            .memory(|mem| mem.data.get_temp::<WireWidgetCache>(id));
+        let widget_rect = cached.map_or_else(
+            || {
+                let default_rect = RectAlign {
                     parent: Align2::CENTER_CENTER,
                     child: style.wire_widget_align.unwrap_or(Align2::CENTER_CENTER),
                 }
@@ -1445,21 +1449,29 @@ where
                     &Rect::from_center_size(center, [wire_x_length, 0.0].into()),
                     Vec2::new(wire_x_length, 0.0),
                     style.wire_widget_gap.unwrap_or(0.0),
-                )
-            } else {
-                widget_rect
-            }
-        } else {
-            RectAlign {
-                parent: Align2::CENTER_CENTER,
-                child: style.wire_widget_align.unwrap_or(Align2::CENTER_CENTER),
-            }
-            .align_rect(
-                &Rect::from_center_size(center, [wire_x_length, 0.0].into()),
-                Vec2::new(wire_x_length, 0.0),
-                style.wire_widget_gap.unwrap_or(0.0),
-            )
-        };
+                );
+                default_rect
+            },
+            |cached| {
+                if cached.wire_len != wire_x_length {
+                    // calculate a new rect if the wire length has been changed due to user moving
+                    // the nodes connected by the wire
+                    let new_rect = RectAlign {
+                        parent: Align2::CENTER_CENTER,
+                        child: style.wire_widget_align.unwrap_or(Align2::CENTER_CENTER),
+                    }
+                    .align_rect(
+                        &Rect::from_center_size(center, [wire_x_length, 0.0].into()),
+                        Vec2::new(wire_x_length, 0.0),
+                        style.wire_widget_gap.unwrap_or(0.0),
+                    );
+                    new_rect
+                } else {
+                    let cached_rect = cached.widget_rect;
+                    cached_rect
+                }
+            },
+        );
         let mut wire_ui = ui.new_child(
             UiBuilder::new()
                 .max_rect(widget_rect)
@@ -1467,20 +1479,18 @@ where
                 .id_salt(id),
         );
         viewer.show_wire_widget(&out_pin, &in_pin, &mut wire_ui, snarl);
-        if widget_rect != wire_ui.min_rect() {
-            ui.ctx().memory_mut(|mem| {
-                mem.data.insert_temp(
-                    id,
-                    (
-                        Rect::from_center_size(
-                            center,
-                            Vec2::new(wire_ui.min_rect().width(), wire_ui.min_rect().height()),
-                        ),
-                        wire_x_length,
+        ui.ctx().memory_mut(|mem| {
+            mem.data.insert_temp(
+                id,
+                WireWidgetCache {
+                    widget_rect: Rect::from_center_size(
+                        center,
+                        Vec2::new(wire_ui.min_rect().width(), wire_ui.min_rect().height()),
                     ),
-                )
-            });
-        }
+                    wire_len: wire_x_length,
+                },
+            )
+        });
     }
 
     ui.advance_cursor_after_rect(Rect::from_min_size(snarl_resp.rect.min, Vec2::ZERO));
