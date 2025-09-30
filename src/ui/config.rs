@@ -18,7 +18,7 @@ pub struct SnarlConfig {
     /// Controls key bindings.
 
     /// Action used to draw selection rect.
-    /// Defaults to [`PointerButton::Primary`] && `[Modifiers::SHIFT].
+    /// Defaults to [`PointerButton::Primary`] && [`Modifiers::SHIFT`].
     pub rect_select: ModifierClick,
 
     /// Action used to remove hovered wire.
@@ -62,13 +62,19 @@ pub struct SnarlConfig {
     pub deselect_node: ModifierClick,
 
     /// Action used to click node header.
-    /// Defaults to [`PointerButton::Primary`]``.
+    /// Defaults to [`PointerButton::Primary`].
     pub click_header: ModifierClick,
 
     #[doc(hidden)]
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     /// Do not access other than with .., here to emulate `#[non_exhaustive(pub)]`
     pub _non_exhaustive: (),
+}
+
+impl Default for SnarlConfig {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SnarlConfig {

@@ -20,7 +20,7 @@ pub mod ui;
 
 use std::ops::{Index, IndexMut};
 
-use egui::{ahash::HashSet, Pos2};
+use egui::{Pos2, ahash::HashSet};
 use slab::Slab;
 
 impl<T> Default for Snarl<T> {
@@ -184,14 +184,14 @@ impl Wires {
         self.wires
             .iter()
             .filter(move |wire| wire.out_pin == out_pin)
-            .map(|wire| (wire.in_pin))
+            .map(|wire| wire.in_pin)
     }
 
     fn wired_outputs(&self, in_pin: InPinId) -> impl Iterator<Item = OutPinId> + '_ {
         self.wires
             .iter()
             .filter(move |wire| wire.in_pin == in_pin)
-            .map(|wire| (wire.out_pin))
+            .map(|wire| wire.out_pin)
     }
 
     fn iter(&self) -> impl Iterator<Item = Wire> + '_ {

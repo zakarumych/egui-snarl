@@ -270,7 +270,7 @@ impl NodeLayout {
         }
     }
 
-    fn output_heights(self, state: &NodeState) -> Heights {
+    fn output_heights(self, state: &NodeState) -> Heights<'_> {
         let rows = state.output_heights().as_slice();
 
         let outer = match (self.kind, self.equal_pin_row_heights) {
@@ -824,6 +824,7 @@ impl Default for SnarlStyle {
     }
 }
 
+#[allow(dead_code)]
 struct Input {
     hover_pos: Option<Pos2>,
     interact_pos: Option<Pos2>,
@@ -978,6 +979,7 @@ impl SnarlWidget {
 }
 
 #[inline(never)]
+#[allow(clippy::too_many_arguments)]
 fn show_snarl<T, V>(
     snarl_id: Id,
     mut style: SnarlStyle,
@@ -1269,8 +1271,8 @@ where
         );
         if viewer.has_wire_widget(&wire.out_pin, &wire.in_pin, snarl) {
             let center = Pos2::new(
-                (from_r.pos.x + to_r.pos.x) / 2.0,
-                (from_r.pos.y + to_r.pos.y) / 2.0,
+                f32::midpoint(from_r.pos.x, to_r.pos.x),
+                f32::midpoint(from_r.pos.y, to_r.pos.y),
             );
             let wire_x_length =
                 f32::max(from_r.pos.x, to_r.pos.x) - f32::min(from_r.pos.x, to_r.pos.x);
@@ -1298,7 +1300,10 @@ where
             if select { Some(id) } else { None }
         });
 
-        if input.modifiers.contains(config.deselect_all_nodes.modifiers) {
+        if input
+            .modifiers
+            .contains(config.deselect_all_nodes.modifiers)
+        {
             snarl_state.deselect_many_nodes(select_nodes);
         } else {
             snarl_state.select_many_nodes(
@@ -1395,15 +1400,12 @@ where
     //
     // This uses `button_down` directly, instead of `clicked_by` to improve
     // responsiveness of the cancel action.
-    if snarl_state.has_new_wires()
-        && ui.input(|x| x.pointer.button_down(PointerButton::Secondary))
+    if snarl_state.has_new_wires() && ui.input(|x| x.pointer.button_down(PointerButton::Secondary))
     {
         let _ = snarl_state.take_new_wires();
     }
 
-    if input.modifiers.command
-        || input.escape_pressed
-    {
+    if input.modifiers.command || input.escape_pressed {
         snarl_state.deselect_all_nodes();
     }
 
@@ -1504,7 +1506,7 @@ where
             .memory(|mem| mem.data.get_temp::<WireWidgetCache>(id));
         let widget_rect = cached.map_or_else(
             || {
-                let default_rect = RectAlign {
+                RectAlign {
                     parent: Align2::CENTER_CENTER,
                     child: style.wire_widget_align.unwrap_or(Align2::CENTER_CENTER),
                 }
@@ -1512,14 +1514,17 @@ where
                     &Rect::from_center_size(center, [wire_x_length, 0.0].into()),
                     Vec2::new(wire_x_length, 0.0),
                     style.wire_widget_gap.unwrap_or(0.0),
-                );
-                default_rect
+                )
             },
             |cached| {
-                if cached.wire_len != wire_x_length {
+                #[allow(clippy::float_cmp)]
+                if cached.wire_len == wire_x_length {
+                    cached.widget_rect
+                } else {
                     // calculate a new rect if the wire length has been changed due to user moving
                     // the nodes connected by the wire
-                    let new_rect = RectAlign {
+
+                    RectAlign {
                         parent: Align2::CENTER_CENTER,
                         child: style.wire_widget_align.unwrap_or(Align2::CENTER_CENTER),
                     }
@@ -1527,11 +1532,7 @@ where
                         &Rect::from_center_size(center, [wire_x_length, 0.0].into()),
                         Vec2::new(wire_x_length, 0.0),
                         style.wire_widget_gap.unwrap_or(0.0),
-                    );
-                    new_rect
-                } else {
-                    let cached_rect = cached.widget_rect;
-                    cached_rect
+                    )
                 }
             },
         );
@@ -1541,7 +1542,7 @@ where
                 .layout(Layout::default())
                 .id_salt(id),
         );
-        viewer.show_wire_widget(&out_pin, &in_pin, &mut wire_ui, snarl);
+        viewer.show_wire_widget(out_pin, in_pin, &mut wire_ui, snarl);
         ui.ctx().memory_mut(|mem| {
             mem.data.insert_temp(
                 id,
@@ -1552,7 +1553,7 @@ where
                     ),
                     wire_len: wire_x_length,
                 },
-            )
+            );
         });
     }
 

@@ -1,4 +1,4 @@
-use egui::{emath::Rot2, vec2, Painter, Rect, Style, Vec2};
+use egui::{Painter, Rect, Style, Vec2, emath::Rot2, vec2};
 
 use super::SnarlStyle;
 
