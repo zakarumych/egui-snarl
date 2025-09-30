@@ -3,11 +3,11 @@
 use std::{collections::HashMap, hash::Hash};
 
 use egui::{
-    Align, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers, PointerButton,
-    Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, UiKind, UiStackInfo,
-    Vec2,
+    Align, Align2, Color32, CornerRadius, Frame, Id, Key, LayerId, Layout, Margin, Modifiers,
+    PointerButton, Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder,
+    UiKind, UiStackInfo, Vec2,
     collapsing_header::paint_default_icon,
-    emath::{GuiRounding, TSTransform},
+    emath::{GuiRounding, RectAlign, TSTransform},
     epaint::Shadow,
     pos2,
     response::Flags,
@@ -19,6 +19,7 @@ use smallvec::SmallVec;
 use crate::{InPin, InPinId, Node, NodeId, OutPin, OutPinId, Snarl, ui::wire::WireId};
 
 mod background_pattern;
+mod config;
 mod pin;
 mod scale;
 mod state;
@@ -33,6 +34,7 @@ use self::{
 
 pub use self::{
     background_pattern::{BackgroundPattern, Grid},
+    config::{ModifierClick, SnarlConfig},
     pin::{AnyPins, PinInfo, PinShape, PinWireInfo, SnarlPin},
     state::get_selected_nodes,
     viewer::SnarlViewer,
@@ -103,6 +105,13 @@ pub enum NodeLayoutKind {
     /// +---------------------+
     FlippedSandwich,
     // TODO: Add vertical layouts.
+}
+
+/// Cache params for wire widget
+#[derive(Clone)]
+pub struct WireWidgetCache {
+    widget_rect: Rect,
+    wire_len: f32,
 }
 
 /// Controls how node elements are laid out.
@@ -261,7 +270,7 @@ impl NodeLayout {
         }
     }
 
-    fn output_heights(self, state: &NodeState) -> Heights {
+    fn output_heights(self, state: &NodeState) -> Heights<'_> {
         let rows = state.output_heights().as_slice();
 
         let outer = match (self.kind, self.equal_pin_row_heights) {
@@ -558,6 +567,25 @@ pub struct SnarlStyle {
     )]
     pub wire_smoothness: Option<f32>,
 
+    /// Controls the gap between wire widget and wire.
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    #[cfg_attr(
+        feature = "egui-probe",
+        egui_probe(range = 0.0..)
+    )]
+    pub wire_widget_gap: Option<f32>,
+
+    /// Controls the alignment of wire widget with respect to the center point of wire
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
+    pub wire_widget_align: Option<Align2>,
+
     #[doc(hidden)]
     #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
@@ -781,6 +809,8 @@ impl SnarlStyle {
             select_style: None,
             crisp_magnified_text: None,
             wire_smoothness: None,
+            wire_widget_gap: None,
+            wire_widget_align: None,
 
             _non_exhaustive: (),
         }
@@ -794,12 +824,25 @@ impl Default for SnarlStyle {
     }
 }
 
+#[allow(dead_code)]
+struct Input {
+    hover_pos: Option<Pos2>,
+    interact_pos: Option<Pos2>,
+    zoom_delta: f32,
+    // primary_pressed: bool,
+    secondary_pressed: bool,
+    modifiers: Modifiers,
+    escape_pressed: bool,
+}
+
 struct DrawNodeResponse {
     node_moved: Option<(NodeId, Vec2)>,
     node_to_top: Option<NodeId>,
     drag_released: bool,
     pin_hovered: Option<AnyPin>,
     final_rect: Rect,
+    in_pins: Vec<InPin>,
+    out_pins: Vec<OutPin>,
 }
 
 struct DrawPinsResponse {
@@ -825,6 +868,7 @@ pub struct SnarlWidget {
     id_salt: Id,
     id: Option<Id>,
     style: SnarlStyle,
+    config: SnarlConfig,
     min_size: Vec2,
     max_size: Vec2,
 }
@@ -845,6 +889,7 @@ impl SnarlWidget {
             id_salt: Id::new(":snarl:"),
             id: None,
             style: SnarlStyle::new(),
+            config: SnarlConfig::new(),
             min_size: Vec2::ZERO,
             max_size: Vec2::INFINITY,
         }
@@ -883,6 +928,14 @@ impl SnarlWidget {
         self
     }
 
+    /// Set config parameters for the [`Snarl`] widget.
+    #[inline]
+    #[must_use]
+    pub fn config(mut self, config: SnarlConfig) -> Self {
+        self.config = config;
+        self
+    }
+
     /// Set minimum size of the [`Snarl`] widget.
     #[inline]
     #[must_use]
@@ -915,6 +968,7 @@ impl SnarlWidget {
         show_snarl(
             snarl_id,
             self.style,
+            self.config,
             self.min_size,
             self.max_size,
             snarl,
@@ -925,9 +979,11 @@ impl SnarlWidget {
 }
 
 #[inline(never)]
+#[allow(clippy::too_many_arguments)]
 fn show_snarl<T, V>(
     snarl_id: Id,
     mut style: SnarlStyle,
+    mut config: SnarlConfig,
     min_size: Vec2,
     max_size: Vec2,
     snarl: &mut Snarl<T>,
@@ -939,7 +995,20 @@ where
 {
     #![allow(clippy::too_many_lines)]
 
-    let (mut latest_pos, modifiers) = ui.ctx().input(|i| (i.pointer.latest_pos(), i.modifiers));
+    let (mut latest_pos, input) = ui.ctx().input(|i| {
+        (
+            i.pointer.latest_pos(),
+            Input {
+                zoom_delta: i.zoom_delta(),
+                hover_pos: i.pointer.hover_pos(),
+                interact_pos: i.pointer.interact_pos(),
+                modifiers: i.modifiers,
+                // primary_pressed: i.pointer.primary_pressed(),
+                secondary_pressed: i.pointer.secondary_pressed(),
+                escape_pressed: i.key_pressed(Key::Escape),
+            },
+        )
+    });
 
     let bg_frame = style.get_bg_frame(ui.style());
 
@@ -1032,10 +1101,10 @@ where
 
     // Process selection rect.
     let mut rect_selection_ended = None;
-    if modifiers.shift || snarl_state.is_rect_selection() {
+    if input.modifiers == config.rect_select.modifiers || snarl_state.is_rect_selection() {
         let select_resp = ui.interact(snarl_resp.rect, snarl_id.with("select"), Sense::drag());
 
-        if select_resp.dragged_by(PointerButton::Primary) {
+        if select_resp.dragged_by(config.rect_select.mouse_button) {
             if let Some(pos) = select_resp.interact_pointer_pos() {
                 if snarl_state.is_rect_selection() {
                     snarl_state.update_rect_selection(pos);
@@ -1045,7 +1114,7 @@ where
             }
         }
 
-        if select_resp.drag_stopped_by(PointerButton::Primary) {
+        if select_resp.drag_stopped_by(config.rect_select.mouse_button) {
             if let Some(select_rect) = snarl_state.rect_selection() {
                 rect_selection_ended = Some(select_rect);
             }
@@ -1064,6 +1133,8 @@ where
 
     let mut input_info = HashMap::new();
     let mut output_info = HashMap::new();
+    let mut input_pins = HashMap::new();
+    let mut output_pins = HashMap::new();
 
     let mut pin_hovered = None;
 
@@ -1085,10 +1156,11 @@ where
             node_idx,
             viewer,
             &mut snarl_state,
+            &mut config,
             &style,
             snarl_id,
             &mut input_info,
-            modifiers,
+            input.modifiers,
             &mut output_info,
         );
 
@@ -1108,12 +1180,19 @@ where
             if rect_selection_ended.is_some() {
                 node_rects.push((node_idx, response.final_rect));
             }
+            for pin in response.in_pins {
+                input_pins.insert(pin.id, pin);
+            }
+            for pin in response.out_pins {
+                output_pins.insert(pin.id, pin);
+            }
         }
     }
 
     let mut hovered_wire = None;
     let mut hovered_wire_disconnect = false;
     let mut wire_shapes = Vec::new();
+    let mut wire_widgets = Vec::new();
 
     // Draw and interact with wires
     for wire in snarl.wires.iter() {
@@ -1121,6 +1200,12 @@ where
             continue;
         };
         let Some(to_r) = input_info.get(&wire.in_pin) else {
+            continue;
+        };
+        let Some(out_pin) = output_pins.get(&wire.out_pin) else {
+            continue;
+        };
+        let Some(in_pin) = input_pins.get(&wire.in_pin) else {
             continue;
         };
 
@@ -1154,7 +1239,8 @@ where
                         ui.interact(snarl_resp.rect, ui.make_persistent_id(wire), Sense::click());
 
                     //Remove hovered wire by second click
-                    hovered_wire_disconnect |= wire_r.clicked_by(PointerButton::Secondary);
+                    hovered_wire_disconnect |=
+                        wire_r.clicked_by(config.remove_hovered_wire.mouse_button);
                 }
             }
         }
@@ -1183,6 +1269,15 @@ where
             wire_threshold,
             pick_wire_style(from_r.wire_style, to_r.wire_style),
         );
+        if viewer.has_wire_widget(&wire.out_pin, &wire.in_pin, snarl) {
+            let center = Pos2::new(
+                f32::midpoint(from_r.pos.x, to_r.pos.x),
+                f32::midpoint(from_r.pos.y, to_r.pos.y),
+            );
+            let wire_x_length =
+                f32::max(from_r.pos.x, to_r.pos.x) - f32::min(from_r.pos.x, to_r.pos.x);
+            wire_widgets.push((out_pin, in_pin, center, wire_x_length));
+        }
     }
 
     // Remove hovered wire by second click
@@ -1205,10 +1300,16 @@ where
             if select { Some(id) } else { None }
         });
 
-        if modifiers.command {
+        if input
+            .modifiers
+            .contains(config.deselect_all_nodes.modifiers)
+        {
             snarl_state.deselect_many_nodes(select_nodes);
         } else {
-            snarl_state.select_many_nodes(!modifiers.shift, select_nodes);
+            snarl_state.select_many_nodes(
+                !input.modifiers.contains(config.rect_select.modifiers),
+                select_nodes,
+            );
         }
     }
 
@@ -1228,7 +1329,8 @@ where
     //
     // This uses `button_down` directly, instead of `clicked_by` to improve
     // responsiveness of the cancel action.
-    if snarl_state.has_new_wires() && ui.input(|x| x.pointer.button_down(PointerButton::Secondary))
+    if snarl_state.has_new_wires()
+        && ui.input(|x| x.pointer.button_down(config.cancel_wire_drag.mouse_button))
     {
         let _ = snarl_state.take_new_wires();
         snarl_resp.flags.remove(Flags::CLICKED);
@@ -1240,7 +1342,9 @@ where
         snarl_state.look_at(nodes_bb, ui_rect, min_scale, max_scale);
     }
 
-    if modifiers.command && snarl_resp.clicked_by(PointerButton::Primary) {
+    if input.modifiers == config.deselect_all_nodes.modifiers
+        && snarl_resp.clicked_by(config.deselect_all_nodes.mouse_button)
+    {
         snarl_state.deselect_all_nodes();
     }
 
@@ -1288,6 +1392,21 @@ where
             }
             _ => {}
         }
+    }
+
+    // If right button is clicked while new wire is being dragged, cancel it.
+    // This is to provide way to 'not open' the link graph node menu, but just
+    // releasing the new wire to empty space.
+    //
+    // This uses `button_down` directly, instead of `clicked_by` to improve
+    // responsiveness of the cancel action.
+    if snarl_state.has_new_wires() && ui.input(|x| x.pointer.button_down(PointerButton::Secondary))
+    {
+        let _ = snarl_state.take_new_wires();
+    }
+
+    if input.modifiers.command || input.escape_pressed {
+        snarl_state.deselect_all_nodes();
     }
 
     if let Some(interact_pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
@@ -1380,6 +1499,64 @@ where
         }
     }
 
+    for (out_pin, in_pin, center, wire_x_length) in wire_widgets {
+        let id = Id::new("wire-widget").with((out_pin.id, in_pin.id));
+        let cached = ui
+            .ctx()
+            .memory(|mem| mem.data.get_temp::<WireWidgetCache>(id));
+        let widget_rect = cached.map_or_else(
+            || {
+                RectAlign {
+                    parent: Align2::CENTER_CENTER,
+                    child: style.wire_widget_align.unwrap_or(Align2::CENTER_CENTER),
+                }
+                .align_rect(
+                    &Rect::from_center_size(center, [wire_x_length, 0.0].into()),
+                    Vec2::new(wire_x_length, 0.0),
+                    style.wire_widget_gap.unwrap_or(0.0),
+                )
+            },
+            |cached| {
+                #[allow(clippy::float_cmp)]
+                if cached.wire_len == wire_x_length {
+                    cached.widget_rect
+                } else {
+                    // calculate a new rect if the wire length has been changed due to user moving
+                    // the nodes connected by the wire
+
+                    RectAlign {
+                        parent: Align2::CENTER_CENTER,
+                        child: style.wire_widget_align.unwrap_or(Align2::CENTER_CENTER),
+                    }
+                    .align_rect(
+                        &Rect::from_center_size(center, [wire_x_length, 0.0].into()),
+                        Vec2::new(wire_x_length, 0.0),
+                        style.wire_widget_gap.unwrap_or(0.0),
+                    )
+                }
+            },
+        );
+        let mut wire_ui = ui.new_child(
+            UiBuilder::new()
+                .max_rect(widget_rect)
+                .layout(Layout::default())
+                .id_salt(id),
+        );
+        viewer.show_wire_widget(out_pin, in_pin, &mut wire_ui, snarl);
+        ui.ctx().memory_mut(|mem| {
+            mem.data.insert_temp(
+                id,
+                WireWidgetCache {
+                    widget_rect: Rect::from_center_size(
+                        center,
+                        Vec2::new(wire_ui.min_rect().width(), wire_ui.min_rect().height()),
+                    ),
+                    wire_len: wire_x_length,
+                },
+            );
+        });
+    }
+
     ui.advance_cursor_after_rect(Rect::from_min_size(snarl_resp.rect.min, Vec2::ZERO));
 
     if let Some(node) = node_to_top {
@@ -1425,6 +1602,7 @@ fn draw_inputs<T, V>(
     min_pin_y_bottom: f32,
     input_spacing: Option<f32>,
     snarl_state: &mut SnarlState,
+    config: &mut SnarlConfig,
     modifiers: Modifiers,
     input_positions: &mut HashMap<InPinId, PinResponse>,
     heights: Heights,
@@ -1493,7 +1671,7 @@ where
 
             pin_ui.skip_ahead_auto_ids(1);
 
-            if r.clicked_by(PointerButton::Secondary) {
+            if r.clicked_by(config.click_pin.mouse_button) {
                 if snarl_state.has_new_wires() {
                     snarl_state.remove_new_wire_in(in_pin.id);
                 } else {
@@ -1504,10 +1682,12 @@ where
                     }
                 }
             }
-            if r.drag_started_by(PointerButton::Primary) {
+            if r.drag_started_by(config.drag_pin.mouse_button) {
+                // TODO: I am not sure what start_new_wires_out() does?
+                // Is that for a future feature where you can draw several wires at once?
                 if modifiers.command {
                     snarl_state.start_new_wires_out(&in_pin.remotes);
-                    if !modifiers.shift {
+                    if modifiers != config.drag_pin.modifiers {
                         snarl.drop_inputs(in_pin.id);
                         if !snarl.nodes.contains(node.0) {
                             // If removed
@@ -1527,6 +1707,7 @@ where
 
             if r.contains_pointer() {
                 if snarl_state.has_new_wires_in() {
+                    // TODO: And here I am also not sure what these modifiers do
                     if modifiers.shift && !modifiers.command {
                         snarl_state.add_new_wire_in(in_pin.id);
                     }
@@ -1584,6 +1765,7 @@ fn draw_outputs<T, V>(
     min_pin_y_bottom: f32,
     output_spacing: Option<f32>,
     snarl_state: &mut SnarlState,
+    config: &mut SnarlConfig,
     modifiers: Modifiers,
     output_positions: &mut HashMap<OutPinId, PinResponse>,
     heights: Heights,
@@ -1652,7 +1834,7 @@ where
 
             pin_ui.skip_ahead_auto_ids(1);
 
-            if r.clicked_by(PointerButton::Secondary) {
+            if r.clicked_by(config.click_pin.mouse_button) {
                 if snarl_state.has_new_wires() {
                     snarl_state.remove_new_wire_out(out_pin.id);
                 } else {
@@ -1663,11 +1845,11 @@ where
                     }
                 }
             }
-            if r.drag_started_by(PointerButton::Primary) {
-                if modifiers.command {
+            if r.drag_started_by(config.drag_pin.mouse_button) {
+                if modifiers.contains(config.drag_pin.modifiers) {
                     snarl_state.start_new_wires_in(&out_pin.remotes);
 
-                    if !modifiers.shift {
+                    if !modifiers.contains(config.no_menu.modifiers) {
                         snarl.drop_outputs(out_pin.id);
                         if !snarl.nodes.contains(node.0) {
                             // If removed
@@ -1686,6 +1868,7 @@ where
             let mut visual_pin_rect = r.rect;
 
             if r.contains_pointer() {
+                // TODO: What is happening here?
                 if snarl_state.has_new_wires_out() {
                     if modifiers.shift && !modifiers.command {
                         snarl_state.add_new_wire_out(out_pin.id);
@@ -1770,6 +1953,7 @@ fn draw_node<T, V>(
     node: NodeId,
     viewer: &mut V,
     snarl_state: &mut SnarlState,
+    config: &mut SnarlConfig,
     style: &SnarlStyle,
     snarl_id: Id,
     input_positions: &mut HashMap<InPinId, PinResponse>,
@@ -1861,14 +2045,17 @@ where
         Sense::click_and_drag(),
     );
 
-    if !modifiers.shift && !modifiers.command && r.dragged_by(PointerButton::Primary) {
+    if !modifiers.contains(config.select_node.modifiers)
+        && !modifiers.contains(config.deselect_node.modifiers)
+        && r.dragged_by(config.click_node.mouse_button)
+    {
         node_moved = Some((node, r.drag_delta()));
     }
 
-    if r.clicked_by(PointerButton::Primary) || r.dragged_by(PointerButton::Primary) {
-        if modifiers.shift {
+    if r.clicked_by(config.click_node.mouse_button) || r.dragged_by(config.drag_node.mouse_button) {
+        if modifiers.contains(config.select_node.modifiers) {
             snarl_state.select_one_node(modifiers.command, node);
-        } else if modifiers.command {
+        } else if modifiers.contains(config.deselect_node.modifiers) {
             snarl_state.deselect_one_node(node);
         }
     }
@@ -2004,6 +2191,7 @@ where
                     node_rect.min.y + node_state.header_height(),
                     input_spacing,
                     snarl_state,
+                    config,
                     modifiers,
                     input_positions,
                     node_layout.input_heights(&node_state),
@@ -2042,6 +2230,7 @@ where
                     node_rect.min.y + node_state.header_height(),
                     output_spacing,
                     snarl_state,
+                    config,
                     modifiers,
                     output_positions,
                     node_layout.output_heights(&node_state),
@@ -2129,6 +2318,7 @@ where
                     node_rect.min.y + node_state.header_height(),
                     input_spacing,
                     snarl_state,
+                    config,
                     modifiers,
                     input_positions,
                     node_layout.input_heights(&node_state),
@@ -2204,6 +2394,7 @@ where
                     node_rect.min.y + node_state.header_height(),
                     output_spacing,
                     snarl_state,
+                    config,
                     modifiers,
                     output_positions,
                     node_layout.output_heights(&node_state),
@@ -2253,6 +2444,7 @@ where
                     node_rect.min.y + node_state.header_height(),
                     output_spacing,
                     snarl_state,
+                    config,
                     modifiers,
                     output_positions,
                     node_layout.output_heights(&node_state),
@@ -2328,6 +2520,7 @@ where
                     node_rect.min.y + node_state.header_height(),
                     input_spacing,
                     snarl_state,
+                    config,
                     modifiers,
                     input_positions,
                     node_layout.input_heights(&node_state),
@@ -2414,7 +2607,7 @@ where
                     );
                     paint_default_icon(ui, openness, &r);
 
-                    if r.clicked_by(PointerButton::Primary) {
+                    if r.clicked_by(config.click_header.mouse_button) {
                         // Toggle node's openness.
                         snarl.open_node(node, !open);
                     }
@@ -2467,6 +2660,8 @@ where
         drag_released,
         pin_hovered,
         final_rect: r.response.rect,
+        in_pins: inputs,
+        out_pins: outputs,
     })
 }
 
@@ -2552,13 +2747,20 @@ const fn mix_colors(a: Color32, b: Color32) -> Color32 {
 impl<T> Snarl<T> {
     /// Render [`Snarl`] using given viewer and style into the [`Ui`].
     #[inline]
-    pub fn show<V>(&mut self, viewer: &mut V, style: &SnarlStyle, id_salt: impl Hash, ui: &mut Ui)
-    where
+    pub fn show<V>(
+        &mut self,
+        viewer: &mut V,
+        style: &SnarlStyle,
+        config: &SnarlConfig,
+        id_salt: impl Hash,
+        ui: &mut Ui,
+    ) where
         V: SnarlViewer<T>,
     {
         show_snarl(
             ui.make_persistent_id(id_salt),
             *style,
+            *config,
             Vec2::ZERO,
             Vec2::INFINITY,
             self,
