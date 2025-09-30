@@ -1,4 +1,4 @@
-use egui::{epaint::PathShape, pos2, vec2, Color32, Painter, Rect, Shape, Stroke, Style, Vec2};
+use egui::{Color32, Painter, Rect, Shape, Stroke, Style, Vec2, epaint::PathShape, pos2, vec2};
 
 use crate::{InPinId, OutPinId};
 

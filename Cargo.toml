@@ -18,10 +18,10 @@ syn = { version = "2" }
 serde = { version = "1" }
 serde_json = { version = "1" }
 
-egui-probe = { version = "0.9.0" }
-egui-scale = { version = "0.2.0" }
+egui-probe = { version = "0.9" }
+egui-scale = { version = "0.2" }
 wasm-bindgen-futures = "0.4"
-web-sys = "0.3.70"
+web-sys = "0.3"
 
 [package]
 name = "egui-snarl"

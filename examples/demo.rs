@@ -3,12 +3,12 @@
 use std::collections::HashMap;
 
 use eframe::{App, CreationContext};
-use egui::{Color32, Id, Ui};
+use egui::{Color32, Id, Modifiers, PointerButton, Ui};
 use egui_snarl::{
     InPin, InPinId, NodeId, OutPin, OutPinId, Snarl,
     ui::{
-        AnyPins, NodeLayout, PinInfo, PinPlacement, SnarlStyle, SnarlViewer, SnarlWidget,
-        WireStyle, get_selected_nodes,
+        AnyPins, ModifierClick, NodeLayout, PinInfo, PinPlacement, SnarlConfig, SnarlStyle,
+        SnarlViewer, SnarlWidget, WireStyle, get_selected_nodes,
     },
 };
 
@@ -929,6 +929,7 @@ impl Expr {
 pub struct DemoApp {
     snarl: Snarl<DemoNode>,
     style: SnarlStyle,
+    config: SnarlConfig,
 }
 
 const fn default_style() -> SnarlStyle {
@@ -961,6 +962,18 @@ const fn default_style() -> SnarlStyle {
     }
 }
 
+const fn default_config() -> SnarlConfig {
+    SnarlConfig {
+        // Mouse and keyboard buttons for interaction with the graph
+        // can be configured here, like so:
+        rect_select: ModifierClick {
+            modifiers: Modifiers::SHIFT,
+            mouse_button: PointerButton::Primary,
+        },
+        ..SnarlConfig::new()
+    }
+}
+
 impl DemoApp {
     pub fn new(cx: &CreationContext) -> Self {
         egui_extras::install_image_loaders(&cx.egui_ctx);
@@ -983,7 +996,19 @@ impl DemoApp {
         });
         // let style = SnarlStyle::new();
 
-        DemoApp { snarl, style }
+        let config = cx.storage.map_or_else(default_config, |storage| {
+            storage
+                .get_string("config")
+                .and_then(|style| serde_json::from_str(&style).ok())
+                .unwrap_or_else(default_config)
+        });
+        // let config = SnarlConfig::new();
+
+        DemoApp {
+            snarl,
+            style,
+            config,
+        }
     }
 }
 
@@ -1053,6 +1078,7 @@ impl App for DemoApp {
             SnarlWidget::new()
                 .id(Id::new("snarl-demo"))
                 .style(self.style)
+                .config(self.config)
                 .show(&mut self.snarl, &mut DemoViewer, ui);
         });
     }
