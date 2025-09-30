@@ -3,7 +3,7 @@
 use std::{collections::HashMap, hash::Hash};
 
 use egui::{
-    Align, Align2, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers,
+    Align, Align2, Color32, CornerRadius, Frame, Id, Key, LayerId, Layout, Margin, Modifiers,
     PointerButton, Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder,
     UiKind, UiStackInfo, Vec2,
     collapsing_header::paint_default_icon,
@@ -824,6 +824,16 @@ impl Default for SnarlStyle {
     }
 }
 
+struct Input {
+    hover_pos: Option<Pos2>,
+    interact_pos: Option<Pos2>,
+    zoom_delta: f32,
+    // primary_pressed: bool,
+    secondary_pressed: bool,
+    modifiers: Modifiers,
+    escape_pressed: bool,
+}
+
 struct DrawNodeResponse {
     node_moved: Option<(NodeId, Vec2)>,
     node_to_top: Option<NodeId>,
@@ -983,7 +993,20 @@ where
 {
     #![allow(clippy::too_many_lines)]
 
-    let (mut latest_pos, modifiers) = ui.ctx().input(|i| (i.pointer.latest_pos(), i.modifiers));
+    let (mut latest_pos, input) = ui.ctx().input(|i| {
+        (
+            i.pointer.latest_pos(),
+            Input {
+                zoom_delta: i.zoom_delta(),
+                hover_pos: i.pointer.hover_pos(),
+                interact_pos: i.pointer.interact_pos(),
+                modifiers: i.modifiers,
+                // primary_pressed: i.pointer.primary_pressed(),
+                secondary_pressed: i.pointer.secondary_pressed(),
+                escape_pressed: i.key_pressed(Key::Escape),
+            },
+        )
+    });
 
     let bg_frame = style.get_bg_frame(ui.style());
 
@@ -1076,7 +1099,7 @@ where
 
     // Process selection rect.
     let mut rect_selection_ended = None;
-    if modifiers == config.rect_select.modifiers || snarl_state.is_rect_selection() {
+    if input.modifiers == config.rect_select.modifiers || snarl_state.is_rect_selection() {
         let select_resp = ui.interact(snarl_resp.rect, snarl_id.with("select"), Sense::drag());
 
         if select_resp.dragged_by(config.rect_select.mouse_button) {
@@ -1135,7 +1158,7 @@ where
             &style,
             snarl_id,
             &mut input_info,
-            modifiers,
+            input.modifiers,
             &mut output_info,
         );
 
@@ -1275,11 +1298,11 @@ where
             if select { Some(id) } else { None }
         });
 
-        if modifiers.contains(config.deselect_all_nodes.modifiers) {
+        if input.modifiers.contains(config.deselect_all_nodes.modifiers) {
             snarl_state.deselect_many_nodes(select_nodes);
         } else {
             snarl_state.select_many_nodes(
-                !modifiers.contains(config.rect_select.modifiers),
+                !input.modifiers.contains(config.rect_select.modifiers),
                 select_nodes,
             );
         }
@@ -1314,7 +1337,7 @@ where
         snarl_state.look_at(nodes_bb, ui_rect, min_scale, max_scale);
     }
 
-    if modifiers == config.deselect_all_nodes.modifiers
+    if input.modifiers == config.deselect_all_nodes.modifiers
         && snarl_resp.clicked_by(config.deselect_all_nodes.mouse_button)
     {
         snarl_state.deselect_all_nodes();
@@ -1364,6 +1387,24 @@ where
             }
             _ => {}
         }
+    }
+
+    // If right button is clicked while new wire is being dragged, cancel it.
+    // This is to provide way to 'not open' the link graph node menu, but just
+    // releasing the new wire to empty space.
+    //
+    // This uses `button_down` directly, instead of `clicked_by` to improve
+    // responsiveness of the cancel action.
+    if snarl_state.has_new_wires()
+        && ui.input(|x| x.pointer.button_down(PointerButton::Secondary))
+    {
+        let _ = snarl_state.take_new_wires();
+    }
+
+    if input.modifiers.command
+        || input.escape_pressed
+    {
+        snarl_state.deselect_all_nodes();
     }
 
     if let Some(interact_pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
