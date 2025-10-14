@@ -108,11 +108,11 @@ impl NodeState {
         }
     }
 
-    pub fn input_heights(&self) -> &RowHeights {
+    pub const fn input_heights(&self) -> &RowHeights {
         &self.input_heights
     }
 
-    pub fn output_heights(&self) -> &RowHeights {
+    pub const fn output_heights(&self) -> &RowHeights {
         &self.output_heights
     }
 
@@ -328,7 +328,7 @@ impl SnarlState {
         }
     }
 
-    pub fn to_global(&self) -> TSTransform {
+    pub const fn to_global(&self) -> TSTransform {
         self.to_global
     }
 
@@ -451,7 +451,7 @@ impl SnarlState {
         }
     }
 
-    pub fn take_new_wires(&mut self) -> Option<NewWires> {
+    pub const fn take_new_wires(&mut self) -> Option<NewWires> {
         match (&self.new_wires, self.new_wires_menu) {
             (Some(_), false) => {
                 self.dirty = true;
@@ -461,7 +461,7 @@ impl SnarlState {
         }
     }
 
-    pub(crate) fn take_new_wires_menu(&mut self) -> Option<NewWires> {
+    pub(crate) const fn take_new_wires_menu(&mut self) -> Option<NewWires> {
         match (&self.new_wires, self.new_wires_menu) {
             (Some(_), true) => {
                 self.dirty = true;
@@ -559,7 +559,7 @@ impl SnarlState {
         self.selected_nodes.clear();
     }
 
-    pub fn start_rect_selection(&mut self, pos: Pos2) {
+    pub const fn start_rect_selection(&mut self, pos: Pos2) {
         self.dirty |= self.rect_selection.is_none();
         self.rect_selection = Some(RectSelect {
             origin: pos,
@@ -567,7 +567,7 @@ impl SnarlState {
         });
     }
 
-    pub fn stop_rect_selection(&mut self) {
+    pub const fn stop_rect_selection(&mut self) {
         self.dirty |= self.rect_selection.is_some();
         self.rect_selection = None;
     }
@@ -576,7 +576,7 @@ impl SnarlState {
         self.rect_selection.is_some()
     }
 
-    pub fn update_rect_selection(&mut self, pos: Pos2) {
+    pub const fn update_rect_selection(&mut self, pos: Pos2) {
         if let Some(rect_selection) = &mut self.rect_selection {
             rect_selection.current = pos;
             self.dirty = true;
