@@ -3,11 +3,11 @@
 use std::{collections::HashMap, hash::Hash};
 
 use egui::{
-    Align, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers, PointerButton,
-    Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, UiKind, UiStackInfo,
-    Vec2,
+    Align, Align2, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers,
+    PointerButton, Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder,
+    UiKind, UiStackInfo, Vec2,
     collapsing_header::paint_default_icon,
-    emath::{GuiRounding, TSTransform},
+    emath::{GuiRounding, RectAlign, TSTransform},
     epaint::Shadow,
     pos2,
     response::Flags,
@@ -103,6 +103,13 @@ pub enum NodeLayoutKind {
     /// +---------------------+
     FlippedSandwich,
     // TODO: Add vertical layouts.
+}
+
+/// Cache params for wire widget
+#[derive(Clone)]
+pub struct WireWidgetCache {
+    widget_rect: Rect,
+    wire_len: f32,
 }
 
 /// Controls how node elements are laid out.
@@ -558,6 +565,25 @@ pub struct SnarlStyle {
     )]
     pub wire_smoothness: Option<f32>,
 
+    /// Controls the gap between wire widget and wire.
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    #[cfg_attr(
+        feature = "egui-probe",
+        egui_probe(range = 0.0..)
+    )]
+    pub wire_widget_gap: Option<f32>,
+
+    /// Controls the alignment of wire widget with respect to the center point of wire
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
+    pub wire_widget_align: Option<Align2>,
+
     #[doc(hidden)]
     #[cfg_attr(feature = "egui-probe", egui_probe(skip))]
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
@@ -781,6 +807,8 @@ impl SnarlStyle {
             select_style: None,
             crisp_magnified_text: None,
             wire_smoothness: None,
+            wire_widget_gap: None,
+            wire_widget_align: None,
 
             _non_exhaustive: (),
         }
@@ -800,6 +828,8 @@ struct DrawNodeResponse {
     drag_released: bool,
     pin_hovered: Option<AnyPin>,
     final_rect: Rect,
+    in_pins: Vec<InPin>,
+    out_pins: Vec<OutPin>,
 }
 
 struct DrawPinsResponse {
@@ -1064,6 +1094,8 @@ where
 
     let mut input_info = HashMap::new();
     let mut output_info = HashMap::new();
+    let mut input_pins = HashMap::new();
+    let mut output_pins = HashMap::new();
 
     let mut pin_hovered = None;
 
@@ -1108,12 +1140,19 @@ where
             if rect_selection_ended.is_some() {
                 node_rects.push((node_idx, response.final_rect));
             }
+            for pin in response.in_pins {
+                input_pins.insert(pin.id, pin);
+            }
+            for pin in response.out_pins {
+                output_pins.insert(pin.id, pin);
+            }
         }
     }
 
     let mut hovered_wire = None;
     let mut hovered_wire_disconnect = false;
     let mut wire_shapes = Vec::new();
+    let mut wire_widgets = Vec::new();
 
     // Draw and interact with wires
     for wire in snarl.wires.iter() {
@@ -1121,6 +1160,12 @@ where
             continue;
         };
         let Some(to_r) = input_info.get(&wire.in_pin) else {
+            continue;
+        };
+        let Some(out_pin) = output_pins.get(&wire.out_pin) else {
+            continue;
+        };
+        let Some(in_pin) = input_pins.get(&wire.in_pin) else {
             continue;
         };
 
@@ -1183,6 +1228,15 @@ where
             wire_threshold,
             pick_wire_style(from_r.wire_style, to_r.wire_style),
         );
+        if viewer.has_wire_widget(&wire.out_pin, &wire.in_pin, snarl) {
+            let center = Pos2::new(
+                (from_r.pos.x + to_r.pos.x) / 2.0,
+                (from_r.pos.y + to_r.pos.y) / 2.0,
+            );
+            let wire_x_length =
+                f32::max(from_r.pos.x, to_r.pos.x) - f32::min(from_r.pos.x, to_r.pos.x);
+            wire_widgets.push((out_pin, in_pin, center, wire_x_length));
+        }
     }
 
     // Remove hovered wire by second click
@@ -1376,6 +1430,65 @@ where
         Some(idx) => {
             ui.painter().set(idx, Shape::Vec(wire_shapes));
         }
+    }
+
+    for (out_pin, in_pin, center, wire_x_length) in wire_widgets {
+        let id = Id::new("wire-widget").with((out_pin.id, in_pin.id));
+        let cached = ui
+            .ctx()
+            .memory(|mem| mem.data.get_temp::<WireWidgetCache>(id));
+        let widget_rect = cached.map_or_else(
+            || {
+                let default_rect = RectAlign {
+                    parent: Align2::CENTER_CENTER,
+                    child: style.wire_widget_align.unwrap_or(Align2::CENTER_CENTER),
+                }
+                .align_rect(
+                    &Rect::from_center_size(center, [wire_x_length, 0.0].into()),
+                    Vec2::new(wire_x_length, 0.0),
+                    style.wire_widget_gap.unwrap_or(0.0),
+                );
+                default_rect
+            },
+            |cached| {
+                if cached.wire_len != wire_x_length {
+                    // calculate a new rect if the wire length has been changed due to user moving
+                    // the nodes connected by the wire
+                    let new_rect = RectAlign {
+                        parent: Align2::CENTER_CENTER,
+                        child: style.wire_widget_align.unwrap_or(Align2::CENTER_CENTER),
+                    }
+                    .align_rect(
+                        &Rect::from_center_size(center, [wire_x_length, 0.0].into()),
+                        Vec2::new(wire_x_length, 0.0),
+                        style.wire_widget_gap.unwrap_or(0.0),
+                    );
+                    new_rect
+                } else {
+                    let cached_rect = cached.widget_rect;
+                    cached_rect
+                }
+            },
+        );
+        let mut wire_ui = ui.new_child(
+            UiBuilder::new()
+                .max_rect(widget_rect)
+                .layout(Layout::default())
+                .id_salt(id),
+        );
+        viewer.show_wire_widget(&out_pin, &in_pin, &mut wire_ui, snarl);
+        ui.ctx().memory_mut(|mem| {
+            mem.data.insert_temp(
+                id,
+                WireWidgetCache {
+                    widget_rect: Rect::from_center_size(
+                        center,
+                        Vec2::new(wire_ui.min_rect().width(), wire_ui.min_rect().height()),
+                    ),
+                    wire_len: wire_x_length,
+                },
+            )
+        });
     }
 
     ui.advance_cursor_after_rect(Rect::from_min_size(snarl_resp.rect.min, Vec2::ZERO));
@@ -2465,6 +2578,8 @@ where
         drag_released,
         pin_hovered,
         final_rect: r.response.rect,
+        in_pins: inputs,
+        out_pins: outputs,
     })
 }
 
