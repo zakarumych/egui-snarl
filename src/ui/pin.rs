@@ -1,4 +1,4 @@
-use egui::{epaint::PathShape, pos2, vec2, Color32, Painter, Rect, Shape, Stroke, Style, Vec2};
+use egui::{Color32, Painter, Rect, Shape, Stroke, Style, Vec2, epaint::PathShape, pos2, vec2};
 
 use crate::{InPinId, OutPinId};
 
@@ -214,7 +214,9 @@ impl PinInfo {
 
         PinWireInfo {
             color: self.wire_color.unwrap_or(fill),
-            style: self.wire_style.unwrap_or(snarl_style.get_wire_style()),
+            style: self
+                .wire_style
+                .unwrap_or_else(|| snarl_style.get_wire_style()),
         }
     }
 }

@@ -571,7 +571,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                     }
                 }
             }
-        };
+        }
     }
 
     fn has_node_menu(&mut self, _node: &DemoNode) -> bool {

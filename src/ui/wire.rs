@@ -22,7 +22,7 @@ pub enum WireLayer {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) enum WireId {
+pub enum WireId {
     Connected {
         snarl_id: Id,
         out_pin: OutPinId,
@@ -64,7 +64,7 @@ pub enum WireStyle {
     Bezier5,
 }
 
-pub fn pick_wire_style(left: WireStyle, right: WireStyle) -> WireStyle {
+pub const fn pick_wire_style(left: WireStyle, right: WireStyle) -> WireStyle {
     match (left, right) {
         (WireStyle::Line, _) | (_, WireStyle::Line) => WireStyle::Line,
         (
@@ -414,8 +414,8 @@ fn bezier_draw_samples_number_3(points: &[Pos2; 4], threshold: f32) -> usize {
             let curve_w = f32::hypot(mid_curve_dx, mid_curve_dy);
 
             let error = f32::max(
-                (mid_curve_dx / curve_w * line_w - mid_line_dx).abs(),
-                (mid_curve_dy / curve_w * line_w - mid_line_dy).abs(),
+                (mid_curve_dx / curve_w).mul_add(line_w, -mid_line_dx).abs(),
+                (mid_curve_dy / curve_w).mul_add(line_w, -mid_line_dy).abs(),
             );
             if error > threshold * 2.0 {
                 return false;
@@ -464,8 +464,8 @@ fn bezier_draw_samples_number_5(points: &[Pos2; 6], threshold: f32) -> usize {
             let curve_w = f32::hypot(mid_curve_dx, mid_curve_dy);
 
             let error = f32::max(
-                (mid_curve_dx / curve_w * line_w - mid_line_dx).abs(),
-                (mid_curve_dy / curve_w * line_w - mid_line_dy).abs(),
+                (mid_curve_dx / curve_w).mul_add(line_w, -mid_line_dx).abs(),
+                (mid_curve_dy / curve_w).mul_add(line_w, -mid_line_dy).abs(),
             );
             if error > threshold * 2.0 {
                 return false;
@@ -637,8 +637,8 @@ impl WireCacheAA {
                     let (sin_a, cos_a) = a.sin_cos();
 
                     let point: Pos2 = pos2(
-                        turn.x + sin_x * sin_a + cos_x * cos_a,
-                        turn.y + sin_y * sin_a + cos_y * cos_a,
+                        cos_x.mul_add(cos_a, sin_x.mul_add(sin_a, turn.x)),
+                        cos_y.mul_add(cos_a, sin_y.mul_add(sin_a, turn.y)),
                     );
                     line.push(point);
                 }
