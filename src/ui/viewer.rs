@@ -1,10 +1,10 @@
-use egui::{emath::TSTransform, Painter, Pos2, Rect, Style, Ui};
+use egui::{Painter, Pos2, Rect, Style, Ui, Vec2, emath::TSTransform};
 
 use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
 use super::{
-    pin::{AnyPins, SnarlPin},
     BackgroundPattern, NodeLayout, SnarlStyle,
+    pin::{AnyPins, SnarlPin},
 };
 
 /// `SnarlViewer` is a trait for viewing a Snarl.
@@ -340,6 +340,20 @@ pub trait SnarlViewer<T> {
         if let Some(background) = background {
             background.draw(viewport, snarl_style, style, painter);
         }
+    }
+
+    /// Informs the viewer that nodes were moved.
+    ///
+    /// Called each frame during a drag with the frame's `delta`, after Snarl node positions were updated.
+    /// When `drag_finished` is `true`, this is the final call for this drag gesture.
+    fn nodes_moved(
+        &mut self,
+        nodes: &[NodeId],
+        delta: Vec2,
+        drag_finished: bool,
+        snarl: &mut Snarl<T>,
+    ) {
+        let _ = (nodes, delta, drag_finished, snarl);
     }
 
     /// Informs the viewer what is the current transform of the snarl view

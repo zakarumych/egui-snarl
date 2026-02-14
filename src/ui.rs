@@ -795,7 +795,7 @@ impl Default for SnarlStyle {
 }
 
 struct DrawNodeResponse {
-    node_moved: Option<(NodeId, Vec2)>,
+    node_moved: Option<(NodeId, Vec2, bool)>,
     node_to_top: Option<NodeId>,
     drag_released: bool,
     pin_hovered: Option<AnyPin>,
@@ -1386,24 +1386,33 @@ where
         snarl_state.node_to_top(node);
     }
 
-    if let Some((node, delta)) = node_moved
-        && snarl.nodes.contains(node.0)
-    {
-        ui.ctx().request_repaint();
-        if snarl_state.selected_nodes().contains(&node) {
-            for node in snarl_state.selected_nodes() {
-                let node = &mut snarl.nodes[node.0];
-                node.pos += delta;
+    if let Some((node_id, delta, finished)) = node_moved {
+        if snarl.nodes.contains(node_id.0) {
+            ui.ctx().request_repaint();
+            if snarl_state.selected_nodes().contains(&node_id) {
+                move_nodes(snarl_state.selected_nodes(), delta, finished, snarl, viewer);
+            } else {
+                move_nodes(&[node_id], delta, finished, snarl, viewer);
             }
-        } else {
-            let node = &mut snarl.nodes[node.0];
-            node.pos += delta;
         }
     }
 
     snarl_state.store(snarl, ui.ctx());
 
     snarl_resp
+}
+
+fn move_nodes<T, V: SnarlViewer<T>>(
+    nodes: &[NodeId],
+    delta: Vec2,
+    finished: bool,
+    snarl: &mut Snarl<T>,
+    viewer: &mut V,
+) {
+    for node_id in nodes {
+        snarl.nodes[node_id.0].pos += delta;
+    }
+    viewer.nodes_moved(nodes, delta, finished, snarl);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1859,8 +1868,12 @@ where
         Sense::click_and_drag(),
     );
 
-    if !modifiers.shift && !modifiers.command && r.dragged_by(PointerButton::Primary) {
-        node_moved = Some((node, r.drag_delta()));
+    let drag_stopped = r.drag_stopped_by(PointerButton::Primary);
+    if !modifiers.shift
+        && !modifiers.command
+        && (r.dragged_by(PointerButton::Primary) || drag_stopped)
+    {
+        node_moved = Some((node, r.drag_delta(), drag_stopped));
     }
 
     if r.clicked_by(PointerButton::Primary) || r.dragged_by(PointerButton::Primary) {
