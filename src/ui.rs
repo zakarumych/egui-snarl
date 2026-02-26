@@ -1233,7 +1233,8 @@ where
     }
 
     // Do centering unless no nodes are present.
-    if style.get_centering() && snarl_resp.double_clicked() && nodes_bb.is_finite() {
+    let center_view = snarl_resp.double_clicked() || viewer.center_view(snarl);
+    if style.get_centering() && center_view && nodes_bb.is_finite() {
         let nodes_bb = nodes_bb.expand(100.0);
         snarl_state.look_at(nodes_bb, ui_rect, min_scale, max_scale);
     }

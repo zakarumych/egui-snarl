@@ -353,6 +353,7 @@ pub trait SnarlViewer<T> {
     ///
     /// Called each frame during a drag with the frame's `delta`, after Snarl node positions were updated.
     /// When `drag_finished` is `true`, this is the final call for this drag gesture.
+    #[inline]
     fn nodes_moved(
         &mut self,
         nodes: &[NodeId],
@@ -379,7 +380,6 @@ pub trait SnarlViewer<T> {
     fn center_view(&mut self, _snarl: &mut Snarl<T>) -> bool {
         false
     }
-
     /// Asks the viewer for updated list of selected nodes.
     /// List of currently selected nodes is provided as 'currently_selected'.
     /// If viewer returns `Some(nodes)`, those nodes will be selected instead of the currently selected nodes.
