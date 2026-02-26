@@ -425,7 +425,13 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         true
     }
 
-    fn show_graph_menu(&mut self, pos: egui::Pos2, ui: &mut Ui, snarl: &mut Snarl<DemoNode>) {
+    fn show_graph_menu(
+        &mut self,
+        pos: egui::Pos2,
+        _selected_nodes: &[NodeId],
+        ui: &mut Ui,
+        snarl: &mut Snarl<DemoNode>,
+    ) {
         ui.label("Add node");
         if ui.button("Number").clicked() {
             snarl.insert_node(pos, DemoNode::Number(0.0));
@@ -583,6 +589,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         node: NodeId,
         _inputs: &[InPin],
         _outputs: &[OutPin],
+        _selected_nodes: &[NodeId],
         ui: &mut Ui,
         snarl: &mut Snarl<DemoNode>,
     ) {

@@ -240,8 +240,14 @@ pub trait SnarlViewer<T> {
     ///
     /// This can be used to implement menu for adding new nodes.
     #[inline]
-    fn show_graph_menu(&mut self, pos: Pos2, ui: &mut Ui, snarl: &mut Snarl<T>) {
-        let _ = (pos, ui, snarl);
+    fn show_graph_menu(
+        &mut self,
+        pos: Pos2,
+        selected_nodes: &[NodeId],
+        ui: &mut Ui,
+        snarl: &mut Snarl<T>,
+    ) {
+        let _ = (pos, selected_nodes, ui, snarl);
     }
 
     /// Checks if the snarl has something to show in context menu if wire drag is stopped at `pos`.
@@ -281,10 +287,11 @@ pub trait SnarlViewer<T> {
         node: NodeId,
         inputs: &[InPin],
         outputs: &[OutPin],
+        selected_nodes: &[NodeId],
         ui: &mut Ui,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (node, inputs, outputs, ui, snarl);
+        let _ = (node, inputs, outputs, selected_nodes, ui, snarl);
     }
 
     /// Asks the viewer to connect two pins.
