@@ -1,10 +1,10 @@
-use egui::{Painter, Pos2, Rect, Style, Ui, Vec2, emath::TSTransform};
+use egui::{emath::TSTransform, Painter, Pos2, Rect, Style, Ui, Vec2};
 
 use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
 use super::{
-    BackgroundPattern, NodeLayout, SnarlStyle,
     pin::{AnyPins, SnarlPin},
+    BackgroundPattern, NodeLayout, SnarlStyle,
 };
 
 /// `SnarlViewer` is a trait for viewing a Snarl.
@@ -372,5 +372,26 @@ pub trait SnarlViewer<T> {
     #[inline]
     fn current_transform(&mut self, to_global: &mut TSTransform, snarl: &mut Snarl<T>) {
         let _ = (to_global, snarl);
+    }
+
+    /// Asks the viewer if the viewed area should be centered to contain all nodes.
+    #[inline]
+    fn center_view(&mut self, _snarl: &mut Snarl<T>) -> bool {
+        false
+    }
+
+    /// Asks the viewer for updated list of selected nodes.
+    /// List of currently selected nodes is provided as 'currently_selected'.
+    /// If viewer returns `Some(nodes)`, those nodes will be selected instead of the currently selected nodes.
+    /// 'ui' is also provided to the user, in order to enable keyboard control over selection.
+    #[inline]
+    fn selected_nodes(
+        &mut self,
+        currently_selected: &[NodeId],
+        ui: &mut Ui,
+        snarl: &mut Snarl<T>,
+    ) -> Option<Vec<NodeId>> {
+        let _ = (currently_selected, ui, snarl);
+        None
     }
 }

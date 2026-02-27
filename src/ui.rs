@@ -1397,6 +1397,12 @@ where
         }
     }
 
+    if let Some(selected_nodes) =
+        viewer.selected_nodes(snarl_state.selected_nodes(), &mut ui, snarl)
+    {
+        snarl_state.select_many_nodes(true, selected_nodes.into_iter());
+    }
+
     snarl_state.store(snarl, ui.ctx());
 
     snarl_resp
