@@ -3,9 +3,9 @@
 use std::{collections::HashMap, hash::Hash};
 
 use egui::{
-    Align, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers, PointerButton,
-    Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, UiKind, UiStackInfo,
-    Vec2,
+    Align, Color32, CornerRadius, DragAndDrop, Frame, Id, LayerId, Layout, Margin, Modifiers,
+    PointerButton, Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder,
+    UiKind, UiStackInfo, Vec2,
     collapsing_header::paint_default_icon,
     emath::{GuiRounding, TSTransform},
     epaint::Shadow,
@@ -909,6 +909,7 @@ impl SnarlWidget {
     pub fn show<T, V>(&self, snarl: &mut Snarl<T>, viewer: &mut V, ui: &mut Ui) -> egui::Response
     where
         V: SnarlViewer<T>,
+        T: Clone + Send + Sync + 'static,
     {
         let snarl_id = self.get_id(ui.id());
 
@@ -936,6 +937,7 @@ fn show_snarl<T, V>(
 ) -> egui::Response
 where
     V: SnarlViewer<T>,
+    T: Clone + Send + Sync + 'static,
 {
     #![allow(clippy::too_many_lines)]
 
@@ -1014,6 +1016,21 @@ where
 
     // Set transform for snarl layer.
     ui.ctx().set_transform_layer(snarl_layer_id, to_global);
+
+    let is_anything_being_dragged = DragAndDrop::has_any_payload(ui.ctx());
+    let can_accept_what_is_being_dragged = DragAndDrop::has_payload_of_type::<T>(ui.ctx());
+
+    if is_anything_being_dragged
+        && can_accept_what_is_being_dragged
+        && snarl_resp.contains_pointer()
+    {
+        if let (Some(node), Some(pos)) = (
+            snarl_resp.dnd_release_payload::<T>(),
+            snarl_resp.hover_pos(),
+        ) {
+            snarl.insert_node(pos, node.as_ref().clone());
+        }
+    }
 
     // Map latest pointer position to graph space.
     latest_pos = latest_pos.map(|pos| from_global * pos);
@@ -2559,6 +2576,7 @@ impl<T> Snarl<T> {
     pub fn show<V>(&mut self, viewer: &mut V, style: &SnarlStyle, id_salt: impl Hash, ui: &mut Ui)
     where
         V: SnarlViewer<T>,
+        T: Clone + Send + Sync + 'static,
     {
         show_snarl(
             ui.make_persistent_id(id_salt),
