@@ -428,23 +428,23 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     fn show_graph_menu(&mut self, pos: egui::Pos2, ui: &mut Ui, snarl: &mut Snarl<DemoNode>) {
         ui.label("Add node");
         if ui.button("Number").clicked() {
-            snarl.insert_node(pos, DemoNode::Number(0.0));
+            snarl.insert_node(pos.into(), DemoNode::Number(0.0));
             ui.close();
         }
         if ui.button("Expr").clicked() {
-            snarl.insert_node(pos, DemoNode::ExprNode(ExprNode::new()));
+            snarl.insert_node(pos.into(), DemoNode::ExprNode(ExprNode::new()));
             ui.close();
         }
         if ui.button("String").clicked() {
-            snarl.insert_node(pos, DemoNode::String(String::new()));
+            snarl.insert_node(pos.into(), DemoNode::String(String::new()));
             ui.close();
         }
         if ui.button("Show image").clicked() {
-            snarl.insert_node(pos, DemoNode::ShowImage(String::new()));
+            snarl.insert_node(pos.into(), DemoNode::ShowImage(String::new()));
             ui.close();
         }
         if ui.button("Sink").clicked() {
-            snarl.insert_node(pos, DemoNode::Sink);
+            snarl.insert_node(pos.into(), DemoNode::Sink);
             ui.close();
         }
     }
@@ -516,7 +516,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                 for (name, ctor, in_ty) in dst_in_candidates {
                     if src_out_ty & in_ty != 0 && ui.button(name).clicked() {
                         // Create new node.
-                        let new_node = snarl.insert_node(pos, ctor());
+                        let new_node = snarl.insert_node(pos.into(), ctor());
                         let dst_pin = InPinId {
                             node: new_node,
                             input: 0,
@@ -550,7 +550,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
                         let new_node = ctor();
                         let dst_ty = pin_out_compat(&new_node);
 
-                        let new_node = snarl.insert_node(pos, new_node);
+                        let new_node = snarl.insert_node(pos.into(), new_node);
                         let dst_pin = OutPinId {
                             node: new_node,
                             output: 0,

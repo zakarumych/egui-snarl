@@ -1393,11 +1393,11 @@ where
         if snarl_state.selected_nodes().contains(&node) {
             for node in snarl_state.selected_nodes() {
                 let node = &mut snarl.nodes[node.0];
-                node.pos += delta;
+                node.pos = (Into::<egui::Pos2>::into(node.pos) + delta).into();
             }
         } else {
             let node = &mut snarl.nodes[node.0];
-            node.pos += delta;
+            node.pos = (Into::<egui::Pos2>::into(node.pos) + delta).into();
         }
     }
 
@@ -1795,7 +1795,7 @@ where
         .map(|idx| OutPin::new(snarl, OutPinId { node, output: idx }))
         .collect::<Vec<_>>();
 
-    let node_pos = pos.round_ui();
+    let node_pos = Into::<egui::Pos2>::into(pos).round_ui();
 
     // Generate persistent id for the node.
     let node_id = snarl_id.with(("snarl-node", node));

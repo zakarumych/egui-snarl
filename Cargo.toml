@@ -37,16 +37,18 @@ keywords = ["egui", "node", "graph", "ui", "node-graph"]
 categories = ["gui", "visualization"]
 
 [features]
-serde = ["dep:serde", "egui/serde", "slab/serde"]
+default = ["ui"]
+serde = ["dep:serde", "egui?/serde", "slab/serde"]
+ui = ["dep:egui", "dep:egui-scale"]
 
 [dependencies]
-egui.workspace = true
+egui = { workspace = true, optional = true }
 slab = { version = "0.4" }
 serde = { workspace = true, features = ["derive"], optional = true }
 smallvec = { version = "1.15", features = ["const_new"] }
 
 egui-probe = { workspace = true, features = ["derive"], optional = true }
-egui-scale.workspace = true
+egui-scale = { workspace = true, optional = true }
 
 [dev-dependencies]
 eframe = { workspace = true, features = ["serde", "persistence"] }
@@ -59,4 +61,4 @@ wasm-bindgen-futures.workspace = true
 
 [[example]]
 name = "demo"
-required-features = ["serde", "egui-probe"]
+required-features = ["ui", "serde", "egui-probe"]

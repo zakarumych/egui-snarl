@@ -280,7 +280,7 @@ impl SnarlState {
         let mut bb = Rect::NOTHING;
 
         for (_, node) in &snarl.nodes {
-            bb.extend_with(node.pos);
+            bb.extend_with(node.pos.into());
         }
 
         if bb.is_finite() {
