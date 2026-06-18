@@ -157,7 +157,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         }
     }
 
-    fn inputs(&mut self, node: &DemoNode) -> usize {
+    fn inputs(&mut self, node: &DemoNode, _snarl: &Snarl<DemoNode>) -> usize {
         match node {
             DemoNode::Sink | DemoNode::ShowImage(_) => 1,
             DemoNode::Number(_) | DemoNode::String(_) => 0,
@@ -165,7 +165,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         }
     }
 
-    fn outputs(&mut self, node: &DemoNode) -> usize {
+    fn outputs(&mut self, node: &DemoNode, _snarl: &Snarl<DemoNode>) -> usize {
         match node {
             DemoNode::Sink => 0,
             DemoNode::Number(_)
