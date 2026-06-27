@@ -1,6 +1,6 @@
 //! This module provides functionality for showing [`Snarl`] graph in [`Ui`].
 
-use std::{collections::HashMap, hash::Hash};
+use std::collections::HashMap;
 
 use egui::{
     Align, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers, PointerButton,
@@ -870,7 +870,7 @@ impl SnarlWidget {
     /// Ignored if [`SnarlWidget::id`] was set.
     #[inline]
     #[must_use]
-    pub fn id_salt(mut self, id_salt: impl Hash) -> Self {
+    pub fn id_salt(mut self, id_salt: impl egui::AsId) -> Self {
         self.id_salt = Id::new(id_salt);
         self
     }
@@ -2556,8 +2556,13 @@ const fn mix_colors(a: Color32, b: Color32) -> Color32 {
 impl<T> Snarl<T> {
     /// Render [`Snarl`] using given viewer and style into the [`Ui`].
     #[inline]
-    pub fn show<V>(&mut self, viewer: &mut V, style: &SnarlStyle, id_salt: impl Hash, ui: &mut Ui)
-    where
+    pub fn show<V>(
+        &mut self,
+        viewer: &mut V,
+        style: &SnarlStyle,
+        id_salt: impl egui::AsIdSalt,
+        ui: &mut Ui,
+    ) where
         V: SnarlViewer<T>,
     {
         show_snarl(
