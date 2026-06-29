@@ -11,17 +11,17 @@ documentation = "https://docs.rs/egui-snarl"
 repository = "https://github.com/zakarumych/egui-snarl"
 
 [workspace.dependencies]
-egui = { version = "0.34" }
-eframe = { version = "0.34" }
-egui_extras = { version = "0.34" }
+egui = { version = "0.35" }
+eframe = { version = "0.35" }
+egui_extras = { version = "0.35" }
 syn = { version = "2" }
 serde = { version = "1" }
 serde_json = { version = "1" }
 
-egui-probe = { version = "0.11.0" }
-egui-scale = { version = "0.4.0" }
+egui-probe = { version = "0.11.0", git = "https://github.com/xangelix/egui-probe", branch = "egui-0.35" }
+egui-scale = { version = "0.4.0", git = "https://github.com/xangelix/egui-scale", branch = "egui-0.35" }
 wasm-bindgen-futures = "0.4"
-web-sys = "0.3.81"
+web-sys = "0.3.103"
 
 [package]
 name = "egui-snarl"
@@ -40,6 +40,7 @@ categories = ["gui", "visualization"]
 serde = ["dep:serde", "egui/serde", "slab/serde"]
 
 [dependencies]
+ahash = { version = "0.8.12", default-features = false }
 egui.workspace = true
 slab = { version = "0.4" }
 serde = { workspace = true, features = ["derive"], optional = true }

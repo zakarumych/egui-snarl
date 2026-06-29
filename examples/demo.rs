@@ -990,7 +990,7 @@ impl DemoApp {
 
 impl App for DemoApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        egui::Panel::top("top_panel").show_inside(ui, |ui| {
+        egui::Panel::top("top_panel").show(ui, |ui| {
             // The top panel is often a good place for a menu bar:
 
             egui::MenuBar::new().ui(ui, |ui| {
@@ -1012,13 +1012,13 @@ impl App for DemoApp {
             });
         });
 
-        egui::Panel::left("style").show_inside(ui, |ui| {
+        egui::Panel::left("style").show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 egui_probe::Probe::new(&mut self.style).show(ui);
             });
         });
 
-        egui::Panel::right("selected-list").show_inside(ui, |ui| {
+        egui::Panel::right("selected-list").show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.strong("Selected nodes");
 
@@ -1050,7 +1050,7 @@ impl App for DemoApp {
             });
         });
 
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             SnarlWidget::new()
                 .id(Id::new("snarl-demo"))
                 .style(self.style)
