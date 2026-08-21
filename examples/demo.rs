@@ -1308,7 +1308,7 @@ impl App for DemoApp {
 
                 let mut selected = selected
                     .into_iter()
-                    .map(|id| (id, &self.snarl[id]))
+                    .filter_map(|id| self.snarl.get_node(id).map(|node| (id, node)))
                     .collect::<Vec<_>>();
 
                 selected.sort_by_key(|(id, _)| *id);
