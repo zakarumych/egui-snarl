@@ -1,10 +1,10 @@
-use egui::{emath::TSTransform, Painter, Pos2, Rect, Style, Ui, Vec2};
+use egui::{Painter, Pos2, Rect, Style, Ui, Vec2, emath::TSTransform};
 
 use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
 use super::{
-    pin::{AnyPins, SnarlPin},
     BackgroundPattern, NodeLayout, SnarlStyle,
+    pin::{AnyPins, SnarlPin},
 };
 
 /// `SnarlViewer` is a trait for viewing a Snarl.
@@ -381,7 +381,7 @@ pub trait SnarlViewer<T> {
         false
     }
     /// Asks the viewer for updated list of selected nodes.
-    /// List of currently selected nodes is provided as 'currently_selected'.
+    /// List of currently selected nodes is provided as `currently_selected`.
     /// If viewer returns `Some(nodes)`, those nodes will be selected instead of the currently selected nodes.
     /// 'ui' is also provided to the user, in order to enable keyboard control over selection.
     #[inline]

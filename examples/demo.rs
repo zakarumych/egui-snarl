@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use eframe::{App, CreationContext};
-use egui::{Color32, Id, Ui};
+use egui::{Color32, Id, Key, KeyboardShortcut, Modifiers, Ui};
 use egui_snarl::{
     InPin, InPinId, NodeId, OutPin, OutPinId, Snarl,
     ui::{
@@ -16,6 +16,28 @@ const STRING_COLOR: Color32 = Color32::from_rgb(0x00, 0xb0, 0x00);
 const NUMBER_COLOR: Color32 = Color32::from_rgb(0xb0, 0x00, 0x00);
 const IMAGE_COLOR: Color32 = Color32::from_rgb(0xb0, 0x00, 0xb0);
 const UNTYPED_COLOR: Color32 = Color32::from_rgb(0xb0, 0xb0, 0xb0);
+const COPY_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::C);
+const CUT_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::X);
+const PASTE_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::V);
+const DUPLICATE_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::D);
+const SELECT_ALL_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::A);
+const DELETE_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::Delete);
+const DUPLICATE_GAP: f32 = 200.0;
+
+fn clipboard_event(ui: &Ui) -> Option<egui::Event> {
+    ui.input(|input| {
+        input
+            .events
+            .iter()
+            .find(|event| {
+                matches!(
+                    event,
+                    egui::Event::Copy | egui::Event::Cut | egui::Event::Paste(_)
+                )
+            })
+            .cloned()
+    })
+}
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 enum DemoNode {
@@ -95,7 +117,214 @@ impl DemoNode {
     }
 }
 
-struct DemoViewer;
+#[derive(Default)]
+struct DemoViewer {
+    clipboard: Option<Snarl<DemoNode>>,
+    selected_nodes: Option<Vec<NodeId>>,
+    center_view: bool,
+}
+
+impl DemoViewer {
+    fn copy_selection(
+        selected_nodes: &[NodeId],
+        snarl: &Snarl<DemoNode>,
+    ) -> Option<Snarl<DemoNode>> {
+        let mut copied = Snarl::new();
+        let mut copied_ids = HashMap::new();
+
+        for &node_id in selected_nodes {
+            if copied_ids.contains_key(&node_id) {
+                continue;
+            }
+
+            let Some(node) = snarl.get_node_info(node_id) else {
+                continue;
+            };
+
+            let copied_id = if node.open {
+                copied.insert_node(node.pos, node.value.clone())
+            } else {
+                copied.insert_node_collapsed(node.pos, node.value.clone())
+            };
+            copied_ids.insert(node_id, copied_id);
+        }
+
+        if copied_ids.is_empty() {
+            return None;
+        }
+
+        for (from, to) in snarl.wires() {
+            if let (Some(&from_node), Some(&to_node)) =
+                (copied_ids.get(&from.node), copied_ids.get(&to.node))
+            {
+                copied.connect(
+                    OutPinId {
+                        node: from_node,
+                        output: from.output,
+                    },
+                    InPinId {
+                        node: to_node,
+                        input: to.input,
+                    },
+                );
+            }
+        }
+
+        Some(copied)
+    }
+
+    fn top_left(snarl: &Snarl<DemoNode>) -> Option<egui::Pos2> {
+        snarl
+            .nodes_info()
+            .map(|node| node.pos)
+            .reduce(|a, b| egui::pos2(a.x.min(b.x), a.y.min(b.y)))
+    }
+
+    fn insert_copy(
+        copied: &Snarl<DemoNode>,
+        pos: egui::Pos2,
+        snarl: &mut Snarl<DemoNode>,
+    ) -> Vec<NodeId> {
+        let Some(top_left) = Self::top_left(copied) else {
+            return Vec::new();
+        };
+        let offset = pos - top_left;
+        let mut pasted_ids = HashMap::new();
+        let mut selected_nodes = Vec::new();
+
+        for (node_id, node) in copied.nodes_ids_data() {
+            let pasted_id = if node.open {
+                snarl.insert_node(node.pos + offset, node.value.clone())
+            } else {
+                snarl.insert_node_collapsed(node.pos + offset, node.value.clone())
+            };
+            pasted_ids.insert(node_id, pasted_id);
+            selected_nodes.push(pasted_id);
+        }
+
+        for (from, to) in copied.wires() {
+            snarl.connect(
+                OutPinId {
+                    node: pasted_ids[&from.node],
+                    output: from.output,
+                },
+                InPinId {
+                    node: pasted_ids[&to.node],
+                    input: to.input,
+                },
+            );
+        }
+
+        selected_nodes
+    }
+
+    fn set_clipboard(&mut self, copied: Snarl<DemoNode>, ui: &Ui) {
+        ui.ctx().copy_text(serde_json::to_string(&copied).unwrap());
+        self.clipboard = Some(copied);
+    }
+
+    fn copy_nodes(&mut self, selected_nodes: &[NodeId], snarl: &Snarl<DemoNode>, ui: &Ui) {
+        if let Some(copied) = Self::copy_selection(selected_nodes, snarl) {
+            self.set_clipboard(copied, ui);
+        }
+    }
+
+    fn cut_nodes(&mut self, selected_nodes: &[NodeId], snarl: &mut Snarl<DemoNode>, ui: &Ui) {
+        let Some(copied) = Self::copy_selection(selected_nodes, snarl) else {
+            return;
+        };
+        self.set_clipboard(copied, ui);
+
+        self.remove_nodes(selected_nodes, snarl);
+    }
+
+    fn remove_nodes(&mut self, selected_nodes: &[NodeId], snarl: &mut Snarl<DemoNode>) {
+        for &node_id in selected_nodes {
+            if snarl.get_node(node_id).is_some() {
+                snarl.remove_node(node_id);
+            }
+        }
+        self.selected_nodes = Some(Vec::new());
+    }
+
+    fn paste_nodes(&mut self, pos: egui::Pos2, snarl: &mut Snarl<DemoNode>) {
+        let Some(clipboard) = &self.clipboard else {
+            return;
+        };
+        self.selected_nodes = Some(Self::insert_copy(clipboard, pos, snarl));
+    }
+
+    fn paste_text(&mut self, text: &str, pos: egui::Pos2, snarl: &mut Snarl<DemoNode>) {
+        let Ok(clipboard) = serde_json::from_str(text) else {
+            return;
+        };
+        self.selected_nodes = Some(Self::insert_copy(&clipboard, pos, snarl));
+        self.clipboard = Some(clipboard);
+    }
+
+    fn duplicate_nodes(&mut self, selected_nodes: &[NodeId], snarl: &mut Snarl<DemoNode>) {
+        let Some(copied) = Self::copy_selection(selected_nodes, snarl) else {
+            return;
+        };
+        let Some(copied_top_left) = Self::top_left(&copied) else {
+            return;
+        };
+        let right = snarl
+            .nodes_info()
+            .map(|node| node.pos.x)
+            .reduce(f32::max)
+            .unwrap_or_default();
+        let pos = egui::pos2(right + DUPLICATE_GAP, copied_top_left.y);
+
+        self.selected_nodes = Some(Self::insert_copy(&copied, pos, snarl));
+        self.center_view = true;
+    }
+
+    fn show_edit_menu(
+        &mut self,
+        paste_pos: egui::Pos2,
+        selected_nodes: &[NodeId],
+        ui: &mut Ui,
+        snarl: &mut Snarl<DemoNode>,
+    ) {
+        let has_selection = !selected_nodes.is_empty();
+        let copy =
+            egui::Button::new("Copy").shortcut_text(ui.ctx().format_shortcut(&COPY_SHORTCUT));
+        if ui.add_enabled(has_selection, copy).clicked() {
+            self.copy_nodes(selected_nodes, snarl, ui);
+            ui.close();
+        }
+
+        let cut = egui::Button::new("Cut").shortcut_text(ui.ctx().format_shortcut(&CUT_SHORTCUT));
+        if ui.add_enabled(has_selection, cut).clicked() {
+            self.cut_nodes(selected_nodes, snarl, ui);
+            ui.close();
+        }
+
+        let paste =
+            egui::Button::new("Paste").shortcut_text(ui.ctx().format_shortcut(&PASTE_SHORTCUT));
+        if ui.add_enabled(self.clipboard.is_some(), paste).clicked() {
+            self.paste_nodes(paste_pos, snarl);
+            ui.close();
+        }
+
+        let duplicate = egui::Button::new("Duplicate")
+            .shortcut_text(ui.ctx().format_shortcut(&DUPLICATE_SHORTCUT));
+        if ui.add_enabled(has_selection, duplicate).clicked() {
+            self.duplicate_nodes(selected_nodes, snarl);
+            ui.close();
+        }
+
+        if has_selection {
+            let remove = egui::Button::new("Remove")
+                .shortcut_text(ui.ctx().format_shortcut(&DELETE_SHORTCUT));
+            if ui.add(remove).clicked() {
+                self.remove_nodes(selected_nodes, snarl);
+                ui.close();
+            }
+        }
+    }
+}
 
 impl SnarlViewer<DemoNode> for DemoViewer {
     #[inline]
@@ -428,7 +657,7 @@ impl SnarlViewer<DemoNode> for DemoViewer {
     fn show_graph_menu(
         &mut self,
         pos: egui::Pos2,
-        _selected_nodes: &[NodeId],
+        selected_nodes: &[NodeId],
         ui: &mut Ui,
         snarl: &mut Snarl<DemoNode>,
     ) {
@@ -453,6 +682,9 @@ impl SnarlViewer<DemoNode> for DemoViewer {
             snarl.insert_node(pos, DemoNode::Sink);
             ui.close();
         }
+
+        ui.separator();
+        self.show_edit_menu(pos, selected_nodes, ui, snarl);
     }
 
     fn has_dropped_wire_menu(&mut self, _src_pins: AnyPins, _snarl: &mut Snarl<DemoNode>) -> bool {
@@ -589,15 +821,53 @@ impl SnarlViewer<DemoNode> for DemoViewer {
         node: NodeId,
         _inputs: &[InPin],
         _outputs: &[OutPin],
-        _selected_nodes: &[NodeId],
+        selected_nodes: &[NodeId],
         ui: &mut Ui,
         snarl: &mut Snarl<DemoNode>,
     ) {
         ui.label("Node menu");
-        if ui.button("Remove").clicked() {
-            snarl.remove_node(node);
-            ui.close();
+        let paste_pos = snarl.get_node_info(node).unwrap().pos;
+        let selected_nodes = if selected_nodes.contains(&node) {
+            selected_nodes
+        } else {
+            if !selected_nodes.is_empty() {
+                self.selected_nodes = Some(vec![node]);
+            }
+            std::slice::from_ref(&node)
+        };
+
+        self.show_edit_menu(paste_pos, selected_nodes, ui, snarl);
+    }
+
+    fn center_view(&mut self, _snarl: &mut Snarl<DemoNode>) -> bool {
+        std::mem::take(&mut self.center_view)
+    }
+
+    fn selected_nodes(
+        &mut self,
+        currently_selected: &[NodeId],
+        ui: &mut Ui,
+        snarl: &mut Snarl<DemoNode>,
+    ) -> Option<Vec<NodeId>> {
+        match clipboard_event(ui) {
+            Some(egui::Event::Copy) => self.copy_nodes(currently_selected, snarl, ui),
+            Some(egui::Event::Cut) => self.cut_nodes(currently_selected, snarl, ui),
+            Some(egui::Event::Paste(text)) => {
+                self.paste_text(&text, ui.clip_rect().center(), snarl);
+            }
+            None if ui.input_mut(|input| input.consume_shortcut(&SELECT_ALL_SHORTCUT)) => {
+                self.selected_nodes = Some(snarl.node_ids().map(|(node_id, _)| node_id).collect());
+            }
+            None if ui.input_mut(|input| input.consume_shortcut(&DELETE_SHORTCUT)) => {
+                self.remove_nodes(currently_selected, snarl);
+            }
+            None if ui.input_mut(|input| input.consume_shortcut(&DUPLICATE_SHORTCUT)) => {
+                self.duplicate_nodes(currently_selected, snarl);
+            }
+            _ => {}
         }
+
+        self.selected_nodes.take()
     }
 
     fn has_on_hover_popup(&mut self, _: &DemoNode) -> bool {
@@ -936,6 +1206,7 @@ impl Expr {
 pub struct DemoApp {
     snarl: Snarl<DemoNode>,
     style: SnarlStyle,
+    viewer: DemoViewer,
 }
 
 const fn default_style() -> SnarlStyle {
@@ -991,7 +1262,11 @@ impl DemoApp {
         });
         // let style = SnarlStyle::new();
 
-        DemoApp { snarl, style }
+        DemoApp {
+            snarl,
+            style,
+            viewer: DemoViewer::default(),
+        }
     }
 }
 
@@ -1061,7 +1336,7 @@ impl App for DemoApp {
             SnarlWidget::new()
                 .id(Id::new("snarl-demo"))
                 .style(self.style)
-                .show(&mut self.snarl, &mut DemoViewer, ui);
+                .show(&mut self.snarl, &mut self.viewer, ui);
         });
     }
 
