@@ -1,10 +1,10 @@
-use egui::{emath::TSTransform, Painter, Pos2, Rect, Style, Ui};
+use egui::{Painter, Pos2, Rect, Style, Ui, Vec2, emath::TSTransform};
 
 use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
 use super::{
-    pin::{AnyPins, SnarlPin},
     BackgroundPattern, NodeLayout, SnarlStyle,
+    pin::{AnyPins, SnarlPin},
 };
 
 /// `SnarlViewer` is a trait for viewing a Snarl.
@@ -240,8 +240,14 @@ pub trait SnarlViewer<T> {
     ///
     /// This can be used to implement menu for adding new nodes.
     #[inline]
-    fn show_graph_menu(&mut self, pos: Pos2, ui: &mut Ui, snarl: &mut Snarl<T>) {
-        let _ = (pos, ui, snarl);
+    fn show_graph_menu(
+        &mut self,
+        pos: Pos2,
+        selected_nodes: &[NodeId],
+        ui: &mut Ui,
+        snarl: &mut Snarl<T>,
+    ) {
+        let _ = (pos, selected_nodes, ui, snarl);
     }
 
     /// Checks if the snarl has something to show in context menu if wire drag is stopped at `pos`.
@@ -281,10 +287,11 @@ pub trait SnarlViewer<T> {
         node: NodeId,
         inputs: &[InPin],
         outputs: &[OutPin],
+        selected_nodes: &[NodeId],
         ui: &mut Ui,
         snarl: &mut Snarl<T>,
     ) {
-        let _ = (node, inputs, outputs, ui, snarl);
+        let _ = (node, inputs, outputs, selected_nodes, ui, snarl);
     }
 
     /// Asks the viewer to connect two pins.
@@ -342,6 +349,21 @@ pub trait SnarlViewer<T> {
         }
     }
 
+    /// Informs the viewer that nodes were moved.
+    ///
+    /// Called each frame during a drag with the frame's `delta`, after Snarl node positions were updated.
+    /// When `drag_finished` is `true`, this is the final call for this drag gesture.
+    #[inline]
+    fn nodes_moved(
+        &mut self,
+        nodes: &[NodeId],
+        delta: Vec2,
+        drag_finished: bool,
+        snarl: &mut Snarl<T>,
+    ) {
+        let _ = (nodes, delta, drag_finished, snarl);
+    }
+
     /// Informs the viewer what is the current transform of the snarl view
     /// and allows viewer to override it.
     ///
@@ -351,5 +373,25 @@ pub trait SnarlViewer<T> {
     #[inline]
     fn current_transform(&mut self, to_global: &mut TSTransform, snarl: &mut Snarl<T>) {
         let _ = (to_global, snarl);
+    }
+
+    /// Asks the viewer if the viewed area should be centered to contain all nodes.
+    #[inline]
+    fn center_view(&mut self, _snarl: &mut Snarl<T>) -> bool {
+        false
+    }
+    /// Asks the viewer for updated list of selected nodes.
+    /// List of currently selected nodes is provided as `currently_selected`.
+    /// If viewer returns `Some(nodes)`, those nodes will be selected instead of the currently selected nodes.
+    /// 'ui' is also provided to the user, in order to enable keyboard control over selection.
+    #[inline]
+    fn selected_nodes(
+        &mut self,
+        currently_selected: &[NodeId],
+        ui: &mut Ui,
+        snarl: &mut Snarl<T>,
+    ) -> Option<Vec<NodeId>> {
+        let _ = (currently_selected, ui, snarl);
+        None
     }
 }
