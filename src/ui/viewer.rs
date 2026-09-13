@@ -122,7 +122,7 @@ pub trait SnarlViewer<T> {
     /// Returns number of input pins of the node.
     ///
     /// [`SnarlViewer::show_input`] will be called for each input in range `0..inputs()`.
-    fn inputs(&mut self, node: &T) -> usize;
+    fn inputs(&mut self, node: NodeId, snarl: &Snarl<T>) -> usize;
 
     /// Renders one specified node's input element and returns drawer for the corresponding pin.
     fn show_input(
@@ -135,7 +135,7 @@ pub trait SnarlViewer<T> {
     /// Returns number of output pins of the node.
     ///
     /// [`SnarlViewer::show_output`] will be called for each output in range `0..outputs()`.
-    fn outputs(&mut self, node: &T) -> usize;
+    fn outputs(&mut self, node: NodeId, snarl: &Snarl<T>) -> usize;
 
     /// Renders the node's output.
     fn show_output(

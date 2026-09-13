@@ -1780,12 +1780,12 @@ where
     let Node {
         pos,
         open,
-        ref value,
+        ..
     } = snarl.nodes[node.0];
 
     // Collect pins
-    let inputs_count = viewer.inputs(value);
-    let outputs_count = viewer.outputs(value);
+    let inputs_count = viewer.inputs(node, snarl);
+    let outputs_count = viewer.outputs(node, snarl);
 
     let inputs = (0..inputs_count)
         .map(|idx| InPin::new(snarl, InPinId { node, input: idx }))
