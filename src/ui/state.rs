@@ -610,6 +610,15 @@ impl SnarlWidget {
         ctx.data(|d| d.get_temp::<SelectedNodes>(snarl_id).unwrap_or_default().0)
             .into_vec()
     }
+
+    /// Modifies the node selection in the UI for the `SnarlWidget` with same ID.
+    ///
+    /// Use same `Ui` instance that was used in [`SnarlWidget::show`].
+    #[inline]
+    pub fn update_selected_nodes(self, ui: &Ui, f: impl FnOnce(&mut Vec<NodeId>)) {
+        let snarl_id = self.get_id(ui.id());
+        update_selected_nodes(snarl_id, ui.ctx(), f);
+    }
 }
 
 /// Returns nodes selected in the UI for the `SnarlWidget` with same ID.
@@ -621,4 +630,16 @@ impl SnarlWidget {
 pub fn get_selected_nodes(id: Id, ctx: &Context) -> Vec<NodeId> {
     ctx.data(|d| d.get_temp::<SelectedNodes>(id).unwrap_or_default().0)
         .into_vec()
+}
+
+/// Modifies the node selection in the UI for the `SnarlWidget` with same ID.
+///
+/// Only works if [`SnarlWidget::id`] was used.
+pub fn update_selected_nodes(id: Id, ctx: &Context, f: impl FnOnce(&mut Vec<NodeId>)) {
+    ctx.data_mut(|data| {
+        let selection = data.get_temp_mut_or_default::<SelectedNodes>(id);
+        let mut nodes = std::mem::take(&mut selection.0).into_vec();
+        f(&mut nodes);
+        selection.0 = SmallVec::from_vec(nodes);
+    });
 }
