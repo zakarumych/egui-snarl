@@ -1004,7 +1004,7 @@ impl App for DemoApp {
                     ui.add_space(16.0);
                 }
 
-                egui::widgets::global_theme_preference_switch(ui);
+                egui::widgets::global_theme_preference_buttons(ui);
 
                 if ui.button("Clear All").clicked() {
                     self.snarl = Snarl::default();
@@ -1022,7 +1022,7 @@ impl App for DemoApp {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.strong("Selected nodes");
 
-                let selected = get_selected_nodes(Id::new("snarl-demo"), ui.ctx());
+                let selected = get_selected_nodes(Id::unique("snarl-demo"), ui.ctx());
 
                 let mut selected = selected
                     .into_iter()

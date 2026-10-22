@@ -1,5 +1,3 @@
-use core::f32;
-
 use ahash::HashMap;
 use egui::{Context, Id, Pos2, Rect, Shape, Stroke, Ui, cache::CacheTrait, pos2};
 
