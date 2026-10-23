@@ -1296,32 +1296,32 @@ where
             };
 
             if viewer.has_dropped_wire_menu(pins, snarl) {
-                snarl_resp.context_menu(|ui| {
-                    let pins = match &new_wires {
-                        NewWires::In(x) => AnyPins::In(x),
-                        NewWires::Out(x) => AnyPins::Out(x),
-                    };
+                let popup = egui::Popup::menu(&snarl_resp);
+                let force_open = snarl_resp.flags.contains(Flags::LONG_TOUCHED);
+                let is_open = popup.is_open();
 
-                    let menu_pos = from_global * ui.cursor().min;
-
-                    // Override wire end position when the wire-drop context menu is opened.
-                    wire_end_pos = menu_pos;
-
-                    // The context menu is opened as *link* graph menu.
-                    viewer.show_dropped_wire_menu(menu_pos, ui, pins, snarl);
-
-                    // Even though menu could be closed in `show_dropped_wire_menu`,
-                    // we need to revert the new wires here, because menu state is inaccessible.
-                    // Next frame context menu won't be shown and wires will be removed.
-                    snarl_state.set_new_wires_menu(new_wires);
-                });
+                if is_open || force_open {
+                    popup
+                        .close_behavior(viewer.menu_close_behavior())
+                        .show(|ui| {
+                            let pins = match &new_wires {
+                                NewWires::In(x) => AnyPins::In(x),
+                                NewWires::Out(x) => AnyPins::Out(x),
+                            };
+                            let menu_pos = from_global * ui.cursor().min;
+                            wire_end_pos = menu_pos;
+                            viewer.show_dropped_wire_menu(menu_pos, ui, pins, snarl);
+                            snarl_state.set_new_wires_menu(new_wires);
+                        });
+                }
             }
         } else if viewer.has_graph_menu(interact_pos, snarl) {
-            snarl_resp.context_menu(|ui| {
-                let menu_pos = from_global * ui.cursor().min;
-
-                viewer.show_graph_menu(menu_pos, ui, snarl);
-            });
+            egui::Popup::context_menu(&snarl_resp)
+                .close_behavior(viewer.menu_close_behavior())
+                .show(|ui| {
+                    let menu_pos = from_global * ui.cursor().min;
+                    viewer.show_graph_menu(menu_pos, ui, snarl);
+                });
         }
     }
 
@@ -1889,13 +1889,14 @@ where
     }
 
     if viewer.has_node_menu(&snarl.nodes[node.0].value) {
-        r.context_menu(|ui| {
-            viewer.show_node_menu(node, &inputs, &outputs, ui, snarl);
-        });
+        egui::Popup::context_menu(&r)
+            .close_behavior(viewer.menu_close_behavior())
+            .show(|ui| {
+                viewer.show_node_menu(node, &inputs, &outputs, ui, snarl);
+            });
 
         if !snarl.nodes.contains(node.0) {
             node_state.clear(ui.ctx());
-            // If removed
             return None;
         }
     }
