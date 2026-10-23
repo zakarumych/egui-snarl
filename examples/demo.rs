@@ -1052,7 +1052,7 @@ impl App for DemoApp {
 
         egui::CentralPanel::default().show(ui, |ui| {
             SnarlWidget::new()
-                .id(Id::new("snarl-demo"))
+                .id(Id::unique("snarl-demo"))
                 .style(self.style)
                 .show(&mut self.snarl, &mut DemoViewer, ui);
         });
