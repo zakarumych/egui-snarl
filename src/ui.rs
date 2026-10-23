@@ -3,9 +3,9 @@
 use std::collections::HashMap;
 
 use egui::{
-    Align, Color32, CornerRadius, Frame, Id, LayerId, Layout, Margin, Modifiers, PointerButton,
-    Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder, UiKind, UiStackInfo,
-    Vec2,
+    Align, Color32, CornerRadius, Frame, Id, IdSalt, LayerId, Layout, Margin, Modifiers,
+    PointerButton, Pos2, Rect, Scene, Sense, Shape, Stroke, StrokeKind, Style, Ui, UiBuilder,
+    UiKind, UiStackInfo, Vec2,
     collapsing_header::paint_default_icon,
     emath::{GuiRounding, TSTransform},
     epaint::Shadow,
@@ -822,7 +822,7 @@ struct PinResponse {
 /// Widget to display [`Snarl`] graph in [`Ui`].
 #[derive(Clone, Copy, Debug)]
 pub struct SnarlWidget {
-    id_salt: Id,
+    id_salt: IdSalt,
     id: Option<Id>,
     style: SnarlStyle,
     min_size: Vec2,
@@ -842,7 +842,7 @@ impl SnarlWidget {
     #[must_use]
     pub fn new() -> Self {
         SnarlWidget {
-            id_salt: Id::new(":snarl:"),
+            id_salt: IdSalt::new(":snarl:"),
             id: None,
             style: SnarlStyle::new(),
             min_size: Vec2::ZERO,
@@ -870,8 +870,8 @@ impl SnarlWidget {
     /// Ignored if [`SnarlWidget::id`] was set.
     #[inline]
     #[must_use]
-    pub fn id_salt(mut self, id_salt: impl egui::AsId) -> Self {
-        self.id_salt = Id::new(id_salt);
+    pub fn id_salt(mut self, id_salt: impl egui::AsIdSalt) -> Self {
+        self.id_salt = IdSalt::new(id_salt);
         self
     }
 
@@ -910,7 +910,7 @@ impl SnarlWidget {
     where
         V: SnarlViewer<T>,
     {
-        let snarl_id = self.get_id(ui.id());
+        let snarl_id = self.get_id(ui.scope_id());
 
         show_snarl(
             snarl_id,
@@ -1862,7 +1862,7 @@ where
         UiBuilder::new()
             .max_rect(node_frame_rect.round_ui())
             .layout(Layout::top_down(Align::Center))
-            .id(node_id),
+            .scope_id(node_id),
     );
 
     // Interact with node frame.

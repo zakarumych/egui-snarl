@@ -596,7 +596,7 @@ impl SnarlWidget {
     #[must_use]
     #[inline]
     pub fn get_selected_nodes(self, ui: &Ui) -> Vec<NodeId> {
-        self.get_selected_nodes_at(ui.id(), ui.ctx())
+        self.get_selected_nodes_at(ui.scope_id(), ui.ctx())
     }
 
     /// Returns list of nodes selected in the UI for the `SnarlWidget` with same id.
