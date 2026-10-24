@@ -1,10 +1,10 @@
-use egui::{emath::TSTransform, Painter, Pos2, Rect, Style, Ui};
+use egui::{Painter, Pos2, Rect, Style, Ui, emath::TSTransform};
 
 use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
 use super::{
-    pin::{AnyPins, SnarlPin},
     BackgroundPattern, NodeLayout, SnarlStyle,
+    pin::{AnyPins, SnarlPin},
 };
 
 /// `SnarlViewer` is a trait for viewing a Snarl.
@@ -351,5 +351,13 @@ pub trait SnarlViewer<T> {
     #[inline]
     fn current_transform(&mut self, to_global: &mut TSTransform, snarl: &mut Snarl<T>) {
         let _ = (to_global, snarl);
+    }
+
+    /// Close behavior for context menus (graph, node, dropped-wire).
+    /// Default is `CloseOnClick` (compatible with old behavior).
+    /// Override to `CloseOnClickOutside` if your menu has interactive widgets
+    /// (search fields, collapsible sections, sliders).
+    fn menu_close_behavior(&self) -> egui::PopupCloseBehavior {
+        egui::PopupCloseBehavior::CloseOnClick
     }
 }
