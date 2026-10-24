@@ -1296,24 +1296,33 @@ where
             };
 
             if viewer.has_dropped_wire_menu(pins, snarl) {
-                let popup = egui::Popup::menu(&snarl_resp);
+                let popup_id = egui::Id::new("snarl_dropped_wire_popup").with(snarl_id);
+                let pos_id = egui::Id::new("snarl_dropped_wire_pos").with(snarl_id);
                 let force_open = snarl_resp.flags.contains(Flags::LONG_TOUCHED);
-                let is_open = popup.is_open();
 
-                if is_open || force_open {
-                    popup
-                        .close_behavior(viewer.menu_close_behavior())
-                        .show(|ui| {
-                            let pins = match &new_wires {
-                                NewWires::In(x) => AnyPins::In(x),
-                                NewWires::Out(x) => AnyPins::Out(x),
-                            };
-                            let menu_pos = from_global * ui.cursor().min;
-                            wire_end_pos = menu_pos;
-                            viewer.show_dropped_wire_menu(menu_pos, ui, pins, snarl);
-                            snarl_state.set_new_wires_menu(new_wires);
-                        });
+                if force_open {
+                    let pos = from_global * interact_pos;
+                    ui.ctx().data_mut(|d| d.insert_temp(pos_id, pos));
+                    egui::Popup::open_id(ui.ctx(), popup_id);
                 }
+
+                let menu_pos = ui.ctx().data(|d| {
+                    d.get_temp::<Pos2>(pos_id)
+                        .unwrap_or(from_global * interact_pos)
+                });
+
+                egui::Popup::context_menu(&snarl_resp)
+                    .id(popup_id)
+                    .close_behavior(viewer.menu_close_behavior())
+                    .show(|ui| {
+                        let pins = match &new_wires {
+                            NewWires::In(x) => AnyPins::In(x),
+                            NewWires::Out(x) => AnyPins::Out(x),
+                        };
+                        wire_end_pos = menu_pos;
+                        viewer.show_dropped_wire_menu(menu_pos, ui, pins, snarl);
+                        snarl_state.set_new_wires_menu(new_wires);
+                    });
             }
         } else if viewer.has_graph_menu(interact_pos, snarl) {
             egui::Popup::context_menu(&snarl_resp)
